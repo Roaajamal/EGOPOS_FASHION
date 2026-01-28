@@ -1,0 +1,30 @@
+<?php
+
+return [
+    // الشهادة الرقمية باستخدام Heredoc للحفاظ على التنسيق
+    'certificate' => env('QZ_CERTIFICATE', <<<'EOT'
+-----BEGIN CERTIFICATE-----
+MIIDFzCCAf+gAwIBAgIUelKk9Q2TouzNfLCAc6cowJbcBWgwDQYJKoZIhvcNAQEL
+BQAwGzEZMBcGA1UEAwwQKi5zc3QtZWdvcG9zLmNvbTAeFw0yNjAxMjAxNjQyMjda
+Fw0zNjAxMTgxNjQyMjdaMBsxGTAXBgNVBAMMECouc3N0LWVnb3Bvcy5jb20wggEi
+MA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC9ChkYAJEHEvWOOYPzCGK++bRz
+n3fifiqV+/O3MFY5ipUPH4WzxzHhIvYjI41eS79zOGLd47m3OwH+7U1cbGJpuZQt
+ZDdqAaYeqWqPocpmFpCKWjITup3S79mKU6O66sbwvQ2tejA7dO977ZJ+cj5bqm3R
+EBucxPUVlptVXbBOrsi/h3d+T4gog2sXrykvF3Z1qrczu3lwJP9uX55QPZ3BDbuF
+MgsFjDaGXODecxPlcL7S/hAmx9STI9w3LkU6/p6RsdaaoW9azj0mpRrp7GmNPM5F
+nsDJIUvaEobBoVoGNF41xdJl9ynzMg0q+i5wDiWoKDHtTK0qp+Qo9wpWBE3bAgMB
+AAGjUzBRMB0GA1UdDgQWBBT1+tX/fduWISDc00UfLTPKx7nu0zAfBgNVHSMEGDAW
+gBT1+tX/fduWISDc00UfLTPKx7nu0zAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3
+DQEBCwUAA4IBAQBKoP8FSCiDt4th660Q+Uz2KTVtVskYLaR1beFTkw3Gw82CpyMg
+75OjBFJGypJksXjITK+LGHvwBNPOpeImS4X952czfYSFrAJLQix9BkGomUsNOs8r
+8Tl8kl+6TX+kQXKTdhlqBI0/baotzZbG4DNvcUSwnB8PdutBIAS48tnPtyCagw0z
+WpNIDx6sntQfTVlYwBDkfIKgmjrb1VdsThdURr0HRxrpBvQzdB3WLfdNuX8S9dtW
+yDkHl+MWOMYk6/UrG6PUtL9kUrTesSamEP0mL9sfsUyB3x/1aLUtqFiTr+MNLNgN
+8b8oBl0PTAzppOsp3dXOtBLxyQKNZx8V0e0g
+-----END CERTIFICATE-----
+EOT
+    ),
+
+    // تم التعديل هنا ليتناسب مع مسارك الحالي
+    'private_key_path' => base_path('app/qz/private.pem'),
+];

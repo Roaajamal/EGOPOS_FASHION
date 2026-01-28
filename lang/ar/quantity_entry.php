@@ -1,0 +1,38 @@
+<?php
+
+return [
+
+    'quantity_entry' => 'إدخال كميات',
+    'quantity_date' => 'تاريخ الأدخال',
+    'product_name' => 'المنتج',
+    'attach_document' => 'إرفاق وثيقة',
+    'import_quantities_entry' => 'استيراد الكميات',
+    'add_new_quantity' => 'إضافة الكمية',
+    'previous_quantity' => 'الكمية السابقة' ,
+    'new_quantity' => 'الكمية المدخلة',
+    'quantity_entry_tax' => 'ضريبة الكمية المدخلة',
+    'additional_notes' => 'ملاحظات إضافية',
+    'quantity_entry_total' => 'إجمالي الكمية',
+    'enter_quantity_and_apply' => 'أدخل الكمية',
+    'cost_quantity_entry' => ' التكلفة',
+    'enter_cost_and_apply' => 'أدخل التكلفة',
+    'auto_select_products' => 'تحديد المنتجات تلقائياً',
+    'auto_select_products_help' => 'عند التفعيل، يتم جلب جميع المنتجات تلقائياً',
+    'auto_selection_active' => 'التحديد التلقائي مفعل',
+    'auto_select_enabled' => 'تم تفعيل التحديد التلقائي',
+    'auto_select_disabled' => 'تم إيقاف التحديد التلقائي',
+    'loading_all_products' => 'جاري تحميل جميع المنتجات...',
+    'all_products_loaded' => 'تم تحميل جميع المنتجات بنجاح',
+    'select_products_manually' => 'يرجى اختيار المنتجات يدوياً',
+    'instruction_line2' => 'يجب أن تكون الأعمدة في ملف .xlsx بالترتيب التالي.',
+    'quantity_entry_report' => 'تقرير ادخال الكميات',
+    'ref_number' => 'الرقم المرجعي',
+    'user' => 'المستخدم',
+    'location' => 'الموقع',
+    'stock' => 'المخزون', 
+    'total' => 'الاجمالي',
+    'total_quantity' => 'اجمالي الكمية', 
+    'total_price' => 'اجمالي السعر' ,
+    'submit' => 'حفظ' ,
+
+];
