@@ -78,6 +78,9 @@
             <div class="row">
                 <div class="col-sm-8 col-sm-offset-2">
                     <div class="form-group">
+                         <button type="button" class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-dw-btn-sm" data-toggle="modal" data-target="#import_new_quantity_products_modal">
+            @lang('quantity_entry.import_quantities_entry')
+        </button>
                         <div class="input-group">
                             <span class="input-group-addon">
                                 <i class="fa fa-search"></i>
