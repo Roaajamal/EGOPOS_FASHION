@@ -509,6 +509,80 @@ class ProductController extends Controller
             if (! empty($product_locations)) {
                 $product->product_locations()->sync($product_locations);
             }
+            // ============================================
+// معالجة المنتجات المتغيرة (الألوان والمقاسات)
+// ============================================
+if ($request->input('type') == 'variable' && $request->has('size_color_qty')) {
+    $size_color_data = $request->input('size_color_qty');
+    $products_created = 0;
+    
+    $default_location = BusinessLocation::where('business_id', $business_id)->first();
+    $default_location_id = $default_location ? $default_location->id : null;
+    
+    foreach ($size_color_data as $color => $sizes) {
+        foreach ($sizes as $size => $quantity) {
+            if ($quantity > 0) {
+                $newProduct = $product->replicate();
+                $newProduct-> sku + 1  ;
+                $newProduct->name;
+                $newProduct->type = 'single';
+                $newProduct->product_custom_field1 = $size;
+                $newProduct->product_custom_field2 = $color;
+                $newProduct->save();
+                
+                $this->productUtil->createSingleProductVariation(
+                    $newProduct->id, 
+                    $newProduct->sku + 1, 
+                    $request->input('single_dpp', 0), 
+                    $request->input('single_dpp_inc_tax', 0), 
+                    $request->input('profit_percent', 0), 
+                    $request->input('single_dsp', 0), 
+                    $request->input('single_dsp_inc_tax', 0)
+                );
+                
+                if ($newProduct->enable_stock == 1 && $quantity > 0 && $default_location_id) {
+                    $variation = Variation::where('product_id', $newProduct->id)->first();
+                    if ($variation) {
+                        $this->productUtil->updateProductQuantity(
+                            $default_location_id,
+                            $newProduct->id,
+                            $variation->id,
+                            $quantity,
+                            0
+                        );
+                    }
+                }
+                
+                $products_created++;
+            }
+        }
+    }
+    
+    $product->delete();
+    
+    DB::commit();
+    $output = ['success' => 1,
+        'msg' => __('product.product_added_success') . ' (' . $products_created . ' منتجات)',
+    ];
+    
+    // معالجة نوع الحفظ
+    if ($request->input('submit_type') == 'submit_n_add_opening_stock') {
+        return redirect()->action([\App\Http\Controllers\OpeningStockController::class, 'add'],
+            ['product_id' => $product->id]
+        );
+    } elseif ($request->input('submit_type') == 'submit_n_add_selling_prices') {
+        return redirect()->action([\App\Http\Controllers\ProductController::class, 'addSellingPrices'],
+            [$product->id]
+        );
+    } elseif ($request->input('submit_type') == 'save_n_add_another') {
+        return redirect()->action([\App\Http\Controllers\ProductController::class, 'create']
+        )->with('status', $output);
+    }
+    
+    return redirect('products')->with('status', $output);
+}
+
+
 
             if ($product->type == 'single') {
                 $this->productUtil->createSingleProductVariation($product->id, $product->sku, $request->input('single_dpp'), $request->input('single_dpp_inc_tax'), $request->input('profit_percent'), $request->input('single_dsp'), $request->input('single_dsp_inc_tax'));
@@ -1478,6 +1552,8 @@ class ProductController extends Controller
 
         return view('product.partials.quick_add_product')
                 ->with(compact('categories', 'brands', 'units', 'taxes', 'barcode_types', 'default_profit_percent', 'tax_attributes', 'product_name', 'locations', 'product_for', 'enable_expiry', 'enable_lot', 'module_form_parts', 'business_locations', 'common_settings', 'warranties'));
+  
+  
     }
 
     /**

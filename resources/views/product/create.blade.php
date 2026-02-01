@@ -352,9 +352,69 @@
         <div class="form-group col-sm-12" id="product_form_part">
             @include('product.partials.single_product_form_part', ['profit_percent' => $default_profit_percent])
         </div>
+        
+{{-- ==================================================== --}}
+{{-- Size-Color Combo Section (Excel Style) --}}
+{{-- ==================================================== --}}
+<div class="col-sm-12" id="size_color_combo_section" >
+    <div class="row">
+        <div class="col-sm-12">
+            <h4>@lang('product.size_color_combinations'):</h4>
+            <p class="help-block">أدخل اللون ثم أضف الأحجام والكميات لكل لون</p>
+            
+            {{-- Color Input --}}
+            <div class="col-sm-6">
+                <div class="form-group">
+                    <label for="new_color">أدخل اللون:</label>
+                    <div class="input-group">
+                        <input type="text" id="new_color" class="form-control" placeholder="مثال: أسود">
+                        <span class="input-group-btn">
+                            <button type="button" id="add_color_btn" class="btn btn-primary">
+                                <i class="fa fa-plus"></i> إضافة لون
+                            </button>
+                        </span>
+                    </div>
+                    <small class="help-block">يمكن إضافة أكثر من لون</small>
+                </div>
+            </div>
+            
+            {{-- Sizes Management --}}
+            <div class="col-sm-6">
+                <div class="form-group">
+                    <label>إدارة الأحجام:</label>
+                    <div class="input-group">
+                        <input type="text" id="new_size" class="form-control" placeholder="مثال: 38, 40, 42">
+                        <span class="input-group-btn">
+                            <button type="button" id="add_size_btn" class="btn btn-info">
+                                <i class="fa fa-plus"></i> إضافة أحجام
+                            </button>
+                        </span>
+                    </div>
+                    <small class="help-block">أدخل الأحجام مفصولة بفاصلة (,) لتطبيقها على جميع الألوان</small>
+                </div>
+            </div>
+            
+            {{-- Color Tables Container --}}
+            <div class="col-sm-12 mt-3" id="color_tables_container">
+                <!-- Color tables will be added here -->
+            </div>
+            
+            {{-- Summary --}}
+            <div class="col-sm-12 mt-3">
+                <div class="alert alert-info" id="summary_box" style="display: none;">
+                    <i class="fa fa-info-circle"></i>
+                    <strong>الملخص:</strong>
+                    <span id="summary_text"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
-        <input type="hidden" id="variation_counter" value="1">
-        <input type="hidden" id="default_profit_percent" value="{{ $default_profit_percent }}">
+<input type="hidden" id="variation_counter" value="0">
+<input type="hidden" id="default_profit_percent" value="{{ $default_profit_percent }}">
+
+     
 
     </div>
     @endcomponent
@@ -382,8 +442,8 @@
     {!! Form::close() !!}
 
 </section>
-<!-- /.content -->
 
+<!-- /.content -->
 @endsection
 
 @section('javascript')
@@ -393,9 +453,11 @@
 <script type="text/javascript">
     $(document).ready(function() {
         __page_leave_confirmation('#product_add_form');
+        
+        // Barcode scanner
         onScan.attachTo(document, {
-            suffixKeyCodes: [13], // enter-key expected at the end of a scan
-            reactToPaste: true, // Compatibility to built-in scanners in paste-mode (as opposed to keyboard-mode)
+            suffixKeyCodes: [13],
+            reactToPaste: true,
             onScan: function(sCode, iQty) {
                 $('input#sku').val(sCode);
             },
@@ -404,10 +466,346 @@
             },
             minLength: 2,
             ignoreIfFocusOn: ['input', '.form-control']
-            // onKeyDetect: function(iKeyCode){ // output all potentially relevant key events - great for debugging!
-            //     console.log('Pressed: ' + iKeyCode);
-            // }
         });
+        
+        // ============================================
+        // نظام الألوان والمقاسات (Excel Style)
+        // ============================================
+        
+        // Global arrays
+        var allColors = [];     // جميع الألوان المضافة
+        var allSizes = [];      // جميع الأحجام المضافة
+        var colorTables = {};   // تخزين جداول الألوان
+        
+        // إظهار قسم الألوان والمقاسات عندما يكون المنتج متغيراً
+        $('#type').change(function() {
+            if ($(this).val() === 'variable') {
+                $('#size_color_combo_section').show();
+                clearSizeColorForm();
+            } else {
+                $('#size_color_combo_section').hide();
+            }
+        });
+        
+        // زر إضافة اللون
+        $('#add_color_btn').click(function() {
+            var colorName = $('#new_color').val().trim();
+            
+            if (!colorName) {
+                toastr.error('الرجاء إدخال اسم اللون');
+                return;
+            }
+            
+            // التحقق إذا كان اللون موجوداً بالفعل
+            if (allColors.includes(colorName)) {
+                toastr.warning('اللون "' + colorName + '" موجود بالفعل');
+                return;
+            }
+            
+            // إضافة اللون للمصفوفة
+            allColors.push(colorName);
+            
+            // إنشاء جدول للون
+            createColorTable(colorName);
+            
+            // مسح الحقل
+            $('#new_color').val('');
+            
+            // تحديث الملخص
+            updateSummary();
+            
+            toastr.success('تم إضافة اللون: ' + colorName);
+        });
+        
+        // زر إضافة المقاسات
+        $('#add_size_btn').click(function() {
+            var sizesInput = $('#new_size').val().trim();
+            
+            if (!sizesInput) {
+                toastr.error('الرجاء إدخال الأحجام');
+                return;
+            }
+            
+            // تحليل المقاسات المدخلة
+            var newSizes = sizesInput.split(',').map(s => s.trim()).filter(s => s !== '');
+            
+            // إضافة للمقاسات العامة (فريدة)
+            newSizes.forEach(function(size) {
+                if (!allSizes.includes(size)) {
+                    allSizes.push(size);
+                }
+            });
+            
+            // إضافة المقاسات لجميع جداول الألوان
+            allColors.forEach(function(color) {
+                addSizesToColorTable(color, newSizes);
+            });
+            
+            // مسح الحقل
+            $('#new_size').val('');
+            
+            toastr.success('تم إضافة ' + newSizes.length + ' حجم');
+        });
+        
+        // دعم زر Enter لحقل اللون
+        $('#new_color').keypress(function(e) {
+            if (e.which == 13) {
+                $('#add_color_btn').click();
+                e.preventDefault();
+            }
+        });
+        
+        // دعم زر Enter لحقل المقاسات
+        $('#new_size').keypress(function(e) {
+            if (e.which == 13) {
+                $('#add_size_btn').click();
+                e.preventDefault();
+            }
+        });
+        
+        // دالة إنشاء جدول اللون
+        function createColorTable(colorName) {
+            var tableId = 'color_table_' + colorName.replace(/\s+/g, '_');
+            
+            var tableHTML = `
+            <div class="color-table-container panel panel-default mt-3" id="${tableId}">
+                <div class="panel-heading">
+                    <h4 class="panel-title">
+                        <i class="fa fa-tag"></i> ${colorName}
+                        <button type="button" class="btn btn-xs btn-danger pull-right remove-color-btn" data-color="${colorName}">
+                            <i class="fa fa-times"></i> حذف اللون
+                        </button>
+                    </h4>
+                </div>
+                <div class="panel-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-condensed color-size-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 100px;">الحجم</th>
+                                    <th>الكمية</th>
+                                    <th style="width: 50px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="table_body_${colorName.replace(/\s+/g, '_')}">
+                                <!-- سيتم إضافة الصفوف هنا -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            `;
+            
+            $('#color_tables_container').append(tableHTML);
+            
+            // تخزين المرجع
+            colorTables[colorName] = {
+                sizes: [],
+                quantities: {}
+            };
+        }
+        
+        // دالة إضافة المقاسات لجدول اللون
+        function addSizesToColorTable(colorName, sizes) {
+            var tableBodyId = '#table_body_' + colorName.replace(/\s+/g, '_');
+            
+            sizes.forEach(function(size) {
+                // التحقق إذا كان المقاس موجوداً بالفعل في جدول هذا اللون
+                if (colorTables[colorName] && colorTables[colorName].sizes.includes(size)) {
+                    return;
+                }
+                
+                // إضافة لصفوف المقاسات
+                if (!colorTables[colorName]) {
+                    colorTables[colorName] = { sizes: [], quantities: {} };
+                }
+                colorTables[colorName].sizes.push(size);
+                
+                // إضافة صف للجدول
+                var rowHTML = `
+                <tr data-size="${size}">
+                    <td style="vertical-align: middle;">
+                        <strong>${size}</strong>
+                    </td>
+                    <td>
+                        <input type="number" 
+                               class="form-control input-sm size-qty-input" 
+                               name="size_color_qty[${colorName}][${size}]"
+                               data-color="${colorName}"
+                               data-size="${size}"
+                               placeholder="0"
+                               value="0"
+                               min="0"
+                               style="min-width: 100px;">
+                    </td>
+                    <td style="vertical-align: middle;">
+                        <button type="button" class="btn btn-xs btn-danger remove-size-btn" 
+                                data-color="${colorName}" 
+                                data-size="${size}">
+                            <i class="fa fa-times"></i>
+                        </button>
+                    </td>
+                </tr>
+                `;
+                
+                $(tableBodyId).append(rowHTML);
+            });
+        }
+        
+        // حذف المقاس من جدول اللون
+        $(document).on('click', '.remove-size-btn', function() {
+            var colorName = $(this).data('color');
+            var sizeName = $(this).data('size');
+            
+            if (confirm(`هل تريد حذف الحجم ${sizeName} من اللون ${colorName}؟`)) {
+                // حذف من جدول اللون
+                if (colorTables[colorName]) {
+                    colorTables[colorName].sizes = colorTables[colorName].sizes.filter(s => s !== sizeName);
+                    delete colorTables[colorName].quantities[sizeName];
+                }
+                
+                // حذف الصف
+                $(this).closest('tr').remove();
+                
+                toastr.info('تم حذف الحجم ' + sizeName);
+            }
+        });
+        
+        // حذف جدول اللون
+        $(document).on('click', '.remove-color-btn', function() {
+            var colorName = $(this).data('color');
+            
+            if (confirm(`هل تريد حذف اللون ${colorName} وجميع أحجامه؟`)) {
+                // حذف من المصفوفات
+                allColors = allColors.filter(c => c !== colorName);
+                delete colorTables[colorName];
+                
+                // حذف الجدول
+                $(this).closest('.color-table-container').remove();
+                
+                // تحديث الملخص
+                updateSummary();
+                
+                toastr.info('تم حذف اللون ' + colorName);
+            }
+        });
+        
+        // تغيير الكمية
+        $(document).on('input', '.size-qty-input', function() {
+            var colorName = $(this).data('color');
+            var sizeName = $(this).data('size');
+            var quantity = $(this).val();
+            
+            // تخزين الكمية
+            if (!colorTables[colorName]) {
+                colorTables[colorName] = { sizes: [], quantities: {} };
+            }
+            colorTables[colorName].quantities[sizeName] = quantity;
+            
+            // تحديث الملخص
+            updateSummary();
+        });
+        
+        // دالة تحديث الملخص
+        function updateSummary() {
+            if (allColors.length === 0) {
+                $('#summary_box').hide();
+                return;
+            }
+            
+            var totalCombinations = 0;
+            var totalQuantity = 0;
+            
+            allColors.forEach(function(color) {
+                if (colorTables[color] && colorTables[color].sizes) {
+                    totalCombinations += colorTables[color].sizes.length;
+                    
+                    // حساب إجمالي الكمية
+                    colorTables[color].sizes.forEach(function(size) {
+                        var qty = parseInt(colorTables[color].quantities[size]) || 0;
+                        totalQuantity += qty;
+                    });
+                }
+            });
+            
+            var summaryText = `
+            <span class="badge bg-primary">${allColors.length} ألوان</span>
+            <span class="badge bg-success">${allSizes.length} أحجام</span>
+            <span class="badge bg-warning">${totalCombinations} تركيبة</span>
+            <span class="badge bg-info">${totalQuantity} قطعة</span>
+            `;
+            
+            $('#summary_text').html(summaryText);
+            $('#summary_box').show();
+        }
+        
+        // دالة مسح النموذج
+        function clearSizeColorForm() {
+            allColors = [];
+            allSizes = [];
+            colorTables = {};
+            $('#color_tables_container').html('');
+            $('#summary_box').hide();
+        }
+        
+        // التحقق من البيانات قبل الحفظ
+        $(document).on('click', '.submit_product_form', function(e) {
+            var submit_type = $(this).attr('value');
+            $('#submit_type').val(submit_type);
+            
+            // إذا كان المنتج متغيراً
+            if ($('#type').val() === 'variable') {
+                // التحقق من وجود بيانات
+                var hasData = false;
+                var totalQty = 0;
+                
+                $('.size-qty-input').each(function() {
+                    var qty = parseInt($(this).val()) || 0;
+                    if (qty > 0) {
+                        hasData = true;
+                        totalQty += qty;
+                    }
+                });
+                
+                if (!hasData) {
+                    toastr.error('الرجاء إدخال الكميات للألوان والمقاسات');
+                    e.preventDefault();
+                    return false;
+                }
+                
+                if (totalQty === 0) {
+                    toastr.error('الرجاء إدخال كمية أكبر من الصفر لواحدة على الأقل من التركيبات');
+                    e.preventDefault();
+                    return false;
+                }
+                
+                // التحقق من وجود ألوان ومقاسات
+                if (allColors.length === 0) {
+                    toastr.error('الرجاء إضافة لون واحد على الأقل');
+                    e.preventDefault();
+                    return false;
+                }
+                
+                if (allSizes.length === 0) {
+                    toastr.error('الرجاء إضافة مقاس واحد على الأقل');
+                    e.preventDefault();
+                    return false;
+                }
+            }
+            
+            // إذا كان النموذج صالحاً، الاستمرار
+            if ($('form#product_add_form').valid()) {
+                return true;
+            }
+            
+            e.preventDefault();
+            return false;
+        });
+        
+        // التهيئة عند تحميل الصفحة إذا كان النوع متغيراً
+        if ($('#type').val() === 'variable') {
+            $('#size_color_combo_section').show();
+        }
     });
 </script>
 @endsection
