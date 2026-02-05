@@ -35,7 +35,7 @@
             <input type="number"
                    name="products[{{ $row_count }}][quantity]"
                    class="form-control text-center quantity"
-                   value="{{ $quantity ?? 1 }}"
+                   value="{{@num_format($quantity ?? 1 )}}"
                    min="1"
                    >
 
@@ -54,7 +54,7 @@
            name="products[{{ $row_count }}][purchase_price]"
            {{-- حذفنا كلاس input_number ومنعنا التقريب --}}
            class="form-control input-sm purchase_price" 
-           value="{{ $purchase_price }}"
+          value="{{@num_format($purchase_price)}}"
            {{-- أضفنا step="any" للسماح بجميع الأعشار --}}
            step="any">
 </td>
