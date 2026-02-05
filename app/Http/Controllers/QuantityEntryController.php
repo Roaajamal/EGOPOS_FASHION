@@ -72,107 +72,95 @@ class QuantityEntryController extends Controller
  
 
 
-   public function store(Request $request)
+public function store(Request $request)
 {
+    $products_input = $request->input('products');
+    if (is_string($products_input)) {
+        $products_data = json_decode($products_input, true);
+    } else {
+        $products_data = $products_input;
+    }
+
+    // التحقق من وجود بيانات
+    if (empty($products_data)) {
+        return response()->json(['success' => false, 'msg' => 'قائمة المنتجات فارغة']);
+    }
+    $is_last_chunk = $request->input('is_last_chunk') == 1;
+
     DB::beginTransaction();
-
     try {
-        // 0️⃣ Validation (أضف سعر الشراء للتحقق)
-        $request->validate([
-            'transaction_date' => 'required',
-            'location_id'      => 'required',
-            'products'         => 'required|array',
-            'products.*.quantity' => 'required|numeric|min:1',
-            'products.*.purchase_price' => 'required|numeric', // تأكد من إرسال السعر
-            'document' => 'nullable|file|max:' . (config('constants.document_size_limit') / 1000),
-            'ref_no'           => 'nullable|string'
-        ]);
-
-        $business_id = auth()->user()->business_id;
-        $user_id     = auth()->id();
-        $total_before_tax = 0; // متغير لتجميع الإجمالي
-
-        // 1️⃣ جلب مورد (كما هو)
-        // $supplier = DB::table('contacts')->where('business_id', $business_id)->where('type', 'supplier')->first();
-        // if (!$supplier) { throw new \Exception('لا يوجد مورد مرتبط بهذا النشاط'); }
-
-        // 2️⃣ توليد الرقم المرجعي (كما هو)
-        $year = date('Y'); 
-        $ref_count = $this->transactionUtil->setAndGetReferenceCount('purchase');
-        $formatted_count = sprintf("%04d", $ref_count);
-        $ref_no = "QE" . $year . "/" . $formatted_count;
-
-        // 3️⃣ رفع الملف (كما هو)
-        $document = null;
-        if ($request->hasFile('document')) {
-            $document = $this->transactionUtil->uploadFile($request, 'document', 'documents');
-        }
-
-        // 4️⃣ إنشاء Transaction (القيمة مبدئياً 0)
-        $transaction = Transaction::create([
-            'business_id'      => $business_id,
-            'location_id'      => $request->location_id,
-            'type'             => 'add_quantity', 
-            'status'           => 'received',
-           // 'contact_id'       => $supplier->id,
-            'ref_no'           => $ref_no,
-            'transaction_date' => Carbon::createFromFormat('m/d/Y H:i', $request->transaction_date),
-            'final_total'      => 0, // سيتم تحديثه لاحقاً
-            'created_by'       => $user_id,
-            'document'         => $document,
-        ]);
-
-        // 5️⃣ معالجة المنتجات
-        foreach ($request->products as $product) {
-            $unit_price = $product['purchase_price'] ?? 0;
-            $quantity = $product['quantity'];
-            $line_total = $unit_price * $quantity;
-            
-            $total_before_tax += $line_total; // إضافة إجمالي السطر إلى الإجمالي الكلي
-
-            // جلب الكمية السابقة (كما هو)
-            $current_stock = DB::table('variation_location_details')
-                ->where('variation_id', $product['variation_id'])
-                ->where('location_id', $request->location_id)
-                ->value('qty_available');
-
-            $prev_qty = $current_stock ?? 0;
-
-            // 5.1️⃣ حفظ في purchase_lines
-            DB::table('purchase_lines')->insert([
-                'transaction_id'         => $transaction->id,
-                'product_id'             => $product['product_id'],
-                'variation_id'           => $product['variation_id'],
-                'quantity'               => $quantity,
-                'previous_quantity'      => $prev_qty,
-                'purchase_price'         => $unit_price,
-                'purchase_price_inc_tax' => $unit_price,
-                'item_tax'               => 0,
-                'created_at'             => now(),
-                'updated_at'             => now(),
+        // 1. جلب أو إنشاء المعاملة بحالة 'draft'
+        $transaction = Transaction::where('ref_no', $request->ref_no)->first();
+        if (!$transaction) {
+            $transaction = Transaction::create([
+                'business_id' => auth()->user()->business_id,
+                'location_id' => $request->location_id,
+                'type' => 'add_quantity',
+                'status' => 'draft', // الحالة مبدئياً مسودة
+                'ref_no' => $request->ref_no,
+                'transaction_date' => Carbon::createFromFormat('m/d/Y H:i', $request->transaction_date),
+                'final_total' => 0,
+                'created_by' => auth()->id(),
             ]);
-
-            // تحديث المخزون (كما هو)
-            $this->productUtil->updateProductQuantity($request->location_id, $product['product_id'], $product['variation_id'], $quantity);
         }
 
-        // ✅ 6️⃣ تحديث الـ Transaction بالإجمالي النهائي
-        $transaction->final_total = $total_before_tax;
+        // 2. إدخال الأسطر فقط في purchase_lines (بدون تحديث المخزون الآن)
+        foreach ($products_data as $product) {
+            DB::table('purchase_lines')->insert([
+                'transaction_id' => $transaction->id,
+                'product_id' => $product['product_id'],
+                'variation_id' => $product['variation_id'],
+                'quantity' => $product['quantity'],
+                'purchase_price' => $product['purchase_price'],
+                'created_at' => now(),
+            ]);
+            $transaction->final_total += ($product['quantity'] * $product['purchase_price']);
+        }
         $transaction->save();
 
-        // 7️⃣ تسجيل النشاط
-        $this->transactionUtil->activityLog($transaction, 'added');
+        // 3. إذا كانت هذه هي الدفعة الأخيرة.. نقوم بتحديث المخزون للجميع!
+        if ($is_last_chunk) {
+            $all_lines = DB::table('purchase_lines')->where('transaction_id', $transaction->id)->get();
+            
+            foreach ($all_lines as $line) {
+                // تحديث المخزون الفعلي هنا
+                $affected = DB::table('variation_location_details')
+                    ->where('variation_id', $line->variation_id)
+                    ->where('location_id', $transaction->location_id)
+                    ->increment('qty_available', $line->quantity);
 
+                if ($affected == 0) {
+                    DB::table('variation_location_details')->insert([
+                        'product_id' => $line->product_id,
+                        'variation_id' => $line->variation_id,
+                        'location_id' => $transaction->location_id,
+                        'qty_available' => $line->quantity
+                    ]);
+                }
+            }
+            // تحويل الحالة إلى مستلمة (نهائية)
+            $transaction->status = 'received';
+            $transaction->save();
+        }
+
+        //  تسجيل النشاط
+        $this->transactionUtil->activityLog($transaction, 'added');
         DB::commit();
-        return redirect()->route('quantity_entry.index')->with('status', ['success' => 1, 'msg' => 'تمت العملية بنجاح']);
+        return response()->json(['success' => true]);
 
     } catch (\Exception $e) {
         DB::rollBack();
-        return back()->withErrors('حدث خطأ: ' . $e->getMessage());
+        return response()->json(['success' => false, 'msg' => $e->getMessage()]);
     }
 }
 
-    
+    public function cleanupFailedTransaction(Request $request) {
+    // مسح المعاملة التي لم تكتمل لكي لا يبقى لها أثر
+    Transaction::where('ref_no', $request->ref_no)
+               ->where('status', 'draft')
+               ->delete();
+    return response()->json(['success' => true]);
+}
 
    public function getProducts(Request $request)
     {
@@ -195,7 +183,9 @@ class QuantityEntryController extends Controller
                 'products.id as product_id',
                 'products.name',
                 'variations.id as variation_id',
-                'variations.sub_sku'
+                'variations.sub_sku',
+                'variations.dpp_inc_tax'
+                
             )
             ->limit(20)
             ->get();
@@ -208,6 +198,7 @@ class QuantityEntryController extends Controller
                 'value' => $product->name,
                 'product_id' => $product->product_id,
                 'variation_id' => $product->variation_id,
+                'dpp_inc_tax' => $product->dpp_inc_tax,
             ];
         }
 
@@ -248,7 +239,7 @@ class QuantityEntryController extends Controller
         }
 
         // سعر الشراء الافتراضي
-        $purchase_price = $variation->default_purchase_price ?? 0;
+        $purchase_price = $variation->dpp_inc_tax ?? 0;
 
         return view('quantity_entry.partials.simple_purchase_entry_row', compact(
             'product',
@@ -263,7 +254,7 @@ class QuantityEntryController extends Controller
 {
     try {
         $request->validate([
-            'file' => 'required|max:2048', 
+            'file' => 'required', 
             'location_id' => 'required'
         ]);
 
@@ -329,7 +320,9 @@ class QuantityEntryController extends Controller
 
             // --- معالجة القيم الرقمية بشكل آمن ---
             $quantity = isset($value[1]) && is_numeric($value[1]) ? (float)$value[1] : 0;
-            $price = isset($value[2]) && is_numeric($value[2]) ? (float)$value[2] : 0;
+           $price = isset($value[2]) && is_numeric($value[2]) && (float)$value[2] > 0 
+         ? (float)$value[2] 
+         : $variation->dpp_inc_tax;
 
             $rows[] = [
                 'product'    => $product,

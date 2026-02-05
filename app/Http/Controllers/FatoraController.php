@@ -27,7 +27,28 @@ public function sendInvoice(Request $request)
             ], 400);
         }
         
-        // ========== أولاً: نجيب معلومات الـ transaction ==========
+        // استرجاع إعدادات الفوترة من جدول settings_fatora
+        $fatoraSettings = DB::table('settings_fatora')
+            ->where('business_id', $businessId)
+            ->where('is_active', true)
+            ->first();
+
+        // التحقق من وجود إعدادات الفوترة
+        if (!$fatoraSettings) {
+            return response()->json([
+                'success' => false,
+                'message' => 'إعدادات الفوترة غير موجودة أو غير مفعلة. يرجى تهيئة إعدادات الفوترة أولاً.'
+            ], 400);
+        }
+
+        // تحديد نوع الفاتورة
+        $invoiceType = $fatoraSettings->invoice_type ?? 'tax_invoice';
+        
+        // Initialize Fatora Service
+        $fatoraService = new FatoraService($businessId);
+        
+        // ========== الفحص المتقدم للحالة ==========
+        // أولاً نجلب معلومات الفاتورة من جدول transactions
         $transaction = DB::table('transactions')
             ->where('id', $transactionId)
             ->where('business_id', $businessId)
@@ -40,52 +61,123 @@ public function sendInvoice(Request $request)
             ], 404);
         }
         
-        // ========== ثانياً: نجيب الـ location_id ==========
-        $location_id = $transaction->location_id ?? null;
-        
-        if (!$location_id) {
-            return response()->json([
-                'success' => false,
-                'message' => 'الفرع غير محدد للمعاملة'
-            ], 400);
-        }
-        
-        // ========== ثالثاً: نفحص إعدادات الفوترة للفرع ==========
-        $fatoraSettings = DB::table('settings_fatora')
-            ->where('business_id', $businessId)
-            ->where('location_id', $location_id)
-            ->where('is_active', true)
-            ->first();
-
-        // التحقق من وجود إعدادات الفوترة
-        if (!$fatoraSettings) {
-            return response()->json([
-                'success' => false,
-                'message' => 'إعدادات الفوترة غير موجودة للفرع المحدد. يرجى تهيئة الإعدادات أولاً.',
-                'location_id' => $location_id
-            ], 400);
-        }
-        
-        // التحقق من اكتمال الإعدادات
-        if (!$fatoraSettings->client_id || !$fatoraSettings->secret_key || !$fatoraSettings->supplier_income_source) {
-            return response()->json([
-                'success' => false,
-                'message' => 'إعدادات الفوترة غير مكتملة للفرع المحدد.',
-                'location_id' => $location_id
-            ], 400);
-        }
-
-        // تحديد نوع الفاتورة
-        $invoiceType = $fatoraSettings->invoice_type ?? 'tax_invoice';
-        
-        // ========== رابعاً: Initialize Fatora Service مع location_id ==========
-        $fatoraService = new FatoraService($businessId, $location_id);
-        
-        // ========== باقي الكود يضل كما هو ==========
+        // فحص حالة الفاتورة باستخدام getStatusAdvancedFatora
         $invoiceNo = $transaction->invoice_no;
         $statusCheck = $fatoraService->getStatusAdvancedFatora($invoiceNo);
         
-        // ... باقي الكود بدون تغيير
+        if ($statusCheck['success'] && isset($statusCheck['data'])) {
+            $statusData = $statusCheck['data'];
+            
+            // ========== اتخاذ القرار بناءً على الحالة ==========
+            if ($statusData['invoice_exists']) {
+                if ($statusData['fatora_exists']) {
+                    $currentStatus = $statusData['fatora_status'];
+                    
+                    // حالة الفاتورة الحالية
+                    switch ($currentStatus) {
+                        case 'approved':
+                        case 'pending':
+                        case 'submitted':
+                            // الفاتورة مقبولة أو قيد المعالجة - لا نسمح بالإرسال
+                            return response()->json([
+                                'success' => false,
+                                'message' => 'الفاتورة مرسلة بالفعل وحالتها: ' . $currentStatus,
+                                'data' => $statusData,
+                                'action' => 'already_sent'
+                            ]);
+                            
+                        case 'rejected':
+                        case 'failed':
+                        case 'error':
+                            // الفاتورة مرفوضة - نسمح بإعادة الإرسال
+                            $allowResend = true;
+                            $resendReason = 'إعادة إرسال فاتورة مرفوضة (الحالة: ' . $currentStatus . ')';
+                            break;
+                            
+                        default:
+                            // حالات أخرى - نفحص التفاصيل
+                            if (!$statusData['qr_code_exists'] || $statusData['summary_status'] == 'NEEDS_RESEND') {
+                                $allowResend = true;
+                                $resendReason = 'الفاتورة بحاجة لإعادة إرسال (QR غير موجود)';
+                            } else {
+                                $allowResend = false;
+                            }
+                    }
+                    
+                    // فحص إضافي للـ QR Code
+                    if (!$statusData['qr_code_exists']) {
+                        $allowResend = true;
+                        $resendReason = 'الفاتورة لا تحتوي على QR Code';
+                    }
+                    
+                    // فحص الاستجابة من النظام
+                    if ($statusData['response_data_exists']) {
+                        $responseStatus = $statusData['response_status'] ?? null;
+                        if ($responseStatus == 'REJECTED' || $responseStatus == 'ERROR') {
+                            $allowResend = true;
+                            $resendReason = 'النظام أشار برفض الفاتورة (حالة الاستجابة: ' . $responseStatus . ')';
+                        }
+                    }
+                    
+                    // إذا كان مسموح بإعادة الإرسال
+                    if ($allowResend) {
+                        Log::info('إعادة إرسال فاتورة', [
+                            'transaction_id' => $transactionId,
+                            'invoice_no' => $invoiceNo,
+                            'current_status' => $currentStatus,
+                            'reason' => $resendReason,
+                            'business_id' => $businessId
+                        ]);
+                        
+                        // إضافة فلاج للإرسال القسري
+                        $options['force_resend'] = true;
+                        $options['resend_reason'] = $resendReason;
+                    }
+                } else {
+                    // الفاتورة موجودة في transactions ولكن لم ترسل للفوترة
+                    Log::info('إرسال فاتورة للمرة الأولى', [
+                        'transaction_id' => $transactionId,
+                        'invoice_no' => $invoiceNo,
+                        'business_id' => $businessId
+                    ]);
+                }
+            }
+        }
+         
+        // Send invoice options
+        $options = [
+            'invoice_type' => $invoiceType,
+            'payment_method' => $request->input('payment_method', 'cash')
+        ];
+
+        // Send invoice
+        $result = $fatoraService->sendInvoice($transactionId, $options);
+        
+        if ($result['success']) {
+            return response()->json([
+                'success' => true,
+                'message' => $result['message'],
+                'data' => $result['data'],
+                'qr_code' => $result['qr_code'] ?? null,
+                'action' => $allowResend ?? false ? 'resend' : 'first_send'
+            ]);
+        } else {
+            return response()->json([
+                'success' => false,
+                'message' => $result['message'],
+                'error' => $result['error'] ?? null
+            ], 400);
+        }
+
+    } catch (Exception $e) {
+        Log::error('Send Invoice Error: '.$e->getMessage(), ['trace'=>$e->getTraceAsString()]);
+        return response()->json([
+            'success' => false,
+            'message' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+}
 /**
  * Force resend invoice (خاصة للفواتير المرفوضة)
  */

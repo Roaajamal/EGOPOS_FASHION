@@ -170,56 +170,85 @@ class MpsPaymentController extends Controller
     /**
      * إرسال المبلغ لـ MEPS
      */
-    private function sendToMeps($amount, $invoiceNumber, $settings)
-    {
-        $url = $settings->service_url ?? 'https://gprs.mepspay.com:6680/apex.smartpos.ecr/EcrComInterface.svc';
+private function sendToMeps($amount, $invoiceNumber, $settings)
+{
+    $url = $settings->service_url ?? 'https://gprs.mepspay.com:6610/v100/EcrComInterface.svc';
+    
+    $xml = $this->buildPaymentXml($amount, $invoiceNumber, $settings);
+    
+    Log::info('📤 إرسال طلب إلى MEPS', [
+        'url' => $url,
+        'xml' => $xml
+    ]);
+    
+    try {
+        $response = Http::timeout(120)
+            ->withHeaders([
+                'Content-Type' => 'text/xml; charset=utf-8',
+                'SOAPAction' => 'http://tempuri.org/IEcrComInterface/Sale',
+            ])
+            ->withOptions(['verify' => false])
+            ->withBody($xml, 'text/xml')
+            ->post($url);
         
-        $xml = $this->buildPaymentXml($amount, $invoiceNumber, $settings);
+        $responseBody = $response->body();
         
-        try {
-            // ⏱️ timeout 10 ثواني فقط!
-            $response = Http::timeout(120) // ← هنا 10 ثواني
-                ->withHeaders([
-                    'Content-Type' => 'text/xml; charset=utf-8',
-                    'SOAPAction' => '"http://tempuri.org/IEcrComInterface/Sale"',
-                ])
-                ->withOptions(['verify' => false])
-                ->withBody($xml, 'text/xml')
-                ->post($url);
-            
-            $parsed = $this->parseMepsResponse($response->body());
-            
-            // النتيجة: true/false فقط
-            $isSuccess = ($parsed['pos_resp_code'] === '00' || $parsed['pos_resp_code'] === '000');
-            
-            Log::info($isSuccess ? '✅ تمت العملية بنجاح' : '❌ فشلت العملية', [
+        Log::info('📥 رد MEPS', [
+            'status' => $response->status(),
+            'body' => $responseBody
+        ]);
+        
+        // تحليل الرد
+        $parsed = $this->parseMepsResponse($responseBody);
+        
+        // تسجيل جميع التفاصيل
+        Log::info('🔍 تحليل رد MEPS', $parsed);
+        
+        // تقييم النجاح بناءً على:
+        // 1. WebResponseStatus = "Success"
+        // 2. PosRespCode = "00" أو "000" (وليس "CC")
+        // 3. PosReceipt لا يحتوي على "TRANSACTION FAILED"
+        
+        $isSuccess = (
+            ($parsed['web_response_status'] ?? '') === 'Success' &&
+            in_array($parsed['pos_resp_code'] ?? '', ['00', '000'], true) &&
+            !str_contains($parsed['pos_receipt'] ?? '', 'TRANSACTION FAILED')
+        );
+        
+        if ($isSuccess) {
+            Log::info('✅ تمت العملية بنجاح', [
                 'amount' => $amount,
                 'invoice' => $invoiceNumber,
-                'business_id' => $settings->business_id,
-                'location_id' => $settings->location_id,
-                'response_code' => $parsed['pos_resp_code']
+                'response_code' => $parsed['pos_resp_code'],
+                'invoice_number' => $parsed['pos_invoice_number'] ?? '',
+                'rrn' => $parsed['pos_rrn'] ?? ''
             ]);
-            
-            return $isSuccess;
-            
-        } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            // ⏱️ timeout حدث بعد 10 ثواني
-            Log::error('⏱️ انتهت مهلة 10 ثواني للاتصال بـ MEPS', [
-                'business_id' => $settings->business_id,
-                'location_id' => $settings->location_id
+        } else {
+            Log::error('❌ فشلت العملية', [
+                'amount' => $amount,
+                'invoice' => $invoiceNumber,
+                'response_code' => $parsed['pos_resp_code'] ?? 'غير معروف',
+                'reason' => $parsed['pos_resp_text'] ?? ($parsed['web_response_error_desc'] ?? 'فشل غير معروف'),
+                'receipt_preview' => substr($parsed['pos_receipt'] ?? '', 0, 200)
             ]);
-            return false;
-            
-        } catch (\Exception $e) {
-            Log::error('❌ خطأ في الاتصال بـ MEPS', [
-                'error' => $e->getMessage(),
-                'business_id' => $settings->business_id,
-                'location_id' => $settings->location_id
-            ]);
-            return false;
         }
+        
+        return $isSuccess;
+        
+    } catch (\Illuminate\Http\Client\ConnectionException $e) {
+        Log::error('⏱️ انتهت مهلة الاتصال بـ MEPS', [
+            'error' => $e->getMessage()
+        ]);
+        return false;
+        
+    } catch (\Exception $e) {
+        Log::error('❌ خطأ في الاتصال بـ MEPS', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        return false;
     }
-    
+}
     /**
      * بناء XML للدفع
      */
@@ -241,6 +270,7 @@ class MpsPaymentController extends Controller
                <ns:MerchantSecureKey>' . $settings->secure_key . '</ns:MerchantSecureKey>
                <ns:Mid>' . $settings->merchant_id . '</ns:Mid>
                <ns:Tid>' . $settings->terminal_id . '</ns:Tid>
+               <ns:Tenant>' . $settings->merchant_name . '</ns:Tenant>
             </ns:Config>
             <ns:EcrAmount>' . $amountFormatted . '</ns:EcrAmount>
             <ns:Printer>
@@ -259,25 +289,153 @@ class MpsPaymentController extends Controller
     /**
      * تحليل رد MEPS
      */
-    private function parseMepsResponse($xmlString)
-    {
-        $result = ['pos_resp_code' => null];
+private function parseMepsResponse($xmlString)
+{
+    $result = [
+        'pos_resp_code' => null,
+        'pos_resp_text' => null,
+        'pos_invoice_number' => null,
+        'pos_rrn' => null,
+        'pos_auth_code' => null,
+        'pos_receipt' => null,
+        'web_response_status' => null,
+        'web_response_error_desc' => null,
+        'raw_response' => $xmlString
+    ];
+    
+    try {
+        // تحميل XML
+        $xml = simplexml_load_string($xmlString);
         
-        try {
-            $xml = @simplexml_load_string($xmlString);
-            if (!$xml) return $result;
+        if ($xml === false) {
+            // إذا فشل التحليل، استخرج البيانات مباشرة من النص
+            return $this->extractDataFromText($xmlString);
+        }
+        
+        // تسجيل namespaces الموجودة فعلياً
+        $namespaces = $xml->getNamespaces(true);
+        Log::info('🔍 Namespaces الموجودة', $namespaces);
+        
+        // البحث في namespace 'a'
+        if (isset($namespaces['a'])) {
+            // تسجيل namespaces للاستخدام في xpath
+            $xml->registerXPathNamespace('a', $namespaces['a']);
+        }
+        
+        // البحث عن جميع الحقول المهمة
+        $fieldsToSearch = [
+            'PosRespCode' => 'pos_resp_code',
+            'PosRespText' => 'pos_resp_text',
+            'PosInvoiceNumber' => 'pos_invoice_number',
+            'PosRRN' => 'pos_rrn',
+            'PosAuthCode' => 'pos_auth_code',
+            'PosReceipt' => 'pos_receipt',
+            'WebResponseStatus' => 'web_response_status',
+            'WebResponseErrorDesc' => 'web_response_error_desc'
+        ];
+        
+        foreach ($fieldsToSearch as $fieldName => $resultKey) {
+            // البحث في namespace 'a'
+            $elements = $xml->xpath("//a:{$fieldName}");
             
+            if (!empty($elements)) {
+                $result[$resultKey] = trim((string)$elements[0]);
+            } else {
+                // البحث بدون namespace
+                $elements = $xml->xpath("//{$fieldName}");
+                if (!empty($elements)) {
+                    $result[$resultKey] = trim((string)$elements[0]);
+                }
+            }
+        }
+        
+        // إذا لم نجد PosRespCode، نبحث بشكل أكثر شمولاً
+        if (empty($result['pos_resp_code'])) {
             $allElements = $xml->xpath('//*');
             foreach ($allElements as $element) {
-                if ($element->getName() === 'PosRespCode') {
+                $name = $element->getName();
+                if (stripos($name, 'respcode') !== false || stripos($name, 'resp_code') !== false) {
                     $result['pos_resp_code'] = trim((string)$element);
                     break;
                 }
             }
-        } catch (\Exception $e) {
-            // تجاهل خطأ التحليل
         }
         
-        return $result;
+    } catch (\Exception $e) {
+        Log::error('❌ خطأ في تحليل رد MEPS', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        // استخراج البيانات من النص الخام كبديل
+        $result = array_merge($result, $this->extractDataFromText($xmlString));
     }
+    
+    return $result;
 }
+
+private function extractDataFromText($text)
+{
+    $data = [];
+    
+    // استخدام regex لاستخراج البيانات
+    $patterns = [
+        'pos_resp_code' => '/<a:PosRespCode[^>]*>(.*?)<\/a:PosRespCode>|<PosRespCode[^>]*>(.*?)<\/PosRespCode>/i',
+        'pos_invoice_number' => '/<a:PosInvoiceNumber[^>]*>(.*?)<\/a:PosInvoiceNumber>|<PosInvoiceNumber[^>]*>(.*?)<\/PosInvoiceNumber>/i',
+        'pos_rrn' => '/<a:PosRRN[^>]*>(.*?)<\/a:PosRRN>|<PosRRN[^>]*>(.*?)<\/PosRRN>/i',
+        'pos_receipt' => '/<a:PosReceipt[^>]*>(.*?)<\/a:PosReceipt>|<PosReceipt[^>]*>(.*?)<\/PosReceipt>/is',
+        'web_response_status' => '/<a:WebResponseStatus[^>]*>(.*?)<\/a:WebResponseStatus>|<WebResponseStatus[^>]*>(.*?)<\/WebResponseStatus>/i'
+    ];
+    
+    foreach ($patterns as $key => $pattern) {
+        if (preg_match($pattern, $text, $matches)) {
+            // نأخذ أول مجموعة غير فارغة
+            for ($i = 1; $i < count($matches); $i++) {
+                if (!empty($matches[$i])) {
+                    $data[$key] = trim($matches[$i]);
+                    break;
+                }
+            }
+        }
+    }
+    
+    // تنظيف نص الإيصال إذا كان موجوداً
+    if (isset($data['pos_receipt'])) {
+        $data['pos_receipt'] = html_entity_decode($data['pos_receipt']);
+        $data['pos_receipt'] = preg_replace('/\s+/', ' ', $data['pos_receipt']);
+    }
+    
+    return $data;
+}
+
+private function extractFromRawResponse($response)
+{
+    $result = [
+        'pos_resp_code' => null,
+        'approval_code' => null,
+        'rrn' => null
+    ];
+    
+    // البحث عن PosRespCode في النص الخام
+    if (preg_match('/<PosRespCode[^>]*>(.*?)<\/PosRespCode>/i', $response, $matches)) {
+        $result['pos_resp_code'] = trim($matches[1]);
+    } elseif (preg_match('/"PosRespCode":"([^"]+)"/', $response, $matches)) {
+        $result['pos_resp_code'] = trim($matches[1]);
+    }
+    
+    // البحث عن ApprovalCode في النص الخام
+    if (preg_match('/<ApprovalCode[^>]*>(.*?)<\/ApprovalCode>/i', $response, $matches)) {
+        $result['approval_code'] = trim($matches[1]);
+    } elseif (preg_match('/"ApprovalCode":"([^"]+)"/', $response, $matches)) {
+        $result['approval_code'] = trim($matches[1]);
+    }
+    
+    // البحث عن RRN في النص الخام
+    if (preg_match('/<RRN[^>]*>(.*?)<\/RRN>/i', $response, $matches)) {
+        $result['rrn'] = trim($matches[1]);
+    } elseif (preg_match('/"RRN":"([^"]+)"/', $response, $matches)) {
+        $result['rrn'] = trim($matches[1]);
+    }
+    
+    return $result;
+}
+    }

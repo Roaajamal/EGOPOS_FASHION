@@ -702,6 +702,22 @@ class AdminSidebarMenu
                         }
                         ////////////////////////////////////////////// quantity entry report 001
 
+                        //////////////////////////// missing product report 001
+                        // missing product report In SideBar
+                        if (auth()->user()->can('report.missing_product_report')) {
+                            $sub->url(
+                                // Route in controller 
+                                action([\App\Http\Controllers\MissingProductController::class, 'getMissingProducts']),
+                                // For translate 
+                                __('missing_product.missing_product_report'),
+                                [
+                                    'icon' => 'fa fa-exchange', 
+                                    'active' => request()->segment(1) == 'missing-products'
+                                ] 
+                            );
+                        }
+                        ////////////////////////////////////////////// missing product report 001
+
                          //////////////////////////// product_sales_detailed_report 001
                         
                         if (auth()->user()->can('report.product_sales_detailed_report')) {

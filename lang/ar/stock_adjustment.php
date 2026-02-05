@@ -1,7 +1,8 @@
 <?php
 
  return [
-     'stock_out_quantity' => ' سند اخراج كميات',
+     'stock_out_quantity' => '  اخراج كميات',
+     'stock_out_quantity_report' => ' تقرير اخراج كميات ',
      'stock_adjustments' => '  اخراج كميات',
      'list' => 'قائمة  سندات الاخراج',
      'add' => 'أضف سند اخراج',
@@ -10,7 +11,8 @@
      'out_type' => 'نوع الاخراج',
      'normal' => 'عادي',
      'abnormal' => 'غير عادي',
-     'total_amount' => 'الإجمالي',
+     'total' => 'المجموع',
+     'total_amount' =>  'الإجمالي',
      'total_amount_recovered' => 'الإجمالي المسترد',
      'reason_for_stock_adjustment' => 'السبب',
      'stock_out_added_successfully' => 'تمت اضافة  سند اخراج بنجاح',
@@ -19,4 +21,11 @@
      'view_details' => 'عرض تفاصيل سند الاخراج',
      'export' => 'استيراد',
      'file_to_export' => 'ملف للاستيراد' ,
+     'from_warehouse_to_branch' => 'من مستودع الى فرع',
+     'from_branch_to_branch' => 'من فرع الى فرع ',
+     'from_warehouse_to_recipient' => 'من مستودع الى جهة',
+     'recipient' => 'الجهة',
+     'discount' => 'الخصم', 
+     'total_stock_adjustment' => 'اجمالي المخزون المخرج ',
+     'edit' => 'تعديل',
  ];

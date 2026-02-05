@@ -40,7 +40,7 @@
      'all' => 'كل',
      'top_trending_products' => 'المنتجات الأكثر شعبية',
      'all_locations' => 'كل الفروع',
-     'stock_adjustment_report' => 'تقرير المخزون التالف',
+     'stock_adjustment_report' => 'تقرير اخراج الكميات',
      'total_stock_adjustment' => 'اجمالى المخزون التالف',
      'total_recovered' => 'اجمالى المبلغ المسترد',
      'total_normal' => 'المجموع الطبيعي',

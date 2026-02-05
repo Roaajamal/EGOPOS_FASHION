@@ -372,6 +372,27 @@
               @show_tooltip(__('lang_v1.view_purchase_price_tooltip'))
             </div>
           </div>
+
+           <!--  add role for view and create quantity entry 001 --> 
+          <div class="col-md-12">
+            <div class="checkbox">
+                <label>
+                 {!! Form::checkbox('permissions[]', 'quantity_entry.view', false, 
+                 [ 'class' => 'input-icheck']); !!} {{ __( 'role.quantity_entry.view' ) }}
+                </label>
+             </div>
+            </div>
+
+          <div class="col-md-12">
+            <div class="checkbox">
+               <label>
+                 {!! Form::checkbox('permissions[]', 'quantity_entry.create', false, 
+                 [ 'class' => 'input-icheck']); !!} {{ __( 'role.quantity_entry.create' ) }}
+                </label>
+             </div>
+          </div>
+           <!--  add role for view and create quantity entry 001 -->
+
         </div>
         </div>
         <hr>
@@ -1549,6 +1570,26 @@
               </label>
             </div>
           </div>
+           <!--  add roles for quantity entry report and missing product report 001 --> 
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'report.quantity_entry_report', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'report.quantity_entry_report_view' ) }}
+              </label>
+            </div>
+          </div>
+
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'report.missing_product_report', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'missing_product.missing_product_report_view' ) }}
+              </label>
+            </div>
+          </div>
+          <!--  add roles for quantity entry report and missing product report 001 --> 
+            
         </div>
         </div>
         <hr>

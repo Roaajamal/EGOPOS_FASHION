@@ -8,6 +8,7 @@ return [
     'gift_invoice'=> 'فاتورة هدية',
     // ترجمات العروض
     'product_offers' => 'عروض المنتجات',
+    'cost' => 'سعر الوحدة', 
     'active_offers' => 'العروض النشطة',
     'import_from_excel' => 'استيراد من إكسل',
     'add_new_offer' => 'إضافة عرض جديد',

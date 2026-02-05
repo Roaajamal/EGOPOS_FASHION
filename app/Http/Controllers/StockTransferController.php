@@ -14,6 +14,7 @@ use DB;
 use Illuminate\Http\Request;
 use Spatie\Activitylog\Models\Activity;
 use App\Events\StockTransferCreatedOrModified;
+use Maatwebsite\Excel\Facades\Excel;
 
 class StockTransferController extends Controller
 {
@@ -206,6 +207,17 @@ class StockTransferController extends Controller
             if (! $this->moduleUtil->isSubscribed($business_id)) {
                 return $this->moduleUtil->expiredResponse(action([\App\Http\Controllers\StockTransferController::class, 'index']));
             }
+            $products = $request->input('products');
+            $expected_count = $request->input('expected_row_count');
+
+            // إذا كان هناك عدد متوقع (قادم من الإكسل) ولم يطابق الواقع في المصفوفة
+           if (!empty($expected_count) && count($products) != $expected_count) {
+           $output = [
+           'success' => 0,
+           'msg' => "فشل الحفظ: تم استيراد " . $expected_count . " منتج ولكن الجدول يحتوي على " . count($products) . " منتج. يرجى إعادة الرفع."
+              ];
+            return redirect()->back()->with('status', $output);
+           }
 
             DB::beginTransaction();
 
@@ -373,6 +385,104 @@ class StockTransferController extends Controller
         return redirect('stock-transfers')->with('status', $output);
     }
 
+      public function import(Request $request)
+{
+    try {
+        $request->validate([
+            'file' => 'required|max:2048', 
+            'location_id' => 'required'
+        ]);
+
+        $file = $request->file('file');
+        // استخدام السطح البيني Excel لقراءة الملف
+        $parsed_array = \Excel::toArray([], $file);
+
+        if (empty($parsed_array) || empty($parsed_array[0])) {
+             throw new \Exception("الملف المرفوع فارغ.");
+        }
+
+        $imported_data = array_splice($parsed_array[0], 1); // تخطي سطر العنوان
+        $business_id = auth()->user()->business_id;
+        $location_id = $request->input('location_id');
+        $row_index = (int)$request->input('row_count', 0);
+
+        $html = '';
+        foreach ($imported_data as $value) {
+            // تخطي الأسطر الفارغة تماماً في ملف الإكسل
+            if (empty($value[0]) && empty($value[1])) {
+                continue;
+            }
+
+            // تنظيف ومعالجة الـ SKU
+            $sku = trim(strval($value[0]));
+            if (strpos($sku, '.') !== false) { 
+                $sku = explode('.', $sku)[0]; 
+            }
+
+            // استعلام شامل يجلب (المنتج، التنوع، الوحدة، والكمية المتوفرة في المخزن لهذا الفرع)
+            $product = \App\Variation::where('variations.sub_sku', $sku)
+                ->join('products as p', 'p.id', '=', 'variations.product_id')
+                ->join('units as u', 'u.id', '=', 'p.unit_id')
+                ->leftJoin('variation_location_details as vld', function ($join) use ($location_id) {
+                    $join->on('variations.id', '=', 'vld.variation_id')
+                         ->where('vld.location_id', '=', $location_id);
+                })
+                ->where('p.business_id', $business_id)
+                ->select([
+                    'variations.id as variation_id',
+                    'p.id as product_id',
+                    'p.name as product_name',
+                    'variations.sub_sku',
+                    'p.enable_stock',
+                    'p.unit_id', // هام جداً لجلب الوحدات الفرعية
+                    'u.short_name as unit',
+                    'u.allow_decimal as unit_allow_decimal',
+                    'variations.default_purchase_price as last_purchased_price',
+                    \DB::raw('COALESCE(vld.qty_available, 0) as qty_available')
+                ])->first();
+
+            // إذا لم يتم العثور على المنتج، تخطاه أو يمكنك إرجاع خطأ حسب رغبتك
+            if (!$product) {
+                continue; 
+            }
+
+            // تنسيق الكمية المتوفرة للعرض
+            $product->formatted_qty_available = $this->productUtil->num_f($product->qty_available);
+
+            // معالجة القيم القادمة من الإكسل (الكمية والسعر)
+            $quantity = isset($value[1]) && is_numeric($value[1]) ? (float)$value[1] : 1;
+            
+            // السعر: إذا كان موجود في الإكسل نأخذه، وإلا نعتمد سعر الشراء الافتراضي
+            $price = isset($value[2]) && is_numeric($value[2]) ? (float)$value[2] : $product->last_purchased_price;
+
+           // *** السطر الأهم لحل مشكلة السعر 0 ***
+            $product->default_purchase_price = $price;
+
+            $sub_units = $this->productUtil->getSubUnits($business_id, $product->unit_id);
+            // بناء السطر باستخدام الـ Blade المخصص لجدول الأسطر
+            $html .= view('stock_transfer.partials.product_table_row', [
+                'product' => $product,
+                'row_index' => $row_index,
+                'quantity' => $quantity,
+                'purchase_price' => $price,
+                'sub_units' => $sub_units,
+            ])->render();
+
+            // زيادة العداد لضمان استقلال الـ IDs في الجدول الأمامي
+            $row_index++; 
+        }
+
+        if (empty($html)) {
+            throw new \Exception("لم يتم العثور على منتجات مطابقة في الملف.");
+        }
+
+        return response()->json(['success' => true, 'html' => $html]);
+
+    } catch (\Exception $e) {
+        \Log::emergency("Error Stock Adjustment Import: " . $e->getMessage());
+        return response()->json(['success' => false, 'msg' => $e->getMessage()]);
+    }
+}
     /**
      * Display the specified resource.
      *

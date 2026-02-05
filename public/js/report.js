@@ -939,7 +939,7 @@ if ($('span#sr_total_sales').length > 0) {
                     d.customer_group_id = $('#psr_customer_group_id').val();
                 },
             },
-            columns: [
+             columns: [
                 { data: 'product_name', name: 'p.name'},
                 { data: 'sub_sku', name: 'v.sub_sku' },
                 { data: 'product_custom_field1', name: 'p.product_custom_field1', "visible": $('#psr_product_custom_field1').html().trim().length > 0},
@@ -950,12 +950,14 @@ if ($('span#sr_total_sales').length > 0) {
                 { data: 'invoice_no', name: 't.invoice_no' },
                 { data: 'transaction_date', name: 't.transaction_date' },
                 { data: 'sell_qty', name: 'transaction_sell_lines.quantity' },
+                { data: 'purchase_price_inc_tax', name: 'v.dpp_inc_tax' },
                 { data: 'unit_price', name: 'transaction_sell_lines.unit_price_before_discount' },
                 { data: 'discount_amount', name: 'transaction_sell_lines.line_discount_amount' },
                 { data: 'tax', name: 'tax_rates.name' },
                 { data: 'unit_sale_price', name: 'transaction_sell_lines.unit_price_inc_tax' },
                 { data: 'subtotal', name: 'subtotal', searchable: false },
                 { data: 'payment_methods', name: 'payment_methods', searchable: false },
+                { data: 'added_by', name: 'u_creator.first_name' },
             ],
             fnDrawCallback: function(oSettings) {
                 $('#footer_subtotal').text(

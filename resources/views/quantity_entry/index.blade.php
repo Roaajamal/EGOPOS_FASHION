@@ -27,7 +27,7 @@ $custom_labels = json_decode(session('business.custom_labels'), true);
         <div class="form-group">
             {!! Form::label('ref_no', __('purchase.ref_no').':') !!}
             @show_tooltip(__('lang_v1.leave_empty_to_autogenerate'))
-            {!! Form::text('ref_no', $ref_no ?? null, ['class' => 'form-control']); !!}
+            {!! Form::text('ref_no', $ref_no ?? null, ['class' => 'form-control', 'id' => 'ref_no']); !!}
         </div>
     </div>
 

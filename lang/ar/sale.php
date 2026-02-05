@@ -6,6 +6,8 @@
      'list_sale' => 'قائمة المبيعات',
      'add_sale' => 'إضافة بيع',
      'pos_sale' => 'نقطة بيع',
+     'purchase_price_inc_tax' => 'التكلفة' ,
+     'added_by' => 'اضيف بواسطة' ,
      'draft_added' => 'تمت إضافة المسودة بنجاح',
      'invoice_added' => 'تمت إضافة الفاتورة بنجاح',
      'item' => 'عناصر',
