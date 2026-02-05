@@ -835,7 +835,14 @@ if (!empty($full_start) && !empty($full_end)) {
             $query->where('transactions.location_id', $request->input('location_id'));
         }
         if (!empty($request->input('start_date')) && !empty($request->input('end_date'))) {
-            $query->whereBetween('transactions.transaction_date', [$request->input('start_date'), $request->input('end_date')]);
+         $start = $request->input('start_date');
+         $end = $request->input('end_date');
+    
+           // التأكد من أن التاريخ يشمل اليوم كاملاً
+         $query->whereBetween(DB::raw('DATE(transactions.transaction_date)'), [
+         date('Y-m-d', strtotime($start)), 
+         date('Y-m-d', strtotime($end))
+          ]);
         }
 
         // 3. التفرع بناءً على نوع العرض
@@ -2226,7 +2233,8 @@ public function getSalesRepresentativeSummary(Request $request) {
                 'transaction_sell_lines.transaction_id',
                 '=',
                 't.id'
-            )
+                )
+                ->join('users as u_creator', 't.created_by', '=', 'u_creator.id') /////// add user table
                 ->join(
                     'variations as v',
                     'transaction_sell_lines.variation_id',
@@ -2251,6 +2259,10 @@ public function getSalesRepresentativeSummary(Request $request) {
                     'pv.name as product_variation',
                     'v.name as variation_name',
                     'v.sub_sku',
+                    't.transaction_date as transaction_date',
+                     // دمج الاسم الأول والأخير للمستخدم وعرضه باسم added_by
+                     DB::raw("CONCAT(COALESCE(u_creator.first_name, ''), ' ', COALESCE(u_creator.last_name, '')) as added_by"),
+                    'v.dpp_inc_tax as purchase_price_inc_tax',   ////// add purchase price
                     'c.name as customer',
                     'c.mobile as contact_no',
                     'c.email as contact_email',
@@ -2258,7 +2270,7 @@ public function getSalesRepresentativeSummary(Request $request) {
                     'c.contact_id',
                     't.id as transaction_id',
                     't.invoice_no',
-                    't.transaction_date as transaction_date',
+                    
                     'transaction_sell_lines.unit_price_before_discount as unit_price',
                     'transaction_sell_lines.unit_price_inc_tax as unit_sale_price',
                     DB::raw('(transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) as sell_qty'),
@@ -2377,7 +2389,14 @@ public function getSalesRepresentativeSummary(Request $request) {
                     return $html;
                 })
                 ->editColumn('customer', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$customer}}')
-                ->rawColumns(['invoice_no', 'unit_sale_price', 'subtotal', 'sell_qty', 'discount_amount', 'unit_price', 'tax', 'customer', 'payment_methods'])
+                ->editColumn('purchase_price_inc_tax', function ($row) {
+                    return '<span class="purchase_price" data-orig-value="'.$row->purchase_price_inc_tax.'">'.
+                   $this->transactionUtil->num_f($row->purchase_price_inc_tax, true).'</span>';
+                })
+                ->editColumn('added_by', function ($row) {
+                    return $row->added_by;
+                })
+                ->rawColumns(['invoice_no', 'unit_sale_price', 'subtotal', 'sell_qty', 'discount_amount','purchase_price_inc_tax','unit_price', 'tax', 'customer', 'payment_methods','added_by'])
                 ->make(true);
         }
 
@@ -2391,7 +2410,6 @@ public function getSalesRepresentativeSummary(Request $request) {
             ->with(compact('business_locations', 'customers', 'categories', 'brands',
                 'customer_group', 'product_custom_field1', 'product_custom_field2'));
     }
-
     /**
      * Shows product purchase report with purchase details
      *

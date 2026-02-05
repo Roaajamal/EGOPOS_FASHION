@@ -118,6 +118,8 @@ class ImportProductsController extends Controller
                 }
 
                 $business_locations = BusinessLocation::where('business_id', $business_id)->get();
+                $excel_skus = [];
+                
                 DB::beginTransaction();
                 foreach ($imported_data as $key => $value) {
 
@@ -309,20 +311,32 @@ class ImportProductsController extends Controller
 
                     //Add SKU
                     $sku = trim($value[5]);
-                    if (! empty($sku)) {
-                        $product_array['sku'] = $sku;
-                        //Check if product with same SKU already exist
-                        $is_exist = Product::where('sku', $product_array['sku'])
-                                        ->where('business_id', $business_id)
-                                        ->exists();
-                        if ($is_exist) {
-                            $is_valid = false;
-                            $error_msg = "$sku SKU already exist in row no. $row_no";
-                            break;
-                        }
-                    } else {
-                        $product_array['sku'] = ' ';
-                    }
+                    if (!empty($sku)) {
+         
+                    // 2. التحقق من التكرار داخل ملف الإكسل نفسه
+                    if (in_array($sku, $excel_skus)) {
+                   $is_valid = false;
+                   $error_msg = "Duplicate SKU '$sku' found in Excel file at row no. $row_no";
+                    break;
+                       }
+        
+                   // أضف الـ SKU الحالي للمصفوفة لكي يتم فحصه مع الصفوف القادمة
+                   $excel_skus[] = $sku;
+
+                   $product_array['sku'] = $sku;
+
+                 // 3. التحقق من وجود الـ SKU مسبقاً في قاعدة البيانات (الكود الأصلي الخاص بك)
+                   $is_exist = Product::where('sku', $product_array['sku'])
+                            ->where('business_id', $business_id)
+                            ->exists();
+                  if ($is_exist) {
+                 $is_valid = false;
+                 $error_msg = "$sku SKU already exist in system. Row no. $row_no";
+                  break;
+                   }
+                     } else {
+                   $product_array['sku'] = ' ';
+                      }
 
                     //Add product expiry
                     $expiry_period = trim($value[9]);

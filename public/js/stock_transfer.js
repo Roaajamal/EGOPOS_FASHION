@@ -62,16 +62,28 @@ $(document).ready(function() {
         };
     }
 
-    $('select#location_id').change(function() {
-        if ($(this).val()) {
-            $('#search_product_for_srock_adjustment').removeAttr('disabled');
-        } else {
-            $('#search_product_for_srock_adjustment').attr('disabled', 'disabled');
-        }
-        $('table#stock_adjustment_product_table tbody').html('');
-        $('#product_row_index').val(0);
-        update_table_total();
-    });
+   $('select#location_id').change(function() {
+    if ($(this).val()) {
+        // تفعيل حقل البحث (موجود أصلاً عندك)
+        $('#search_product_for_srock_adjustment').removeAttr('disabled');
+        // تفعيل كبسة الاستيراد من إكسل (الإضافة الجديدة)
+        $('#import_excel_btn').removeAttr('disabled');
+    } else {
+        // تعطيل حقل البحث
+        $('#search_product_for_srock_adjustment').attr('disabled', 'disabled');
+        // تعطيل كبسة الاستيراد من إكسل
+        $('#import_excel_btn').attr('disabled', 'disabled');
+    }
+    
+    // تفريغ الجدول والعدادات عند تغيير الفرع لضمان دقة البيانات
+    $('table#stock_adjustment_product_table tbody').html('');
+    $('#product_row_index').val(0);
+    $('#expected_row_count').val(0); // تصفير عداد الإكسل أيضاً عند تغيير الفرع
+    update_table_total();
+    
+});
+// ✅ هذا السطر يجب أن يكون بالخارج ليعمل عند تحميل الصفحة أول مرة فقط
+$('select#location_id').trigger('change');
 
     $(document).on('change', 'input.product_quantity', function() {
         update_table_row($(this).closest('tr'));
@@ -396,6 +408,81 @@ $(document).on('submit', '#update_stock_transfer_status_form', function(e) {
         },
     });
 });
+
+///////////////////// 📤 Import products from Excel  001
+  $(document).on('submit', '#export_transfer_products_modal form', function(e) {
+    e.preventDefault();
+    let formData = new FormData(this); 
+    let url = $(this).attr('action');
+
+    // جلب العداد الحالي لضمان عدم تداخل المعرفات (IDs)
+    let currentRows = parseInt($('#product_row_index').val()) || 0;
+    formData.append('location_id', $('#location_id').val()); 
+    formData.append('row_count', currentRows); 
+
+    let btn = $(this).find('button[type="submit"]');
+    let btn_text = btn.html();
+    btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+
+    $.ajax({
+        method: 'POST',
+        url: url,
+        data: formData,
+        dataType: 'json',
+        processData: false, 
+        contentType: false, 
+        success: function(result) {
+    btn.prop('disabled', false).html(btn_text);
+    if (result.success) {
+        if (result.html && result.html.trim() !== '') {
+            let $wrappedHtml = $('<table><tbody>' + result.html + '</tbody></table>');
+            let $newRows = $wrappedHtml.find('tr.product_row');
+            
+            // --- الجزء الجديد هنا ---
+            // جلب العدد الحالي المخزن في الحقل المخفي
+            let expectedCount = parseInt($('#expected_row_count').val()) || 0;
+            // إضافة عدد الأسطر الجديدة القادمة من الإكسل
+            expectedCount += $newRows.length;
+            // تحديث الحقل المخفي بالعدد الكلي الجديد
+            $('#expected_row_count').val(expectedCount);
+            // ------------------------
+
+            $newRows.each(function() {
+                let $currentRow = $(this).clone(); 
+                let variation_id = $currentRow.find('.variation_id').val();
+                
+                let existingRow = $('#stock_adjustment_product_table tbody')
+                                    .find('.variation_id[value="' + variation_id + '"]')
+                                    .closest('tr');
+
+                if (existingRow.length > 0) {
+                    let current_qty = parseFloat(__read_number(existingRow.find('.product_quantity'))) || 0;
+                    let new_qty = parseFloat($currentRow.find('.product_quantity').val()) || 0;
+                    __write_number(existingRow.find('.product_quantity'), current_qty + new_qty);
+                    update_table_row(existingRow);
+                    
+                    // ملاحظة: بما أن المنتج موجود أصلاً ودمجنا الكمية، يجب إنقاص 1 من العداد لأننا لم نضف سطراً جديداً
+                    let finalCount = parseInt($('#expected_row_count').val()) - 1;
+                    $('#expected_row_count').val(finalCount);
+
+                } else {
+                    $('#stock_adjustment_product_table tbody').append($currentRow);
+                }
+            });
+
+            update_table_total();
+            $('#export_transfer_products_modal').modal('hide');
+            toastr.success("تم استيراد المنتجات وتحديث العدد المتوقع");
+        }
+    }
+},
+        error: function(e) {
+            btn.prop('disabled', false).html(btn_text);
+            toastr.error("حدث خطأ أثناء الرفع، تأكد من صيغة الملف وتطابق البيانات");
+        }
+    });
+});
+ 
 $(document).on('shown.bs.modal', '.view_modal', function() {
     __currency_convert_recursively($('.view_modal'));
 });

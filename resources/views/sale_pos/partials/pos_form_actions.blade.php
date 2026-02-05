@@ -225,49 +225,36 @@
 
 
 
+
 document.addEventListener('keydown', function (e) {
 
-    // DRAFT — F1
-    if (e.key === 'F1') {
-        e.preventDefault();
-        document.getElementById('pos-draft')?.click();
-    }
 
-    // QUOTATION — F2
-    if (e.key === 'F2') {
-        e.preventDefault();
-        document.getElementById('pos-quotation')?.click();
-    }
 
-    // SUSPEND — F3
-    if (e.key === 'F3') {
-        e.preventDefault();
-        document.querySelector('[data-pay_method="suspend"]')?.click();
-    }
 
-    // CREDIT SALE — F4
-    if (e.key === 'F4') {
-        e.preventDefault();
-        document.querySelector('[data-pay_method="credit_sale"]')?.click();
+if (e.key === 'F1') {
+    e.preventDefault();
+    
+    const DRAFT_LOCATION_ID = '32'; // فرع الدرفت
+    let locationField = document.querySelector('#location_id, input[name="location_id"]');
+    let draftButton = document.getElementById('pos-draft');
+    
+    if (locationField && draftButton) {
+        // حفظ القيمة الأصلية للفرع
+        const originalLocation = locationField.value;
+        
+        // تغيير الفرع إلى 20
+        locationField.value = DRAFT_LOCATION_ID;
+        
+        // النقر على زر الدرفت
+        draftButton.click();
+        
+        // إرجاع الفرع الأصلي فوراً
+        setTimeout(() => {
+            locationField.value = originalLocation;
+        }, 50);
     }
-
-    // EXPRESS CASH — F5
-    if (e.key === 'F8') {
-        e.preventDefault();
-        document.querySelector('[data-pay_method="cash"]')?.click();
-    }
-
-    // CARD — F6
-    if (e.key === 'F7') {
-        e.preventDefault();
-        document.querySelector('[data-pay_method="card"]')?.click();
-    }
-
-    // CHECKOUT MULTI PAY — F7
-    if (e.key === 'F2') {
-        e.preventDefault();
-        document.getElementById('pos-finalize')?.click();
-    }
+}
+  
 
     // CANCEL — F9
     if (e.key === 'F9') {
@@ -287,6 +274,49 @@ document.addEventListener('keydown', function (e) {
         document.getElementById('recent-transactions')?.click();
     }
 
+});
+let ORIGINAL_LOCATION = null;
+
+// حفظ الأصلي عند التحميل
+document.addEventListener('DOMContentLoaded', function() {
+    let locationField = document.querySelector('#location_id, input[name="location_id"]');
+    if (locationField) {
+        ORIGINAL_LOCATION = locationField.value;
+    }
+});
+
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'F3') {
+        e.preventDefault();
+        
+        const FIXED_LOCATION_ID = '29';
+        let locationField = document.querySelector('#location_id, input[name="location_id"]');
+        
+        if (locationField) {
+            // حفظ الأصلي إذا أول مرة
+            if (ORIGINAL_LOCATION === null) {
+                ORIGINAL_LOCATION = locationField.value;
+            }
+            
+            // تغيير إلى 20
+            locationField.value = FIXED_LOCATION_ID;
+            
+            // فوري بعد النقر، ارجع للأصلي
+            setTimeout(() => {
+                document.querySelector('[data-pay_method="cash"]')?.click();
+                
+                // إرجاع فوري للأصلي
+                setTimeout(() => {
+                    locationField.value = ORIGINAL_LOCATION;
+                }, 50);
+            }, 50);
+        }
+    }
+    
+    if (e.key === 'F8') {
+        e.preventDefault();
+        document.querySelector('[data-pay_method="cash"]')?.click();
+    }
 });
 
 document.addEventListener('DOMContentLoaded', function() {

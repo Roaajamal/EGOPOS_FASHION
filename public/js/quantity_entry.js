@@ -219,13 +219,13 @@ $(document).ready(function () {
         });
     }
 
-// 📤 Import products from Excel
+// ==========================================
+    // 📤 5. استيراد المنتجات من الإكسل
+    // ==========================================
     $(document).on('submit', '#import_new_quantity_products_modal form', function(e) {
         e.preventDefault();
         let formData = new FormData(this); 
         let url = $(this).attr('action');
-
-        // نرسل الـ rowCount الحالي للسيرفر لكي يبدأ ترقيم الأسطر منه
         let currentRows = $('#purchase_entry_table tbody tr').length;
         formData.append('location_id', $('#location_id').val()); 
         formData.append('row_count', currentRows); 
@@ -242,65 +242,151 @@ $(document).ready(function () {
             processData: false, 
             contentType: false, 
             success: function(result) {
-    btn.prop('disabled', false).html(btn_text);
-    if (result.success) {
-        if (result.html && result.html.trim() !== '') {
-            // 1. تحويل الـ HTML القادم إلى كائن jQuery مؤقت لفصل الأسطر
-            let $newRows = $(result.html);
+                btn.prop('disabled', false).html(btn_text);
+                if (result.success) {
+                    if (result.html && result.html.trim() !== '') {
+                        let $newRows = $(result.html);
+                        let tbody = $('#purchase_entry_table tbody');
+                        tbody.hide(); 
 
-            $newRows.each(function() {
-                let $currentRow = $(this);
-                let variation_id = $currentRow.find('.variation_id').val();
-                let new_qty = parseFloat($currentRow.find('.quantity').val()) || 0;
-                let new_price = parseFloat($currentRow.find('.purchase_price').val()) || 0;
+                        $newRows.each(function() {
+                            let $currentRow = $(this);
+                            let variation_id = $currentRow.find('.variation_id').val();
+                            let existingRow = tbody.find('.variation_id[value="' + variation_id + '"]').closest('tr');
 
-                // 2. البحث هل هذا الـ variation_id موجود أصلاً في الجدول؟
-                let existingRow = $('#purchase_entry_table tbody').find('.variation_id[value="' + variation_id + '"]').closest('tr');
+                            if (existingRow.length > 0) {
+                                let new_qty = parseFloat($currentRow.find('.quantity').val()) || 0;
+                                let current_qty = parseFloat(existingRow.find('.quantity').val()) || 0;
+                                existingRow.find('.quantity').val(current_qty + new_qty);
+                                updateRowTotal(existingRow);
+                            } else {
+                                tbody.append($currentRow);
+                            }
+                        });
 
-                if (existingRow.length > 0) {
-                    // إذا وجدناه: نحدث الكمية والسعر
-                    let current_qty = parseFloat(existingRow.find('.quantity').val()) || 0;
-                    existingRow.find('.quantity').val(current_qty + new_qty);
-                    
-                    // تحديث السعر (اختياري: هل تريدين تحديث السعر لآخر سعر في الإكسل؟)
-                    existingRow.find('.purchase_price').val(new_price);
-                    
-                    updateRowTotal(existingRow);
+                        tbody.show();
+                        update_table_sr_number();
+                        recalculateAllRows();
+                        $('#import_new_quantity_products_modal').modal('hide');
+                        toastr.success("تم الاستيراد بنجاح");
+                        $('#import_new_quantity_products_modal form')[0].reset();
+                    }
                 } else {
-                    // إذا لم نجده: نضيف السطر كاملاً
-                    $('#purchase_entry_table tbody').append($currentRow);
+                    toastr.error(result.msg);
                 }
-            });
-
-            // 3. تحديث الأرقام التسلسلية والإجماليات بعد انتهاء الحلقة
-            update_table_sr_number();
-            recalculateAllRows();
-            
-            $('#import_new_quantity_products_modal').modal('hide');
-            toastr.success("تم الاستيراد وتحديث الكميات بنجاح");
-            $('#import_new_quantity_products_modal form')[0].reset();
-        }
-    } else {
-        toastr.error(result.msg);
-    }
-},
-            error: function(e) {
+            },
+            error: function() {
                 btn.prop('disabled', false).html(btn_text);
                 toastr.error("حدث خطأ أثناء الرفع");
             }
         });
     });
 
-    // منع الخروج أو إعادة التحميل إذا كان الجدول يحتوي على بيانات
-$(window).on('beforeunload', function() {
-    if ($('#purchase_entry_table tbody tr').length > 0) {
-        return "لديك تغييرات غير محفوظة، هل أنت متأكد من مغادرة الصفحة؟";
-    }
+    // ==========================================
+    // 💾 6. منطق الحفظ النهائي (الدفعات + التراجع)
+    // ==========================================
+    $(document).on('submit', 'form#add_quantity_form', function(e) {
+        e.preventDefault();
+        let form = $(this);
+        let btn = form.find('button[type="submit"]');
+        let ref_no = $('#ref_no').val() || ("QE-" + Date.now()); 
+
+        let allProducts = [];
+        $('#purchase_entry_table tbody tr').each(function() {
+    let row = $(this);
+    
+    // ملاحظة: نبحث عن الحقل باستخدام [name*="product_id"] لأن الكلاس مفقود في الـ HTML لديك
+    let p_id = row.find('input[name*="[product_id]"]').val();
+    let v_id = row.find('.variation_id').val();
+    let qty = row.find('.quantity').val();
+    let price = row.find('.purchase_price').val();
+
+    allProducts.push({
+        product_id: p_id,
+        variation_id: v_id,
+        quantity: qty,
+        purchase_price: price
+    });
+    });
+
+        if (allProducts.length === 0) {
+            toastr.error("الجدول فارغ!");
+            return false;
+        }
+
+        // تقسيم البيانات إلى دفعات (Chunks)
+        let chunkSize = 200;
+        let chunks = [];
+        for (let i = 0; i < allProducts.length; i += chunkSize) {
+            chunks.push(allProducts.slice(i, i + chunkSize));
+        }
+
+        btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> جاري الحفظ...');
+
+        // الاحتفاظ بنسخة وتفريغ الجدول لتجنب max_input_vars
+        let tableBackup = $('#purchase_entry_table tbody').html();
+        $('#purchase_entry_table tbody').empty();
+
+        let currentChunkIndex = 0;
+
+        function sendNextChunk() {
+            let isLastChunk = (currentChunkIndex === chunks.length - 1);
+
+            $.ajax({
+                method: 'POST',
+                url: form.attr('action'),
+                data: {
+                    _token: $('meta[name="csrf-token"]').attr('content'),
+                    location_id: $('#location_id').val(),
+                    transaction_date: $('#transaction_date').val(),
+                    ref_no: ref_no,
+                    products: JSON.stringify(chunks[currentChunkIndex]),
+                    is_last_chunk: isLastChunk ? 1 : 0
+                },
+                success: function(result) {
+                    if (result.success) {
+                        currentChunkIndex++;
+                        if (currentChunkIndex < chunks.length) {
+                            btn.html('<i class="fa fa-spinner fa-spin"></i> دفعة ' + currentChunkIndex + ' من ' + chunks.length);
+                            sendNextChunk();
+                        } else {
+                            $(window).off('beforeunload');
+                            toastr.success("تم الحفظ وتحديث المخزون بنجاح!");
+                            window.location.href = '/quantity-entry';
+                        }
+                    } else {
+                        // فشل: تراجع عن كل الدفعات السابقة
+                        rollbackTransaction(ref_no, tableBackup);
+                        toastr.error("فشل في الدفعة: " + result.msg);
+                    }
+                },
+                error: function() {
+                    rollbackTransaction(ref_no, tableBackup);
+                    toastr.error("خطأ اتصال بالسيرفر. تم إلغاء العملية.");
+                }
+            });
+        }
+
+        sendNextChunk();
+
+        function rollbackTransaction(ref_no, backup) {
+            $.post('/quantity-entry/cleanup', { 
+                ref_no: ref_no, 
+                _token: $('meta[name="csrf-token"]').attr('content') 
+            }, function() {
+                $('#purchase_entry_table tbody').html(backup);
+                btn.prop('disabled', false).html('حفظ');
+                recalculateAllRows();
+            });
+        }
+    });
+
+    // ⛔ منع الخروج إذا وجد بيانات
+    $(window).on('beforeunload', function() {
+        if ($('#purchase_entry_table tbody tr').length > 0) {
+            return "لديك تغييرات غير محفوظة، هل أنت متأكد من مغادرة الصفحة؟";
+        }
+    });
+
 });
 
-// تعطيل التنبيه عند الضغط على زر الحفظ (أو إرسال الفورم الرئيسي)
-$(document).on('submit', 'form#add_quantity_form', function() {
-    $(window).off('beforeunload');
-});
-
-});

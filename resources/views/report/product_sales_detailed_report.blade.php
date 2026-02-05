@@ -400,12 +400,22 @@
     { data: 'customer_name', name: 'c.name' },
     { data: 'sku', name: 'p.sku' },
     { data: 'product_name', name: 'p.name' },
-    { data: 'quantity', name: 'quantity' },
-    { data: 'total_line_amount', name: 'total_line_amount', searchable: false }, // عطلنا البحث هنا
-    { data: 'cash_val', name: 'cash_val', searchable: false, orderable: false },
-    { data: 'card_val', name: 'card_val', searchable: false, orderable: false },
-    { data: 'due_val', name: 'due_val', searchable: false, orderable: false },
-    { data: 'location_name', name: 'bl.name' }
+    { data: 'quantity', name: 'quantity', render: function(data) {
+                    return __number_f(data, false); // تنسيق الكمية بدون كسر إذا لم نحتاج
+                } },
+    { data: 'total_line_amount', name: 'total_line_amount', searchable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true); // تنسيق المبلغ كعملة
+                } }, // عطلنا البحث هنا
+    { data: 'cash_val', name: 'cash_val', searchable: false, orderable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true);
+                } },
+    { data: 'card_val', name: 'card_val', searchable: false, orderable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true);
+                } },
+    { data: 'due_val', name: 'due_val', searchable: false, orderable: false,  render: function(data) {
+                    return __currency_trans_from_en(data, true);
+                } },
+    { data: 'location_name', name: 'bl.name', }
 ],
                 footerCallback: function (row, data, start, end, display) {
                     var api = this.api();
@@ -426,7 +436,8 @@
             { data: 'type_label', name: 'type_label', searchable: false },
             { data: 'invoice_no', name: 't.invoice_no' },
             { data: 'customer_name', name: 'c.name' },
-            { data: 'final_total', name: 'final_total', searchable: false }, // حقل ناتج عن IF
+            { data: 'final_total', name: 'final_total', searchable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true);  } }, // حقل ناتج عن IF
             { data: 'payment_status', name: 't.payment_status' },
             { data: 'location_name', name: 'bl.name' }
         ],
@@ -446,13 +457,21 @@
             { data: 'customer_name', name: 'c.name' },
             { data: 'sku', name: 'p.sku' },
             { data: 'product_name', name: 'p.name' },
-            { data: 'quantity', name: 'transaction_sell_lines.quantity' },
-            { data: 'price_before_tax', name: 'transaction_sell_lines.unit_price_before_discount', searchable: false },
-            { data: 'price_after_tax', name: 'transaction_sell_lines.unit_price_inc_tax', searchable: false },
-            { data: 'total_line_amount', name: 'total_line_amount', searchable: false },
-            { data: 'cash_amount', name: 'cash_amount', searchable: false, orderable: false },
-            { data: 'card_amount', name: 'card_amount', searchable: false, orderable: false },
-            { data: 'due_amount', name: 'due_amount', searchable: false, orderable: false },
+            { data: 'quantity', name: 'transaction_sell_lines.quantity', render: function(data) {
+                    return __number_f(data, false); // تنسيق الكمية بدون كسر إذا لم نحتاج
+                } },
+            { data: 'price_before_tax', name: 'transaction_sell_lines.unit_price_before_discount', searchable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true);  } },
+            { data: 'price_after_tax', name: 'transaction_sell_lines.unit_price_inc_tax', searchable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true); } },
+            { data: 'total_line_amount', name: 'total_line_amount', searchable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true);  } },
+            { data: 'cash_amount', name: 'cash_amount', searchable: false, orderable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true); } },
+            { data: 'card_amount', name: 'card_amount', searchable: false, orderable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true);  }  },
+            { data: 'due_amount', name: 'due_amount', searchable: false, orderable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true);  } },
             { data: 'location_name', name: 'bl.name' }
         ],
         footerCallback: function (row, data, start, end, display) {
@@ -473,10 +492,14 @@
             { data: 'transaction_date', name: 't.transaction_date', searchable: false },
             { data: 'invoice_no', name: 't.invoice_no' },
             { data: 'customer_name', name: 'c.name' },
-            { data: 'original_price', name: 'original_price', searchable: false }, // حقل SUM
-            { data: 'unit_tax', name: 'unit_tax', searchable: false },             // حقل SUM
-            { data: 'discount_val', name: 't.discount_amount', searchable: false },
-            { data: 'total_line_amount', name: 't.final_total', searchable: false },
+            { data: 'original_price', name: 'original_price', searchable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true); } }, // حقل SUM
+            { data: 'unit_tax', name: 'unit_tax', searchable: false , render: function(data) {
+                    return __currency_trans_from_en(data, true);  } },             // حقل SUM
+            { data: 'discount_val', name: 't.discount_amount', searchable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true);  }},
+            { data: 'total_line_amount', name: 't.final_total', searchable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true); } },
             { data: 'payment_methods', name: 'payment_methods', searchable: false, orderable: false },
             { data: 'location_name', name: 'bl.name' }
         ],
@@ -502,8 +525,11 @@
             { data: 'customer_name', name: 'c.name' },
             { data: 'sku', name: 'p.sku' },
             { data: 'product_name', name: 'p.name' },
-            { data: 'quantity', name: 'tsl.quantity' },
-            { data: 'subtotal', name: 'subtotal', searchable: false, orderable: false }, 
+            { data: 'quantity', name: 'tsl.quantity', render: function(data) {
+                    return __number_f(data, false); // تنسيق الكمية بدون كسر إذا لم نحتاج
+                } },
+            { data: 'subtotal', name: 'subtotal', searchable: false, orderable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true); } }, 
             { data: 'payment_status', name: 't.payment_status' },
             { data: 'location_name', name: 'bl.name' }
         ],
@@ -525,7 +551,8 @@
             { data: 'transaction_date', name: 't.transaction_date', searchable: false },
             { data: 'invoice_no', name: 't.invoice_no' },
             { data: 'customer_name', name: 'c.name' }, 
-            { data: 'total_line_amount', name: 't.final_total', searchable: false },
+            { data: 'total_line_amount', name: 't.final_total', searchable: false, render: function(data) {
+                    return __currency_trans_from_en(data, true); } },
             { data: 'payment_status', name: 't.payment_status' },
             { data: 'payment_methods', name: 'payment_methods', searchable: false, orderable: false },
             { data: 'location_name', name: 'bl.name' }

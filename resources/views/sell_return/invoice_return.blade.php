@@ -126,10 +126,7 @@
     <div style="margin-top: 10px; border-top: 1px solid #000; padding-top: 5px;">
         @if(empty($layout->hide_price))
             {{-- تم دمج التسمية والقيمة في سطر واحد لمنع التكرار الظاهر بالصورة --}}
-            <div class="flex-box">
-               
-                <p class="sub-headings">{{ $receipt_details->subtotal ?? '' }}</p>
-            </div>
+          
 
             @if(!empty($layout->additional_expenses))
                 @foreach($layout->additional_expenses as $key => $val)
