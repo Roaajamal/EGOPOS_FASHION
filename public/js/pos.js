@@ -839,7 +839,8 @@ $(document).on('submit', 'form#add_pos_sell_form', function(e) {
 
         var data = $(form).serialize();
         var is_gift = $('#is_gift_receipt').is(':checked') ? 1 : 0;
-        data = data + '&status=final&is_gift_receipt=' + is_gift;
+       var is_slip = $('#is_slip_receipt').is(':checked') ? 1 : 0;
+        data = data + '&status=final&is_gift_receipt=' + is_gift + '&is_slip_receipt=' + is_slip;
 
         var url = $(form).attr('action');
         $.ajax({
