@@ -188,6 +188,83 @@
     </div>
 </div>
                      <!-- gift fatora   -->
+                      <!-- slip fatora checkbox  -->
+          @if(!empty($pos_settings['enable_slip']))
+<style>
+    /* حاوية السويتش */
+    .slip-switch-container {
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        margin-top: 5px !important;
+        cursor: pointer;
+    }
+
+    /* إخفاء الـ Checkbox الأصلي وأي طبقة iCheck تضاف فوقه */
+    .slip-switch-container input[type="checkbox"], 
+    .slip-switch-container .icheckbox_square-blue {
+        display: none !important;
+    }
+
+    /* هيكل السويتش */
+    .custom-switch {
+        position: relative !important;
+        display: inline-block !important;
+        width: 38px !important;
+        height: 20px !important;
+        background-color: #ccc !important;
+        border-radius: 20px !important;
+        transition: all 0.3s !important;
+    }
+
+    /* الدائرة البيضاء الصغيرة */
+    .custom-switch::after {
+        content: "" !important;
+        position: absolute !important;
+        width: 14px !important;
+        height: 14px !important;
+        border-radius: 50% !important;
+        background-color: white !important;
+        top: 3px !important;
+        left: 3px !important;
+        transition: all 0.3s !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+    }
+
+    /* التنسيق عند التفعيل */
+    #is_slip_receipt:checked + .custom-switch {
+        background-color: #3c8dbc !important; /* اللون الأزرق الرسمي للنظام */
+    }
+
+    #is_slip_receipt:checked + .custom-switch::after {
+        left: 21px !important;
+    }
+
+    .slip-label-text {
+        font-weight: bold !important;
+        font-size: 13px !important;
+        user-select: none !important;
+    }
+</style>
+
+<div class="col-md-2 col-sm-3 col-xs-6 p-0">
+    <label class="slip-switch-container">
+        <input type="checkbox" id="is_slip_receipt" value="1" style="display:none !important;">
+        <span class="custom-switch"></span>
+        <span class="slip-label-text">Slip</span>
+    </label>
+</div>
+
+<script>
+    // لضمان استجابة السويتش حتى مع وجود مكتبات أخرى
+    $(document).on('change', '#is_slip_receipt', function() {
+        if($(this).is(':checked')) {
+            console.log("Slip Receipt Enabled");
+        }
+    });
+</script>
+@endif
+                     <!-- slip fatora   --> 
 
                 @if (!$is_mobile)
                     {{-- <div class="bg-navy pos-total text-white ">

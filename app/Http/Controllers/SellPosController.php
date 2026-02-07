@@ -341,6 +341,8 @@ class SellPosController extends Controller
         // --- إضافة: استقبال خيار فاتورة الهدية ---
         $is_gift_receipt_selected = !empty($request->input('is_gift_receipt')) && 
                                     ($request->input('is_gift_receipt') == 1 || $request->input('is_gift_receipt') == 'true');
+        $is_slip_receipt_selected = !empty($request->input('is_slip_receipt')) && 
+                            ($request->input('is_slip_receipt') == 1 || $request->input('is_slip_receipt') == 'true');                            
 
         $input['is_quotation'] = 0;
         // معالجة حالة الفاتورة
@@ -688,7 +690,7 @@ try {
 
             // --- التعديل النهائي للطباعة (العادية والهدية المنفصلة) ---
            if ($print_invoice) {
-                $receipt = $this->receiptContent($business_id, $input['location_id'], $transaction->id, null, false, true, $invoice_layout_id);
+                $receipt = $this->receiptContent($business_id, $input['location_id'], $transaction->id, null, false, true, $invoice_layout_id,false,false,$is_slip_receipt_selected);
                 $receipt['business_id'] = $business_id; // لضمان عدم ظهور خطأ الـ Blade
                 
                 $receipt['gift_html'] = ''; 
@@ -740,7 +742,8 @@ private function receiptContent(
     $from_pos_screen = true,
     $invoice_layout_id = null,
     $is_delivery_note = false,
-    $is_gift_receipt = false
+    $is_gift_receipt = false,
+    $is_slip_receipt = false
 ) {
     try {
         $output = [
@@ -764,9 +767,8 @@ private function receiptContent(
 
         // --- 1. تحديد التصميم (Layout) بناءً على نوع الطلب ---
        if ($is_gift_receipt) {
-    // التعديل هنا: نبحث عن تصميم 'gift' بغض النظر عن الـ business_id إذا كنتِ تريدين ذلك
-    // أو نجعله يبحث عنه كأولوية أولى
-    // التعديل: إضافة شرط business_id لضمان جلب تصميم النشاط الحالي فقط
+    
+       // التعديل: إضافة شرط business_id لضمان جلب تصميم النشاط الحالي فقط
          $invoice_layout = \App\InvoiceLayout::where('business_id', $business_id)
                                     ->where('design', 'gift')
                                     ->first();
@@ -804,7 +806,11 @@ private function receiptContent(
             $view_path = 'sale_pos.receipts.packing_slip';
         } elseif ($is_delivery_note) {
             $view_path = 'sale_pos.receipts.delivery_note';
-        } else {
+        }
+        elseif ($is_slip_receipt) {
+        // إذا كان الخيار المختار هو slip، يقرأ من المسار الذي حددته
+         $view_path = 'sale_pos.receipts.slip'; }
+          else {
             $view_path = $layout_design;
         }
 
