@@ -19,17 +19,25 @@ class PrintBarcodeController extends Controller
         try {
             $business_id = Auth::check() ? Auth::user()->business_id : 1;
             
-            // جلب بعض المنتجات للعرض الأولي
+            // جلب المنتجات للعرض (أحدث المنتجات أولاً، ومن لديه تباين واحد على الأقل للباركود)
             $products = Product::where('business_id', $business_id)
                 ->with(['brand', 'category', 'variations'])
                 ->where('type', '!=', 'modifier')
-                ->orderBy('name')
-                ->take(20)
+                ->whereHas('variations')
+                ->orderBy('created_at', 'desc')
+                ->take(50)
                 ->get();
             
             $designData = $this->getBarcodeDesign($business_id);
             
-            return view('printbarcode.printbar', compact('products', 'designData'));
+            $print_after_save_product_id = request()->get('product_id');
+            $print_after_save_all = request()->get('print_all', 0);
+            $print_copies = (int) request()->get('print_copies', 1);
+            $print_send_mode = request()->get('print_send_mode', 'one_by_one');
+            if ($print_copies < 1) $print_copies = 1;
+            if ($print_copies > 999) $print_copies = 999;
+            
+            return view('printbarcode.printbar', compact('products', 'designData', 'print_after_save_product_id', 'print_after_save_all', 'print_copies', 'print_send_mode'));
             
         } catch (\Exception $e) {
             Log::error('❌ خطأ في صفحة الباركود: ' . $e->getMessage());
@@ -51,14 +59,18 @@ class PrintBarcodeController extends Controller
 
             $products = Product::where('business_id', $business_id)
                 ->with(['category', 'brand', 'variations'])
-                ->when($search, function($query) use ($search) {
-                    return $query->where('name', 'LIKE', "%{$search}%")
-                               ->orWhere('sku', 'LIKE', "%{$search}%")
-                               ->orWhereHas('variations', function($q) use ($search) {
-                                   $q->where('sub_sku', 'LIKE', "%{$search}%");
-                               });
-                })
                 ->where('type', '!=', 'modifier')
+                ->whereHas('variations')
+                ->when($search, function($query) use ($search) {
+                    return $query->where(function($q) use ($search) {
+                        $q->where('name', 'LIKE', "%{$search}%")
+                          ->orWhere('sku', 'LIKE', "%{$search}%")
+                          ->orWhereHas('variations', function($vq) use ($search) {
+                              $vq->where('sub_sku', 'LIKE', "%{$search}%");
+                          });
+                    });
+                })
+                ->orderBy('created_at', 'desc')
                 ->get();
 
             Log::info('✅ عدد المنتجات التي تم العثور عليها: ' . $products->count());
@@ -544,6 +556,59 @@ class PrintBarcodeController extends Controller
                 'success' => false,
                 'message' => 'حدث خطأ أثناء الطباعة'
             ], 500);
+        }
+    }
+
+    /**
+     * جلب توليفات اللون/المقاس لمنتج (لصفحة طباعة الباركود — اختيار ما يطبع).
+     */
+    public function getProductVariations($product_id)
+    {
+        try {
+            $business_id = Auth::check() ? Auth::user()->business_id : 1;
+            $product = Product::where('business_id', $business_id)->where('id', $product_id)->first();
+
+            if (! $product) {
+                return response()->json(['success' => false, 'message' => 'المنتج غير موجود'], 404);
+            }
+
+            $combinations = $product->size_color_combinations;
+            $by_color = null;
+
+            if (is_array($combinations) && ! empty($combinations['by_color'])) {
+                $by_color = $combinations['by_color'];
+            }
+
+            if (empty($by_color) && $product->type == 'variable') {
+                $variations = $product->variations()->with('product_variation')->get();
+                $flat = [];
+                foreach ($variations as $v) {
+                    $flat[] = [
+                        'variation_id' => $v->id,
+                        'sub_sku' => $v->sub_sku,
+                        'value' => $v->name,
+                        'sell_price_inc_tax' => $v->sell_price_inc_tax,
+                        'label' => $v->name,
+                        'size' => $v->name,
+                    ];
+                }
+                return response()->json([
+                    'success' => true,
+                    'product' => ['id' => $product->id, 'name' => $product->name, 'sku' => $product->sku],
+                    'by_color' => null,
+                    'combinations' => $flat,
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'product' => ['id' => $product->id, 'name' => $product->name, 'sku' => $product->sku],
+                'by_color' => $by_color,
+                'combinations' => null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('PrintBarcodeController@getProductVariations: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 }

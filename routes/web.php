@@ -16,6 +16,7 @@ Route::middleware(['auth', 'SetSessionData', 'language', 'timezone', 'AdminSideb
         Route::get('/', [PrintBarcodeController::class, 'index'])->name('print.page');
         Route::get('/search', [PrintBarcodeController::class, 'search'])->name('search');
         Route::get('/design', [PrintBarcodeController::class, 'getDesign'])->name('design.get');
+        Route::get('/product-variations/{product_id}', [PrintBarcodeController::class, 'getProductVariations'])->name('product-variations');
         Route::post('/print-preview', [PrintBarcodeController::class, 'printPreview'])->name('print-preview');
         Route::post('/print', [PrintBarcodeController::class, 'printBarcodes'])->name('print');
         Route::post('/print-send', [PrintBarcodeController::class, 'sendToPrinter'])->name('print-send');
@@ -167,6 +168,12 @@ Route::middleware(['auth'])->group(function () {
     // اختبار الاتصال
     Route::get('/barcode-test', [App\Http\Controllers\BarcodeDesignController::class, 'testConnection'])
          ->name('barcode.test');
+
+    // بحث منتجات وعرض توليفات اللون/المقاس (مجموعة حسب اللون)
+    Route::get('/barcode-design/products-search', [App\Http\Controllers\BarcodeDesignController::class, 'searchProducts'])
+         ->name('barcode.design.products_search');
+    Route::get('/barcode-design/product-variations/{product_id}', [App\Http\Controllers\BarcodeDesignController::class, 'getProductVariations'])
+         ->name('barcode.design.product_variations');
 
 });
 Route::get('/pos/get-product-by-barcode', [PosController::class, 'getProductByBarcode'])->name('pos.get-product-by-barcode');

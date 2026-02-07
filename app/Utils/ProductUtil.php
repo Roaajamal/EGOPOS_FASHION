@@ -186,6 +186,92 @@ class ProductUtil extends Util
     }
 
     /**
+     * إنشاء توليفات لون-مقاس من نموذج size_color_qty وحفظها على المنتج (منتج واحد متغير).
+     * كل لون يجمع المقاسات تحته لاستخدامها في طباعة الباركود (كل مقاس لحاله).
+     *
+     * @param  \App\Product  $product
+     * @param  array  $size_color_qty  [ 'لون' => [ 'مقاس' => كمية, ... ], ... ]
+     * @param  array  $options  single_dsp, single_dsp_inc_tax, single_dpp, single_dpp_inc_tax, profit_percent, location_id
+     * @return void
+     */
+    public function createSizeColorMatrixAndSaveCombinations($product, array $size_color_qty, array $options = [])
+    {
+        if (! is_object($product)) {
+            $product = Product::find($product);
+        }
+
+        $dsp = $this->num_uf($options['single_dsp'] ?? 0);
+        $dsp_inc_tax = $this->num_uf($options['single_dsp_inc_tax'] ?? 0);
+        $dpp = $this->num_uf($options['single_dpp'] ?? 0);
+        $dpp_inc_tax = $this->num_uf($options['single_dpp_inc_tax'] ?? 0);
+        $profit_percent = $this->num_uf($options['profit_percent'] ?? 0);
+        $location_id = $options['location_id'] ?? null;
+
+        $product_variation = $product->product_variations()->create([
+            'name' => 'اللون-المقاس',
+            'is_dummy' => 0,
+        ]);
+
+        $by_color = [];
+        $c = 0;
+
+        $base_sku = preg_replace('/[^a-zA-Z0-9]/', '', trim($product->sku)) ?: 'P' . $product->id;
+
+        foreach ($size_color_qty as $color => $sizes) {
+            if (! is_array($sizes)) {
+                continue;
+            }
+            $sizes_list = [];
+            foreach ($sizes as $size => $qty) {
+                $qty = (int) $qty;
+                if ($qty < 0) {
+                    continue;
+                }
+                $c++;
+                $combo_name = $color . ' - ' . $size;
+                // كل مقاس/لون يأخذ باركود جديد فريد (بدون شرطة: base_sku + رقم مثل SKU0011, SKU0012)
+                $sub_sku = $base_sku . $c;
+                if (strlen($sub_sku) > 50) {
+                    $sub_sku = $base_sku . $c;
+                }
+
+                $variation = $product_variation->variations()->create([
+                    'name' => $combo_name,
+                    'product_id' => $product->id,
+                    'sub_sku' => $sub_sku,
+                    'default_purchase_price' => $dpp,
+                    'dpp_inc_tax' => $dpp_inc_tax,
+                    'profit_percent' => $profit_percent,
+                    'default_sell_price' => $dsp,
+                    'sell_price_inc_tax' => $dsp_inc_tax,
+                ]);
+
+                if ($product->enable_stock == 1 && $location_id && $qty > 0) {
+                    $this->updateProductQuantity($location_id, $product->id, $variation->id, $qty, 0, null, false);
+                }
+
+                $sizes_list[] = [
+                    'size' => $size,
+                    'variation_id' => $variation->id,
+                    'sub_sku' => $sub_sku,
+                    'quantity' => $qty,
+                    'sell_price_inc_tax' => $dsp_inc_tax,
+                    'label' => $combo_name,
+                ];
+            }
+            if (! empty($sizes_list)) {
+                $by_color[] = [
+                    'color' => $color,
+                    'sizes' => $sizes_list,
+                ];
+            }
+        }
+
+        $product->size_color_combinations = ['by_color' => $by_color];
+        $product->save();
+    }
+
+    /**
      * Update variable type product variation
      *
      * @param $product_id

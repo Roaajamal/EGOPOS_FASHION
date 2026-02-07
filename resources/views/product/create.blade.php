@@ -30,17 +30,17 @@
             </div>
         </div>
 
-        <div class="col-sm-4">
+        <div class="col-sm-4 @if(isset($common_settings['show_product_sku']) && !$common_settings['show_product_sku']) hide @endif">
             <div class="form-group">
                 {!! Form::label('sku', __('product.sku') . ':') !!} @show_tooltip(__('tooltip.sku'))
-                {!! Form::text('sku', null, ['class' => 'form-control',
+                {!! Form::text('sku', !empty($duplicate_product->sku) ? $duplicate_product->sku : null, ['class' => 'form-control',
                 'placeholder' => __('product.sku')]); !!}
             </div>
         </div>
-        <div class="col-sm-4">
+        <div class="col-sm-4 @if(isset($common_settings['show_product_barcode_type']) && !$common_settings['show_product_barcode_type']) hide @endif">
             <div class="form-group">
                 {!! Form::label('barcode_type', __('product.barcode_type') . ':*') !!}
-                {!! Form::select('barcode_type', $barcode_types, !empty($duplicate_product->barcode_type) ? $duplicate_product->barcode_type : $barcode_default, ['class' => 'form-control select2', 'required']); !!}
+                {!! Form::select('barcode_type', $barcode_types, !empty($duplicate_product->barcode_type) ? $duplicate_product->barcode_type : ($common_settings['default_barcode_type'] ?? $barcode_default), ['class' => 'form-control select2', 'required']); !!}
             </div>
         </div>
 
@@ -77,7 +77,7 @@
             <div class="form-group">
                 {!! Form::label('brand_id', __('product.brand') . ':') !!}
                 <div class="input-group">
-                    {!! Form::select('brand_id', $brands, !empty($duplicate_product->brand_id) ? $duplicate_product->brand_id : null, ['placeholder' => __('messages.please_select'), 'class' => 'form-control select2']); !!}
+                    {!! Form::select('brand_id', $brands, !empty($duplicate_product->brand_id) ? $duplicate_product->brand_id : ($common_settings['default_brand_id'] ?? null), ['placeholder' => __('messages.please_select'), 'class' => 'form-control select2']); !!}
                     <span class="input-group-btn">
                         <button type="button" @if(!auth()->user()->can('brand.create')) disabled @endif class="btn btn-default bg-white btn-flat btn-modal" data-href="{{action([\App\Http\Controllers\BrandController::class, 'create'], ['quick_add' => true])}}" title="@lang('brand.add_brand')" data-container=".view_modal"><i class="fa fa-plus-circle text-primary fa-lg"></i></button>
                     </span>
@@ -86,8 +86,9 @@
         </div>
         <div class="col-sm-4 @if(!session('business.enable_category')) hide @endif">
             <div class="form-group">
-                {!! Form::label('category_id', __('product.category') . ':') !!}
-                {!! Form::select('category_id', $categories, !empty($duplicate_product->category_id) ? $duplicate_product->category_id : null, ['placeholder' => __('messages.please_select'), 'class' => 'form-control select2']); !!}
+                {!! Form::label('category_id', __('product.category') . ' / نوع المنتج:') !!}
+                {!! Form::select('category_id', $categories, !empty($duplicate_product->category_id) ? $duplicate_product->category_id : ($common_settings['default_category_id'] ?? null), ['placeholder' => __('messages.please_select'), 'class' => 'form-control select2', 'id' => 'category_id']); !!}
+                <small class="help-block">إذا اخترت تصنيفاً (نوع منتج)، يمكن جعل المنتج متغيراً تلقائياً (مقاسات وألوان).</small>
             </div>
         </div>
 
@@ -104,7 +105,7 @@
         $default_location = array_key_first($business_locations->toArray());
         }
         @endphp
-        <div class="col-sm-4">
+        <div class="col-sm-4 @if(isset($common_settings['show_product_locations']) && !$common_settings['show_product_locations']) hide @endif">
             <div class="form-group">
                 {!! Form::label('product_locations', __('business.business_locations') . ':') !!} @show_tooltip(__('lang_v1.product_location_help'))
                 {!! Form::select('product_locations[]', $business_locations, $default_location, ['class' => 'form-control select2', 'multiple', 'id' => 'product_locations']); !!}
@@ -118,14 +119,14 @@
             <div class="form-group">
                 <br>
                 <label>
-                    {!! Form::checkbox('enable_stock', 1, !empty($duplicate_product) ? $duplicate_product->enable_stock : true, ['class' => 'input-icheck', 'id' => 'enable_stock']); !!} <strong>@lang('product.manage_stock')</strong>
+                    {!! Form::checkbox('enable_stock', 1, !empty($duplicate_product) ? $duplicate_product->enable_stock : (isset($common_settings['default_enable_stock']) ? (int)$common_settings['default_enable_stock'] : true), ['class' => 'input-icheck', 'id' => 'enable_stock']); !!} <strong>@lang('product.manage_stock')</strong>
                 </label>@show_tooltip(__('tooltip.enable_stock')) <p class="help-block"><i>@lang('product.enable_stock_help')</i></p>
             </div>
         </div>
-        <div class="col-sm-4 @if(!empty($duplicate_product) && $duplicate_product->enable_stock == 0) hide @endif" id="alert_quantity_div">
+        <div class="col-sm-4 @if(!empty($duplicate_product) && $duplicate_product->enable_stock == 0) hide @endif @if(isset($common_settings['show_alert_quantity']) && !$common_settings['show_alert_quantity']) hide @endif" id="alert_quantity_div">
             <div class="form-group">
                 {!! Form::label('alert_quantity', __('product.alert_quantity') . ':') !!} @show_tooltip(__('tooltip.alert_quantity'))
-                {!! Form::text('alert_quantity', !empty($duplicate_product->alert_quantity) ? @format_quantity($duplicate_product->alert_quantity) : null , ['class' => 'form-control input_number',
+                {!! Form::text('alert_quantity', !empty($duplicate_product->alert_quantity) ? @format_quantity($duplicate_product->alert_quantity) : ($common_settings['default_alert_quantity'] ?? null) , ['class' => 'form-control input_number',
                 'placeholder' => __('product.alert_quantity'), 'min' => '0']); !!}
             </div>
         </div>
@@ -146,7 +147,7 @@
         @endforeach
         @endif
         <div class="clearfix"></div>
-        <div class="col-sm-8 mb-5">
+        <div class="col-sm-8 mb-5 @if(isset($common_settings['show_product_description']) && !$common_settings['show_product_description']) hide @endif">
             <div class="form-group">
                 <div class="row">
                     <div class="col-sm-8 product-description-label">
@@ -172,7 +173,7 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-4">
+    <div class="col-sm-4 @if(isset($common_settings['show_product_brochure']) && !$common_settings['show_product_brochure']) hide @endif">
         <div class="form-group">
             {!! Form::label('product_brochure', __('lang_v1.product_brochure') . ':') !!}
             {!! Form::file('product_brochure', ['id' => 'product_brochure', 'accept' => implode(',', array_keys(config('constants.document_upload_mimes_types')))]); !!}
@@ -213,7 +214,7 @@
         </div>
         @endif
 
-        <div class="col-sm-4">
+        <div class="col-sm-4 @if(isset($common_settings['show_enable_sr_no']) && !$common_settings['show_enable_sr_no']) hide @endif">
             <div class="form-group">
                 <br>
                 <label>
@@ -222,7 +223,7 @@
             </div>
         </div>
 
-        <div class="col-sm-4">
+        <div class="col-sm-4 @if(isset($common_settings['show_not_for_selling']) && !$common_settings['show_not_for_selling']) hide @endif">
             <div class="form-group">
                 <br>
                 <label>
@@ -262,7 +263,7 @@
         @endforeach
         @endif
 
-        <div class="col-sm-4">
+        <div class="col-sm-4 @if(isset($common_settings['show_product_weight']) && !$common_settings['show_product_weight']) hide @endif">
             <div class="form-group">
                 {!! Form::label('weight', __('lang_v1.weight') . ':') !!}
                 {!! Form::text('weight', !empty($duplicate_product->weight) ? $duplicate_product->weight : null, ['class' => 'form-control', 'placeholder' => __('lang_v1.weight')]); !!}
@@ -309,7 +310,7 @@
             @endif
         @endforeach
 
-        <div class="col-sm-3">
+        <div class="col-sm-3 @if(isset($common_settings['show_preparation_time']) && !$common_settings['show_preparation_time']) hide @endif">
             <div class="form-group">
                 {!! Form::label('preparation_time_in_minutes', __('lang_v1.preparation_time_in_minutes') . ':') !!}
                 {!! Form::number('preparation_time_in_minutes', !empty($duplicate_product->preparation_time_in_minutes) ? $duplicate_product->preparation_time_in_minutes : null, ['class' => 'form-control', 'placeholder' => __('lang_v1.preparation_time_in_minutes')]); !!}
@@ -327,14 +328,14 @@
         <div class="col-sm-4 @if(!session('business.enable_price_tax')) hide @endif">
             <div class="form-group">
                 {!! Form::label('tax', __('product.applicable_tax') . ':') !!}
-                {!! Form::select('tax', $taxes, !empty($duplicate_product->tax) ? $duplicate_product->tax : null, ['placeholder' => __('messages.please_select'), 'class' => 'form-control select2'], $tax_attributes); !!}
+                {!! Form::select('tax', $taxes, !empty($duplicate_product->tax) ? $duplicate_product->tax : ($common_settings['default_tax_id'] ?? null), ['placeholder' => __('messages.please_select'), 'class' => 'form-control select2'], $tax_attributes); !!}
             </div>
         </div>
 
         <div class="col-sm-4 @if(!session('business.enable_price_tax')) hide @endif">
             <div class="form-group">
                 {!! Form::label('tax_type', __('product.selling_price_tax_type') . ':*') !!}
-                {!! Form::select('tax_type', ['inclusive' => __('product.inclusive'), 'exclusive' => __('product.exclusive')], !empty($duplicate_product->tax_type) ? $duplicate_product->tax_type : 'exclusive',
+                {!! Form::select('tax_type', ['inclusive' => __('product.inclusive'), 'exclusive' => __('product.exclusive')], !empty($duplicate_product->tax_type) ? $duplicate_product->tax_type : ($common_settings['default_tax_type'] ?? 'exclusive'),
                 ['class' => 'form-control select2', 'required']); !!}
             </div>
         </div>
@@ -344,8 +345,9 @@
         <div class="col-sm-4">
             <div class="form-group">
                 {!! Form::label('type', __('product.product_type') . ':*') !!} @show_tooltip(__('tooltip.product_type'))
-                {!! Form::select('type', $product_types, !empty($duplicate_product->type) ? $duplicate_product->type : null, ['class' => 'form-control select2',
+                {!! Form::select('type', $product_types, !empty($duplicate_product->type) ? $duplicate_product->type : ($common_settings['default_product_type'] ?? 'single'), ['class' => 'form-control select2', 'id' => 'type',
                 'required', 'data-action' => !empty($duplicate_product) ? 'duplicate' : 'add', 'data-product_id' => !empty($duplicate_product) ? $duplicate_product->id : '0']); !!}
+           
             </div>
         </div>
 
@@ -354,14 +356,20 @@
         </div>
         
 {{-- ==================================================== --}}
-{{-- Size-Color Combo Section (Excel Style) --}}
+{{-- Size-Color Combo Section: يظهر فقط عندما يكون نوع المنتج «تباين» (variable) — بدون جدول التباين التقليدي، مع سعر واحد لجميع المقاسات --}}
 {{-- ==================================================== --}}
-<div class="col-sm-12" id="size_color_combo_section" >
+<div class="col-sm-12" id="size_color_combo_section" style="display: none;">
     <div class="row">
         <div class="col-sm-12">
-            <h4>@lang('product.size_color_combinations'):</h4>
-            <p class="help-block">أدخل اللون ثم أضف الأحجام والكميات لكل لون</p>
-            
+            {{-- سعر واحد لجميع المقاسات — يطبّق تلقائياً على كل اللون/المقاس --}}
+            <div class="col-sm-12" style="margin-bottom: 16px;">
+                <div class="form-group" style="max-width: 280px;">
+                    <label for="variable_single_price">سعر واحد لجميع المقاسات:</label>
+                    <input type="text" id="variable_single_price" name="variable_single_price" class="form-control input_number" placeholder="مثال: 10.00" step="0.01" />
+                </div>
+            </div>
+            <div class="clearfix"></div>
+            <h4>@lang('product.size_color_combinations'):</h4>    
             {{-- Color Input --}}
             <div class="col-sm-6">
                 <div class="form-group">
@@ -418,6 +426,36 @@
 
     </div>
     @endcomponent
+    <div class="row" style="margin-bottom: 16px;">
+        <div class="col-sm-12">
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    <strong>🖨️ إعدادات الطباعة (عند استخدام «حفظ وطباعة»)</strong>
+                </div>
+                <div class="panel-body">
+                    <div class="row">
+                        <div class="col-sm-4">
+                            <div class="form-group">
+                                <label for="print_copies">عدد النسخ للطباعة</label>
+                                <input type="number" name="print_copies" id="print_copies" class="form-control input_number" value="1" min="1" max="999" placeholder="1">
+                                <small class="help-block">كم نسخة من كل ملصق (أو كل مقاس/لون) تُطبع.</small>
+                            </div>
+                        </div>
+                        <div class="col-sm-4">
+                            <div class="form-group">
+                                <label for="print_send_mode">طريقة الإرسال للطابعة</label>
+                                <select name="print_send_mode" id="print_send_mode" class="form-control">
+                                    <option value="all_at_once">طباعة مباشرة للكل</option>
+                                    <option value="one_by_one">وحدة وحدة</option>
+                                </select>
+                                <small class="help-block">«مباشرة للكل»: إرسال واحد؛ «وحدة وحدة»: كل ملصق على حدة.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="row">
         <div class="col-sm-12">
             <input type="hidden" name="submit_type" id="submit_type">
@@ -427,9 +465,7 @@
                     <button type="submit" value="submit_n_add_selling_prices" class="tw-dw-btn tw-dw-btn-warning tw-dw-btn-lg tw-text-white submit_product_form">@lang('lang_v1.save_n_add_selling_price_group_prices')</button>
                     @endif
 
-                    @can('product.opening_stock')
-                    <button id="opening_stock_button" @if(!empty($duplicate_product) && $duplicate_product->enable_stock == 0) disabled @endif type="submit" value="submit_n_add_opening_stock" class="tw-dw-btn tw-dw-btn-lg tw-text-white bg-purple submit_product_form">@lang('lang_v1.save_n_add_opening_stock')</button>
-                    @endcan
+                    <button id="save_and_print_button" type="submit" value="submit_n_print" class="tw-dw-btn tw-dw-btn-lg tw-text-white bg-purple submit_product_form">🖨️ حفظ وطباعة</button>
 
                     <button type="submit" value="save_n_add_another" class="tw-dw-btn tw-dw-btn-lg bg-maroon submit_product_form">@lang('lang_v1.save_n_add_another')</button>
 
@@ -477,13 +513,68 @@
         var allSizes = [];      // جميع الأحجام المضافة
         var colorTables = {};   // تخزين جداول الألوان
         
-        // إظهار قسم الألوان والمقاسات عندما يكون المنتج متغيراً
+        // عند «تباين»: إخفاء جدول السعر/التباين التقليدي، إظهار قسم اللون والمقاسات فقط مع مربع السعر الواحد
+        function toggleSizeColorSection() {
+            if ($('#type').val() === 'variable') {
+                $('#product_form_part').hide();
+                $('#size_color_combo_section').show();
+                if (!$('#variable_single_price').val() && $('#single_dsp_inc_tax').length) {
+                    var v = $('#single_dsp_inc_tax').val();
+                    if (v) $('#variable_single_price').val(v);
+                }
+                var priceVal = $('#variable_single_price').val();
+                if (priceVal && typeof __write_number === 'function') {
+                    __write_number($('#single_dsp'), priceVal);
+                    __write_number($('#single_dsp_inc_tax'), priceVal);
+                }
+                if ($('#single_dpp').length && (!$('#single_dpp').val() || $('#single_dpp').val() === '')) {
+                    if (typeof __write_number === 'function') {
+                        __write_number($('#single_dpp'), 0);
+                        __write_number($('#single_dpp_inc_tax'), 0);
+                    }
+                }
+            } else {
+                $('#product_form_part').show();
+                $('#size_color_combo_section').hide();
+                if (typeof clearSizeColorForm === 'function') clearSizeColorForm();
+            }
+        }
         $('#type').change(function() {
             if ($(this).val() === 'variable') {
+                $('#product_form_part').hide();
                 $('#size_color_combo_section').show();
-                clearSizeColorForm();
+                if (typeof clearSizeColorForm === 'function') clearSizeColorForm();
             } else {
+                $('#product_form_part').show();
                 $('#size_color_combo_section').hide();
+                if (typeof clearSizeColorForm === 'function') clearSizeColorForm();
+            }
+        });
+        toggleSizeColorSection();
+
+        // نسخ السعر من مربع «السعر لجميع المقاسات» إلى الحقول المرسلة (رقم بصيغة نقطة عشرية)
+        function syncVariablePriceToForm() {
+            var raw = $('#variable_single_price').val();
+            if (raw == null || raw === '') return;
+            var num = parseFloat(String(raw).replace(/\s/g, '').replace(',', '.')) || 0;
+            $('#single_dsp').val(num);
+            $('#single_dsp_inc_tax').val(num);
+            $('#variable_single_price').val(num); // يبقى الـ name يرسل نفس القيمة للـ backend
+            if ($('#single_dpp').length && (!$('#single_dpp').val() || $('#single_dpp').val() === '0')) {
+                $('#single_dpp').val(0);
+                $('#single_dpp_inc_tax').val(0);
+            }
+        }
+        $('#variable_single_price').on('input change blur', function() {
+            syncVariablePriceToForm();
+        });
+
+        // عندما يختار المستخدم «نوع المنتج» (التصنيف) نجعله متغيراً تلقائياً ونظهر المقاسات والألوان
+        $('#category_id').change(function() {
+            var catVal = $(this).val();
+            if (catVal && catVal !== '') {
+                $('#type').val('variable').trigger('change');
+                $('#size_color_combo_section').show();
             }
         });
         
@@ -748,6 +839,13 @@
             $('#summary_box').hide();
         }
         
+        // قبل إرسال النموذج: نسخ سعر التباين إلى الحقول المرسلة (ليصل للـ Backend)
+        $('form#product_add_form').on('submit', function() {
+            if ($('#type').val() === 'variable' && $('#variable_single_price').val()) {
+                syncVariablePriceToForm();
+            }
+        });
+
         // التحقق من البيانات قبل الحفظ
         $(document).on('click', '.submit_product_form', function(e) {
             var submit_type = $(this).attr('value');
@@ -791,6 +889,19 @@
                     e.preventDefault();
                     return false;
                 }
+                
+                var priceVal = $('#variable_single_price').val();
+                if (!priceVal || priceVal.toString().trim() === '') {
+                    toastr.error('الرجاء إدخال السعر لجميع المقاسات');
+                    e.preventDefault();
+                    return false;
+                }
+                syncVariablePriceToForm();
+            }
+            
+            // قبل التحقق من صحة النموذج: عند تباين، نسخ السعر من المربع إلى الحقول المرسلة
+            if ($('#type').val() === 'variable') {
+                syncVariablePriceToForm();
             }
             
             // إذا كان النموذج صالحاً، الاستمرار
@@ -802,10 +913,6 @@
             return false;
         });
         
-        // التهيئة عند تحميل الصفحة إذا كان النوع متغيراً
-        if ($('#type').val() === 'variable') {
-            $('#size_color_combo_section').show();
-        }
     });
 </script>
 @endsection
