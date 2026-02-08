@@ -692,6 +692,8 @@ class ProductController extends Controller
         }
 
         if ($request->input('submit_type') == 'submit_n_add_opening_stock') {
+            $request->session()->put('product_form_old_input', $request->except('_token', 'image'));
+            $request->session()->put('opening_stock_return_to_create', true);
             return redirect()->action([\App\Http\Controllers\OpeningStockController::class, 'add'],
                 ['product_id' => $product->id]
             );
