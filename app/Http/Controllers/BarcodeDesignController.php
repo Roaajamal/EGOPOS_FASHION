@@ -4,9 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Business;
 use App\Product;
+use App\Services\PrintService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class BarcodeDesignController extends Controller
@@ -62,29 +63,16 @@ class BarcodeDesignController extends Controller
                 'user_id' => Auth::id()
             ];
 
-            Log::info('💾 بيانات التصميم المحضرة:', $designData);
+            Log::info('💾 بيانات التصميم المحضرة (سيتم تطبيعها عبر PrintService)');
 
-            // حفظ أو تحديث التصميم
-            $existing = DB::table('barcode_design_settings')
-                        ->where('business_id', $businessId)
-                        ->first();
+            // الحفظ عبر الخدمة المركزية لضمان تطبيع التصميم وعدم تخريبه عند الطباعة
+            $saved = PrintService::forBusiness($businessId)->saveBarcodeDesign($designData);
 
-            if ($existing) {
-                Log::info('🔄 تحديث التصميم الموجود');
-                DB::table('barcode_design_settings')
-                    ->where('business_id', $businessId)
-                    ->update([
-                        'design' => json_encode($designData, JSON_UNESCAPED_UNICODE),
-                        'updated_at' => now()
-                    ]);
-            } else {
-                Log::info('🆕 إنشاء تصميم جديد');
-                DB::table('barcode_design_settings')->insert([
-                    'business_id' => $businessId,
-                    'design' => json_encode($designData, JSON_UNESCAPED_UNICODE),
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ]);
+            if (! $saved) {
+                return response()->json([
+                    'success' => false,
+                    'message' => '❌ تعذر حفظ التصميم'
+                ], 500);
             }
 
             Log::info('=== نجاح حفظ الباركود ===');
@@ -117,14 +105,11 @@ class BarcodeDesignController extends Controller
             $businessId = Auth::check() ? Auth::user()->business_id : 1;
             Log::info('جاري التحميل للعمل: ' . $businessId);
 
-            $design = DB::table('barcode_design_settings')
-                      ->where('business_id', $businessId)
-                      ->first();
+            // التحميل من الخدمة المركزية (تصميم مطبّع — نفس المصدر المستخدم في الطباعة)
+            $designData = PrintService::forBusiness($businessId)->getBarcodeDesignRaw();
 
-            if ($design && $design->design) {
+            if ($designData !== null) {
                 Log::info('✅ تم العثور على تصميم');
-                $designData = json_decode($design->design, true);
-                
                 return response()->json([
                     'success' => true,
                     'design' => $designData,

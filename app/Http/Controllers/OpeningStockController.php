@@ -388,7 +388,8 @@ class OpeningStockController extends Controller
 
         if (request()->session()->get('opening_stock_return_to_create')) {
             request()->session()->forget('opening_stock_return_to_create');
-            return redirect()->action([\App\Http\Controllers\ProductController::class, 'create'])->with('status', $output);
+            $createUrl = action([\App\Http\Controllers\ProductController::class, 'create']) . '?print_product_id=' . (int) $product_id;
+            return redirect()->to($createUrl)->with('status', $output);
         }
 
         return redirect('products')->with('status', $output);

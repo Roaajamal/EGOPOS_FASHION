@@ -15,7 +15,7 @@
 	@include('opening_stock.form-part')
 	<div class="row">
 		<div class="col-sm-12 text-center">
-			<button type="submit" class="btn btn-primary btn-big">@lang('messages.save')</button>
+			<button type="submit" class="btn btn-primary btn-big">🖨️ حفظ وطباعة</button>
 		</div>
 	</div>
 

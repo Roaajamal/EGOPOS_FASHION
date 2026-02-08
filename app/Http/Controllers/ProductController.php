@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Yajra\DataTables\Facades\DataTables;
 use App\Events\ProductsCreatedOrModified;
+use App\Services\PrintService;
 use App\TransactionSellLine;
 
 class ProductController extends Controller
@@ -483,6 +484,15 @@ class ProductController extends Controller
         }
 
         $form_restored_from_session = $form_restored_from_session ?? false;
+        $print_product_id = (int) request()->get('print_product_id', 0);
+        $print_product_url = '';
+        if ($print_product_id > 0) {
+            $printService = PrintService::forBusiness($business_id);
+            $print_product_url = $printService->getBarcodePrintUrl($print_product_id, [
+                'print_copies' => 1,
+                'print_send_mode' => 'one_by_one',
+            ]);
+        }
         $selling_price_group_count = SellingPriceGroup::countSellingPriceGroups($business_id);
 
         $module_form_parts = $this->moduleUtil->getModuleData('product_form_part');
@@ -495,7 +505,7 @@ class ProductController extends Controller
         $pos_module_data = $this->moduleUtil->getModuleData('get_product_screen_top_view');
 
         return view('product.create')
-            ->with(compact('categories', 'brands', 'units', 'taxes', 'barcode_types', 'default_profit_percent', 'tax_attributes', 'barcode_default', 'business_locations', 'duplicate_product', 'sub_categories', 'rack_details', 'selling_price_group_count', 'module_form_parts', 'product_types', 'common_settings', 'warranties', 'pos_module_data', 'form_restored_from_session'));
+            ->with(compact('categories', 'brands', 'units', 'taxes', 'barcode_types', 'default_profit_percent', 'tax_attributes', 'barcode_default', 'business_locations', 'duplicate_product', 'sub_categories', 'rack_details', 'selling_price_group_count', 'module_form_parts', 'product_types', 'common_settings', 'warranties', 'pos_module_data', 'form_restored_from_session', 'print_product_id', 'print_product_url'));
     }
 
     private function product_types()
@@ -613,21 +623,21 @@ class ProductController extends Controller
                 $output = ['success' => 1, 'msg' => __('product.product_added_success')];
 
                 if ($request->input('submit_type') == 'submit_n_print') {
-                    $print_copies = (int) $request->input('print_copies', 1);
-                    $print_send_mode = $request->input('print_send_mode', 'one_by_one');
-                    if ($print_copies < 1) $print_copies = 1;
-                    if ($print_copies > 999) $print_copies = 999;
-                    $business = Business::find($business_id);
-                    $common = $business && $business->common_settings ? $business->common_settings : [];
-                    $default_printer = isset($common['default_barcode_printer']) ? $common['default_barcode_printer'] : '';
-                    $print_url = url('print-barcode?product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer));
+                    $printService = PrintService::forBusiness($business_id);
+                    $print_url = $printService->getBarcodePrintUrl($product->id, [
+                        'print_copies'    => (int) $request->input('print_copies', 1),
+                        'print_send_mode' => $request->input('print_send_mode', 'one_by_one'),
+                    ]);
                     if ($request->ajax() || $request->wantsJson()) {
                         $request->session()->flash('product_form_old_input', $request->except('_token', 'image'));
                         $output['print_url'] = $print_url;
                         $output['redirect_url'] = action([\App\Http\Controllers\ProductController::class, 'create']);
                         return response()->json($output);
                     }
-                    $url = 'products?print_product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer);
+                    $url = 'products?' . $printService->getBarcodePrintQueryString($product->id, [
+                        'print_copies'    => (int) $request->input('print_copies', 1),
+                        'print_send_mode' => $request->input('print_send_mode', 'one_by_one'),
+                    ]);
                     return redirect($url)->with('status', $output);
                 }
                 if ($request->input('submit_type') == 'submit_n_add_selling_prices') {
@@ -707,22 +717,22 @@ class ProductController extends Controller
             );
         }
         if ($request->input('submit_type') == 'submit_n_print') {
-            $print_copies = (int) $request->input('print_copies', 1);
-            $print_send_mode = $request->input('print_send_mode', 'one_by_one');
-            if ($print_copies < 1) $print_copies = 1;
-            if ($print_copies > 999) $print_copies = 999;
             $business_id = $request->session()->get('user.business_id');
-            $business = Business::find($business_id);
-            $common = $business && $business->common_settings ? $business->common_settings : [];
-            $default_printer = isset($common['default_barcode_printer']) ? $common['default_barcode_printer'] : '';
-            $print_url = url('print-barcode?product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer));
+            $printService = PrintService::forBusiness($business_id);
+            $print_url = $printService->getBarcodePrintUrl($product->id, [
+                'print_copies'    => (int) $request->input('print_copies', 1),
+                'print_send_mode' => $request->input('print_send_mode', 'one_by_one'),
+            ]);
             if ($request->ajax() || $request->wantsJson()) {
                 $request->session()->flash('product_form_old_input', $request->except('_token', 'image'));
                 $output['print_url'] = $print_url;
                 $output['redirect_url'] = action([\App\Http\Controllers\ProductController::class, 'create']);
                 return response()->json($output);
             }
-            $url = 'products?print_product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer);
+            $url = 'products?' . $printService->getBarcodePrintQueryString($product->id, [
+                'print_copies'    => (int) $request->input('print_copies', 1),
+                'print_send_mode' => $request->input('print_send_mode', 'one_by_one'),
+            ]);
             return redirect($url)->with('status', $output);
         } elseif ($request->input('submit_type') == 'submit_n_add_selling_prices') {
             return redirect()->action([\App\Http\Controllers\ProductController::class, 'addSellingPrices'],

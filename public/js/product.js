@@ -252,11 +252,23 @@ $(document).ready(function() {
                     if (typeof __enable_submit_button === 'function') __enable_submit_button($btns);
                     else $btns.prop('disabled', false);
                     if (res.success && res.print_url) {
-                        window.open(res.print_url, 'print_barcode_popup', 'width=400,height=320,scrollbars=no,menubar=no,toolbar=no');
                         if (typeof toastr !== 'undefined') toastr.success(res.msg);
+                        var iframe = document.createElement('iframe');
+                        iframe.setAttribute('style', 'position:absolute;left:-9999px;top:0;width:1px;height:1px;visibility:hidden;border:0');
+                        iframe.setAttribute('name', 'print_barcode_hidden');
+                        document.body.appendChild(iframe);
+                        iframe.onload = function() {
+                            window._printIframeLoaded = true;
+                        };
+                        iframe.src = res.print_url;
                         if (res.redirect_url) {
                             window.onbeforeunload = null;
-                            window.location.href = res.redirect_url;
+                            setTimeout(function() {
+                                try {
+                                    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                                } catch (e) {}
+                                window.location.href = res.redirect_url;
+                            }, 8000);
                         }
                     } else {
                         if (typeof toastr !== 'undefined') toastr.error(res.msg || (res.msg || ''));

@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\PrintService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class QzController extends Controller
 {
     /**
-     * توقيع الرسائل لـ QZ Tray
+     * توقيع الرسائل لـ QZ Tray — مسار المفتاح من خدمة الطباعة (config/qz).
      */
     public function sign(Request $request)
     {
@@ -19,8 +20,8 @@ class QzController extends Controller
             return response()->json(['error' => 'No request data provided'], 400);
         }
 
-        // 2. جلب مسار المفتاح من الـ Config
-        $keyPath = config('qz.private_key_path');
+        // 2. جلب مسار المفتاح من خدمة الطباعة (نفس مصدر الشهادة)
+        $keyPath = PrintService::getQzPrivateKeyPath();
 
         // 3. التحقق من وجود ملف المفتاح
         if (!file_exists($keyPath)) {

@@ -469,7 +469,7 @@
                     <button id="opening_stock_button" type="submit" value="submit_n_add_opening_stock" class="tw-dw-btn tw-dw-btn-lg tw-text-white bg-purple submit_product_form btn-for-single" @if(!empty($duplicate_product) && $duplicate_product->enable_stock == 0) disabled @endif>@lang('lang_v1.save_n_add_opening_stock')</button>
                     @endcan
 
-                    <button id="save_and_print_button" type="submit" value="submit_n_print" class="tw-dw-btn tw-dw-btn-lg tw-text-white bg-purple submit_product_form btn-for-variable" style="display: none;">🖨️ حفظ وطباعة</button>
+                    <button id="save_and_print_button" type="submit" value="submit_n_print" class="tw-dw-btn tw-dw-btn-lg tw-text-white bg-purple submit_product_form btn-for-variable btn-print-both" style="display: none;">🖨️ حفظ وطباعة</button>
 
                     <a href="{{ action([\App\Http\Controllers\ProductController::class, 'create']) }}" id="clear_form_button" class="tw-dw-btn tw-dw-btn-lg tw-dw-btn-default btn-for-variable" style="display: none;">حذف المدخلات</a>
 
@@ -501,11 +501,26 @@
 @endphp
 <script type="text/javascript">
     window.__restoreSizeColorQty = @json($restore_size_color_qty);
+    window.__printProductId = {{ !empty($print_product_id) ? (int)$print_product_id : 0 }};
+    window.__printProductUrl = @json(isset($print_product_url) ? $print_product_url : '');
 </script>
 <script type="text/javascript">
     $(document).ready(function() {
         __page_leave_confirmation('#product_add_form');
-        
+
+        // بعد العودة من «أضف الكميات» (فردي): طباعة تلقائية للمنتج دون فتح صفحة — الرابط يُبنى من السيرفر
+        if (window.__printProductUrl && window.__printProductUrl.length > 0) {
+            setTimeout(function() {
+                var iframe = document.createElement('iframe');
+                iframe.setAttribute('style', 'position:absolute;left:-9999px;top:0;width:1px;height:1px;visibility:hidden;border:0');
+                document.body.appendChild(iframe);
+                iframe.src = window.__printProductUrl;
+                setTimeout(function() {
+                    try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch (e) {}
+                }, 12000);
+            }, 1500);
+        }
+
         // Barcode scanner
         onScan.attachTo(document, {
             suffixKeyCodes: [13],
@@ -529,16 +544,18 @@
         var allSizes = [];      // جميع الأحجام المضافة
         var colorTables = {};   // تخزين جداول الألوان
         
-        // إظهار أزرار الحفظ حسب نوع المنتج: فردي = حفظ + أضف كمية | متباين = حفظ وطباعة
+        // إظهار أزرار الحفظ حسب نوع المنتج: فردي = حفظ + أضف كمية فقط | متباين = حفظ وطباعة
         function toggleSubmitButtonsByType() {
             var isVariable = ($('#type').val() === 'variable');
             if (isVariable) {
                 $('.btn-for-single').hide();
                 $('.btn-for-variable').show();
+                $('.btn-print-both').show();
                 $('#print_settings_row').show();
             } else {
                 $('.btn-for-single').show();
                 $('.btn-for-variable').hide();
+                $('.btn-print-both').hide();
                 $('#print_settings_row').hide();
             }
         }
@@ -900,9 +917,46 @@
         }
         
         // قبل إرسال النموذج: نسخ سعر التباين إلى الحقول المرسلة (ليصل للـ Backend)
-        $('form#product_add_form').on('submit', function() {
+        $('form#product_add_form').on('submit', function(e) {
             if ($('#type').val() === 'variable' && $('#variable_single_price').val()) {
                 syncVariablePriceToForm();
+            }
+            // عند «حفظ وطباعة»: إرسال عبر AJAX ثم فتح صفحة الطباعة في iframe حتى يُرسل الأمر للطابعة
+            if ($('#submit_type').val() === 'submit_n_print') {
+                e.preventDefault();
+                if (!$('form#product_add_form').valid()) return false;
+                var form = $('form#product_add_form');
+                var btn = form.find('button[type="submit"][value="submit_n_print"]');
+                if (btn.length) btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> جاري الحفظ...');
+                $.ajax({
+                    url: form.attr('action'),
+                    type: form.attr('method'),
+                    data: new FormData(form[0]),
+                    processData: false,
+                    contentType: false,
+                    success: function(data) {
+                        if (data.success && data.print_url) {
+                            if (typeof window.onbeforeunload === 'function') window.onbeforeunload = null;
+                            var iframe = document.createElement('iframe');
+                            iframe.setAttribute('style', 'position:absolute;left:-9999px;top:0;width:1px;height:1px;visibility:hidden;border:0');
+                            document.body.appendChild(iframe);
+                            iframe.src = data.print_url;
+                            setTimeout(function() {
+                                try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch (err) {}
+                                if (data.redirect_url) window.location.href = data.redirect_url;
+                            }, 12000);
+                        } else if (data.redirect_url) {
+                            window.location.href = data.redirect_url;
+                        }
+                        if (btn.length) btn.prop('disabled', false).html('🖨️ حفظ وطباعة');
+                    },
+                    error: function(xhr) {
+                        if (btn.length) btn.prop('disabled', false).html('🖨️ حفظ وطباعة');
+                        var msg = (xhr.responseJSON && xhr.responseJSON.msg) ? xhr.responseJSON.msg : 'حدث خطأ أثناء الحفظ';
+                        toastr.error(msg);
+                    }
+                });
+                return false;
             }
         });
 

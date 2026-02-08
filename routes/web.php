@@ -14,6 +14,7 @@ Route::middleware(['auth', 'SetSessionData', 'language', 'timezone', 'AdminSideb
     ->name('barcode.')
     ->group(function () {
         Route::get('/', [PrintBarcodeController::class, 'index'])->name('print.page');
+        Route::get('/url', [PrintBarcodeController::class, 'getPrintUrl'])->name('print.url');
         Route::get('/search', [PrintBarcodeController::class, 'search'])->name('search');
         Route::get('/design', [PrintBarcodeController::class, 'getDesign'])->name('design.get');
         Route::get('/product-variations/{product_id}', [PrintBarcodeController::class, 'getProductVariations'])->name('product-variations');
@@ -21,6 +22,7 @@ Route::middleware(['auth', 'SetSessionData', 'language', 'timezone', 'AdminSideb
         Route::post('/print-preview', [PrintBarcodeController::class, 'printPreview'])->name('print-preview');
         Route::post('/print', [PrintBarcodeController::class, 'printBarcodes'])->name('print');
         Route::post('/print-send', [PrintBarcodeController::class, 'sendToPrinter'])->name('print-send');
+        Route::post('/zpl', [PrintBarcodeController::class, 'getZpl'])->name('zpl');
     });
         use App\Http\Controllers\EcrIntegrationController;
 use App\Http\Controllers\MpsPaymentController;

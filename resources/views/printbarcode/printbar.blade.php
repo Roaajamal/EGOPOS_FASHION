@@ -691,6 +691,8 @@
         const designData = @json($designData ?? []);
         const shopName = "{{ Auth::user()->business->name ?? 'المحل' }}";
         const productVariationsUrl = "{{ url('/print-barcode/product-variations') }}";
+        const zplUrl = "{{ url('/print-barcode/zpl') }}";
+        const _token = "{{ csrf_token() }}";
         const printAfterSaveProductId = {{ $print_after_save_product_id ?? 'null' }};
         const printAfterSaveAll = {{ $print_after_save_all ?? 0 }};
         const printCopiesFromCreate = {{ (int)($print_copies ?? 1) }};
@@ -702,9 +704,8 @@
 // 1. تحديد الخوارزمية لتطابق ملف PHP (هام جداً)
 qz.security.setSignatureAlgorithm("SHA256");
 
-// 2. وضع الشهادة (تأكد أنها الشهادة الجديدة التي ولّدتها للـ Wildcard)
-// 1. استدعاء الشهادة من الـ Config
-const myCertificate = `{!! config('qz.certificate') !!}`;
+// 2. وضع الشهادة — من خدمة الطباعة المركزية (نفس مصدر config/qz)
+const myCertificate = `{!! \App\Services\PrintService::getQzCertificate() !!}`;
 
 qz.security.setSignatureAlgorithm("SHA256");
 
@@ -1077,65 +1078,104 @@ qz.security.setSignaturePromise(function(toSign) {
                 }
             });
 
-            // بعد «حفظ وطباعة»: اختيار الطابعة المحفوظة (أو الأولى) ثم طباعة كل المقاسات وإغلاق النافذة
+            // بعد «حفظ وطباعة»: انتظار تحميل الطابعات ثم اختيار الطابعة الافتراضية وطباعة كل المقاسات
             if (printAfterSaveProductId && printAfterSaveAll) {
-                function runAutoPrint() {
-                    var $sel = $('#printers');
-                    if ($sel.find('option').length > 1) {
-                        var hasDefault = false;
-                        if (typeof defaultPrinterName === 'string' && defaultPrinterName) {
-                            $sel.find('option').each(function() {
-                                if ($(this).val() === defaultPrinterName) { $sel.val(defaultPrinterName); hasDefault = true; return false; }
-                            });
-                        }
-                        if (!hasDefault) {
-                            var firstVal = $sel.find('option').eq(1).val();
-                            if (firstVal) $sel.val(firstVal);
-                        }
-                    }
-                    $.get(productVariationsUrl + '/' + printAfterSaveProductId).done(function(res){
-                        if (!res.success) return;
-                        var byColor = res.by_color || [];
-                        var combinations = res.combinations || [];
-                        var flatList = [];
-                        if (byColor && byColor.length > 0) {
-                            byColor.forEach(function(g){
-                                (g.sizes || []).forEach(function(s){
-                                    var raw = s.label || (g.color + ' - ' + s.size);
-                                    flatList.push({
-                                        sub_sku: s.sub_sku,
-                                        label: cleanVariationLabel(raw) || raw,
-                                        sell_price_inc_tax: s.sell_price_inc_tax,
-                                        variation_id: s.variation_id,
-                                        custom_field_1: (g.color || '').toString().trim(),
-                                        custom_field_2: (s.size || '').toString().trim()
-                                    });
-                                });
-                            });
-                        } else if (combinations && combinations.length > 0) {
-                            combinations.forEach(function(c){
-                                var raw = c.label || c.value || '';
-                                var parts = (raw + '').split(/\s*[-–]\s*/).map(function(p){ return p.trim(); });
-                                flatList.push({
-                                    sub_sku: c.sub_sku,
-                                    label: cleanVariationLabel(raw) || raw,
-                                    sell_price_inc_tax: c.sell_price_inc_tax,
-                                    variation_id: c.variation_id,
-                                    custom_field_1: parts[0] || '',
-                                    custom_field_2: parts[1] || ''
-                                });
-                            });
-                        }
-                        if (flatList.length === 0) return;
-                        var productName = (res.product && res.product.name) ? res.product.name : '';
-                        var productBrand = '';
-                        var productId = res.product && res.product.id ? res.product.id : printAfterSaveProductId;
-                        currentCombosProduct = { id: productId, name: productName, brand: productBrand };
-                        currentCombosList = flatList;
-                        addSelectedCombosToPrint(true);
+                function waitForPrinters(maxMs, intervalMs) {
+                    maxMs = maxMs || 8000;
+                    intervalMs = intervalMs || 300;
+                    return new Promise(function(resolve) {
+                        var elapsed = 0;
+                        var t = setInterval(function() {
+                            var opts = $('#printers option');
+                            if (opts.length > 1 && opts.eq(1).val()) {
+                                clearInterval(t);
+                                resolve(true);
+                                return;
+                            }
+                            elapsed += intervalMs;
+                            if (elapsed >= maxMs) {
+                                clearInterval(t);
+                                resolve(false);
+                            }
+                        }, intervalMs);
                     });
                 }
-                setTimeout(runAutoPrint, 2800);
+                function runAutoPrint() {
+                    waitForPrinters(8000).then(function(ready) {
+                        var $sel = $('#printers');
+                        if ($sel.find('option').length > 1) {
+                            var hasDefault = false;
+                            if (typeof defaultPrinterName === 'string' && defaultPrinterName) {
+                                var defLower = defaultPrinterName.toLowerCase();
+                                $sel.find('option').each(function() {
+                                    var v = $(this).val();
+                                    if (v && v.toLowerCase() === defLower) {
+                                        $sel.val(v);
+                                        hasDefault = true;
+                                        return false;
+                                    }
+                                });
+                            }
+                            if (!hasDefault) {
+                                var firstVal = $sel.find('option').eq(1).val();
+                                if (firstVal) $sel.val(firstVal);
+                            }
+                        }
+                        $.get(productVariationsUrl + '/' + printAfterSaveProductId).done(function(res){
+                            if (!res.success) return;
+                            var byColor = res.by_color || [];
+                            var combinations = res.combinations || [];
+                            var flatList = [];
+                            if (byColor && byColor.length > 0) {
+                                byColor.forEach(function(g){
+                                    (g.sizes || []).forEach(function(s){
+                                        var raw = s.label || (g.color + ' - ' + s.size);
+                                        flatList.push({
+                                            sub_sku: s.sub_sku,
+                                            label: cleanVariationLabel(raw) || raw,
+                                            sell_price_inc_tax: s.sell_price_inc_tax,
+                                            variation_id: s.variation_id,
+                                            custom_field_1: (g.color || '').toString().trim(),
+                                            custom_field_2: (s.size || '').toString().trim()
+                                        });
+                                    });
+                                });
+                            } else if (combinations && combinations.length > 0) {
+                                combinations.forEach(function(c){
+                                    var raw = c.label || c.value || '';
+                                    var parts = (raw + '').split(/\s*[-–]\s*/).map(function(p){ return p.trim(); });
+                                    flatList.push({
+                                        sub_sku: c.sub_sku,
+                                        label: cleanVariationLabel(raw) || raw,
+                                        sell_price_inc_tax: c.sell_price_inc_tax,
+                                        variation_id: c.variation_id,
+                                        custom_field_1: parts[0] || '',
+                                        custom_field_2: parts[1] || ''
+                                    });
+                                });
+                            }
+                            // منتج فردي بدون توليفات من السيرفر — نستخدم المنتج كملصق واحد للطباعة التلقائية
+                            if (flatList.length === 0 && res.product) {
+                                flatList.push({
+                                    sub_sku: res.product.sku || '',
+                                    label: res.product.name || '',
+                                    sell_price_inc_tax: 0,
+                                    variation_id: null,
+                                    custom_field_1: '',
+                                    custom_field_2: ''
+                                });
+                            }
+                            if (flatList.length === 0) return;
+                            var productName = (res.product && res.product.name) ? res.product.name : '';
+                            var productBrand = '';
+                            var productId = res.product && res.product.id ? res.product.id : printAfterSaveProductId;
+                            currentCombosProduct = { id: productId, name: productName, brand: productBrand };
+                            currentCombosList = flatList;
+                            addSelectedCombosToPrint(true);
+                        });
+                    });
+                }
+                setTimeout(runAutoPrint, 1200);
             }
         });
 
@@ -1164,9 +1204,19 @@ qz.security.setSignaturePromise(function(toSign) {
                     return;
                 }
                 printers.forEach(p => sel.append($('<option/>').val(p).text(p)));
-                if (typeof defaultPrinterName === 'string' && defaultPrinterName && printers.indexOf(defaultPrinterName) !== -1) {
-                    sel.val(defaultPrinterName);
+                // اختيار الطابعة الافتراضية — مطابقة بدون مراعاة حجم الحروف
+                var chosen = null;
+                if (typeof defaultPrinterName === 'string' && defaultPrinterName) {
+                    var defLower = defaultPrinterName.toLowerCase();
+                    for (var i = 0; i < printers.length; i++) {
+                        if (printers[i].toLowerCase() === defLower) {
+                            chosen = printers[i];
+                            break;
+                        }
+                    }
+                    if (!chosen && printers.length > 0) chosen = printers[0];
                 }
+                if (chosen) sel.val(chosen);
                 $('#printerStatus').removeClass('status-disconnected').addClass('status-connected');
             } catch (err) {
                 console.error('خطأ في جلب الطابعات:', err);
@@ -1345,7 +1395,7 @@ qz.security.setSignaturePromise(function(toSign) {
             const sendMode = $('#printSendMode').val() || 'one_by_one';
 
             if (sendMode === 'all_at_once') {
-                // طباعة مباشرة للكل — بناء كل الملصقات وإرسالها في أمر واحد
+                // طباعة مباشرة للكل — بناء HTML لكل ملصق وإرسالها في أمر واحد (تعريف الويندوز يطبعها)
                 const originalProduct = {...currentProduct};
                 const data = [];
                 selectedProducts.forEach((product, productId) => {
@@ -1403,9 +1453,12 @@ qz.security.setSignaturePromise(function(toSign) {
 
         async function printProduct(product, quantity, printer = null) {
             printer = printer || $('#printers').val();
-            
-            if (!printer) {
+            if (!printer || printer.toString().trim() === '') {
                 alert('اختر طابعة صحيحة');
+                return false;
+            }
+            if (typeof qz === 'undefined' || !qz.websocket || (qz.websocket.isConnected && !qz.websocket.isConnected())) {
+                alert('غير متصل بـ QZ Tray. شغّل QZ Tray وتأكد من الاتصال.');
                 return false;
             }
 
@@ -1421,25 +1474,20 @@ qz.security.setSignaturePromise(function(toSign) {
                 custom_field_1: (product.custom_field_1 != null ? product.custom_field_1 : '').toString(),
                 custom_field_2: (product.custom_field_2 != null ? product.custom_field_2 : '').toString()
             };
-            
+
             const previewHTML = generateLabelHTML();
-            
+
             try {
                 const cfg = qz.configs.create(printer, {});
-                const data = [{ type:'html', format:'plain', data: previewHTML }];
-                await qz.print(cfg, data);
-                
+                await qz.print(cfg, [{ type: 'html', format: 'plain', data: previewHTML }]);
                 currentProduct = originalProduct;
                 renderLabelPreview();
-                
                 return true;
             } catch (err) {
                 console.error('خطأ في الطباعة:', err);
                 alert('فشل الطباعة: ' + (err?.toString?.() || err));
-                
                 currentProduct = originalProduct;
                 renderLabelPreview();
-                
                 return false;
             }
         }
