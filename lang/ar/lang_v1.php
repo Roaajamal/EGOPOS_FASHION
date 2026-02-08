@@ -109,7 +109,7 @@ return [
     'stock_transfer_cannot_be_deleted' => 'لا يمكن حذف تحويل هذا العنصر لأنه تم بيع البعض منه بالفعل',
     'total_transfer_shipping_charges' => 'مجموع تكاليف شحن التحويل',
     'enable_inline_tax' => 'تفعيل الضريبة في السطر على الشراء والبيع',
-    'save_n_add_opening_stock' => 'احفظ وأضف مخزون الإفتتاح',
+    'save_n_add_opening_stock' => 'حفظ وأضف الكميات',
     'add_opening_stock' => 'أضف مخزون الإفتتاح',
     'opening_stock_added_successfully' => 'تمت إضافة المخزون الافتتاحي بنجاح',
     'update_n_edit_opening_stock' => 'تحديث وتعديل المخزون الافتتاحي',

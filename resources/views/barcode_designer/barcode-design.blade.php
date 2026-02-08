@@ -469,6 +469,16 @@ label {
 .notification.error { background: #dc3545; }
 .notification.warning { background: #ffc107; color: #212529; }
 .notification.info { background: #17a2b8; }
+
+/* قسم المنتجات بالمقاس/اللون — كل لون يجمع المقاسات تحته */
+.barcode-combo-list { max-height: 280px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 8px; padding: 8px; background: #f8f9fa; margin-top: 8px; }
+.barcode-color-group { margin-bottom: 12px; background: #fff; border-radius: 8px; border: 1px solid #e9ecef; overflow: hidden; }
+.barcode-color-heading { padding: 8px 12px; background: linear-gradient(135deg, #007bff, #0056b3); color: #fff; font-weight: 700; font-size: 13px; }
+.barcode-combo-item { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; margin: 0; border-bottom: 1px solid #f1f1f1; font-size: 12px; }
+.barcode-combo-item:last-child { border-bottom: none; }
+.barcode-combo-item .combo-label { font-weight: 600; color: #495057; }
+.barcode-combo-item .combo-sku { color: #6c757d; font-size: 11px; margin-right: 8px; }
+.barcode-combo-item .btn-print-one { padding: 4px 10px; font-size: 11px; }
 </style>
 
 <div class="editor-container">
@@ -479,6 +489,20 @@ label {
                 🎨 مصمم الباركود الاحترافي
             </h3>
             <p style="color: #6c757d; margin: 5px 0 0 0; font-size: 13px;">صمم وادمج واطبع ملصقات الباركود</p>
+        </div>
+
+        <!-- طباعة باركود حسب المقاس/اللون — كل لون يجمع المقاسات تحته -->
+        <div class="control-group">
+            <h5>🏷️ طباعة كل مقاس/لون لوحده</h5>
+            <label>اختيار منتج (متغير):</label>
+            <div style="position:relative;">
+                <input type="text" class="form-control" id="barcodeProductSearch" placeholder="ابحث باسم المنتج أو SKU..." autocomplete="off">
+                <div id="barcodeProductDropdown" style="display:none; position:absolute; left:0; right:0; top:100%; z-index:100; background:#fff; border:1px solid #dee2e6; border-radius:8px; max-height:200px; overflow-y:auto; box-sizing:border-box; margin-top:2px; box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+            </div>
+            <input type="hidden" id="barcodeSelectedProductId">
+            <div id="barcodeSelectedProductName" style="margin-top:6px; font-size:12px; color:#28a745; font-weight:600;"></div>
+            <button type="button" class="btn btn-info btn-sm w-100 mt-2" id="btnLoadCombinations" style="display:none;" onclick="loadProductCombinations()">📋 تحميل المقاسات والألوان</button>
+            <div id="barcodeCombinationsList" class="barcode-combo-list" style="display:none;"></div>
         </div>
 
         <!-- إدارة التصاميم -->
@@ -657,6 +681,44 @@ label {
             </select>
         </div>
 
+        <!-- الحقول المخصصة (من إعدادات المنتج) -->
+        @php
+            $product_custom_fields = $product_custom_fields ?? [];
+        @endphp
+        @if(count($product_custom_fields) > 0)
+        <div class="control-group">
+            <h5>📋 الحقول المخصصة</h5>
+            <p class="text-muted" style="font-size: 11px; margin-bottom: 10px;">يمكنك إظهار أو إخفاء كل حقل في التصميم.</p>
+            @foreach($product_custom_fields as $cfId => $cfLabel)
+            <div class="control-group" data-element="{{ $cfId }}">
+                <div class="control-header">
+                    <h6 style="margin: 0 0 6px 0;">{{ $cfLabel }}</h6>
+                    <button type="button" class="btn btn-sm toggle-btn btn-secondary" onclick="toggleElement('{{ $cfId }}')">👁️ إخفاء</button>
+                </div>
+                <input type="text" class="form-control" id="txt_{{ $cfId }}" value="{{ $cfLabel }}" oninput="updateCfText('{{ $cfId }}')" placeholder="نص افتراضي">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div>
+                        <label>📍 X (مم):</label>
+                        <input type="number" id="x_{{ $cfId }}" class="form-control" value="5" oninput="updateCfPos('{{ $cfId }}')" step="0.1">
+                    </div>
+                    <div>
+                        <label>📍 Y (مم):</label>
+                        <input type="number" id="y_{{ $cfId }}" class="form-control" value="12" oninput="updateCfPos('{{ $cfId }}')" step="0.1">
+                    </div>
+                </div>
+                <label>🔤 حجم الخط (pt):</label>
+                <input type="number" id="size_{{ $cfId }}" value="10" class="form-control" oninput="updateCfFont('{{ $cfId }}')" min="6" max="72">
+                <label>📝 نوع الخط:</label>
+                <select id="font_{{ $cfId }}" class="form-select" onchange="updateCfFont('{{ $cfId }}')">
+                    <option value="Arial">Arial</option>
+                    <option value="Tahoma">Tahoma</option>
+                    <option value="Cairo">Cairo</option>
+                </select>
+            </div>
+            @endforeach
+        </div>
+        @endif
+
         <!-- العناصر الإضافية -->
         <div class="control-group">
             <h5>✨ العناصر الإضافية</h5>
@@ -753,6 +815,9 @@ label {
                     <div id="lblName" class="draggable" style="top:19px; left:19px; font-size:16px; font-family:Arial;">اسم المنتج</div>
                     <div id="lblPrice" class="draggable" style="top:57px; left:19px; font-size:16px; font-family:Arial;">0.00</div>
                     <div id="lblBrand" class="draggable" style="top:19px; left:113px; font-size:13px; font-family:Arial;">Brand</div>
+                    @foreach($product_custom_fields ?? [] as $cfId => $cfLabel)
+                    <div id="{{ $cfId }}" class="draggable" style="top:45px; left:19px; font-size:13px; font-family:Arial;">{{ $cfLabel }}</div>
+                    @endforeach
                     <div id="barcode-container" class="draggable barcode-container" style="top:76px; left:19px;">
                         <svg id="barcode"></svg>
                     </div>
@@ -787,10 +852,12 @@ label {
 
 <script>
 const BASE_URL = '{{ url("/") }}';
-const SAVE_URL = '{{ route("barcode.save") }}';      // /barcode-save
-const LOAD_URL = '{{ route("barcode.load") }}';      // /barcode-load  
-const TEST_URL = '{{ route("barcode.test") }}';      // /barcode-test
-const DELETE_URL = '{{ route("barcode.delete") }}';  // /barcode-delete
+const SAVE_URL = '{{ route("barcode.save") }}';
+const LOAD_URL = '{{ route("barcode.load") }}';
+const TEST_URL = '{{ route("barcode.test") }}';
+const DELETE_URL = '{{ route("barcode.delete") }}';
+const PRODUCTS_SEARCH_URL = '{{ route("barcode.design.products_search") }}';
+const PRODUCT_VARIATIONS_URL = '{{ url("/barcode-design/product-variations") }}';
 const CSRF_TOKEN = '{{ csrf_token() }}';
 
 console.log('🔗 الروابط المستخدمة:', {
@@ -803,19 +870,24 @@ console.log('🔗 الروابط المستخدمة:', {
 // ثوابت التحويل
 const MM_TO_PX = 3.7795275591;
 
-// حالة العناصر
+// حالة العناصر (الأساسية + الحقول المخصصة من إعدادات المنتج)
+const customFieldIds = @json(array_keys($product_custom_fields ?? []));
 const elementStates = {
     'lblName': true,
     'lblPrice': true,
     'lblBrand': true,
     'barcode': true
 };
+customFieldIds.forEach(id => { elementStates[id] = true; });
 
 let extraCount = 0;
 let currentZoom = 1;
 let lastSaveTime = new Date();
 let currentDesignId = null;
 let userDesigns = [];
+let currentBarcodeProduct = null;
+let currentBarcodeCombinations = [];
+let currentBarcodeByColor = null;
 
 // تهيئة أولية
 document.addEventListener('DOMContentLoaded', function() {
@@ -831,7 +903,53 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(() => {
         loadDesignFromDB();
     }, 1000);
-    
+
+    // بحث منتج للطباعة بالمقاس/اللون
+    const searchInput = document.getElementById('barcodeProductSearch');
+    const dropdown = document.getElementById('barcodeProductDropdown');
+    function doProductSearch(q) {
+        fetch(PRODUCTS_SEARCH_URL + '?q=' + encodeURIComponent(q || ''))
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    dropdown.innerHTML = '<div class="p-2 text-danger">خطأ في التحميل</div>';
+                } else if (!data.products || !data.products.length) {
+                    dropdown.innerHTML = '<div class="p-2 text-muted">لا توجد منتجات (أضف منتجاً متغيراً من قسم المنتجات مع ألوان ومقاسات)</div>';
+                } else {
+                    dropdown.innerHTML = data.products.map(p =>
+                        '<div class="design-item" style="cursor:pointer;padding:10px;" data-id="' + p.id + '" data-name="' + (p.name || '').replace(/"/g, '&quot;') + '" data-sku="' + (p.sku || '') + '">' + (p.name || '') + ' <small class="text-muted">' + (p.sku || '') + '</small></div>'
+                    ).join('');
+                    dropdown.querySelectorAll('.design-item').forEach(el => {
+                        el.addEventListener('click', function() {
+                            document.getElementById('barcodeSelectedProductId').value = this.getAttribute('data-id');
+                            document.getElementById('barcodeSelectedProductName').textContent = this.getAttribute('data-name') || '';
+                            document.getElementById('btnLoadCombinations').style.display = 'block';
+                            searchInput.value = this.getAttribute('data-name') || '';
+                            dropdown.style.display = 'none';
+                        });
+                    });
+                }
+                dropdown.style.display = 'block';
+            }).catch(function() {
+                dropdown.innerHTML = '<div class="p-2 text-danger">فشل الاتصال بالخادم</div>';
+                dropdown.style.display = 'block';
+            });
+    }
+    if (searchInput && dropdown) {
+        let searchTimeout = null;
+        searchInput.addEventListener('focus', function() {
+            if (dropdown.style.display !== 'block' || dropdown.innerHTML === '') {
+                doProductSearch(this.value.trim());
+            }
+        });
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimeout);
+            const q = this.value.trim();
+            searchTimeout = setTimeout(function() { doProductSearch(q); }, 300);
+        });
+        searchInput.addEventListener('blur', function() { setTimeout(function() { dropdown.style.display = 'none'; }, 200); });
+    }
+
     console.log('✅ مصمم الباركود جاهز للاستخدام');
 });
 
@@ -920,6 +1038,40 @@ function updateFont(id){
     let sizePx = Math.round(size * 1.33);
     el.style.fontSize = sizePx + "px";
     el.style.fontFamily = font;
+    autoSave();
+}
+
+/* ========== الحقول المخصصة (من إعدادات المنتج) ========== */
+function updateCfText(id) {
+    const txtEl = document.getElementById('txt_' + id);
+    if (txtEl) {
+        document.getElementById(id).innerText = txtEl.value;
+        updateStats();
+        autoSave();
+    }
+}
+function updateCfPos(id) {
+    const xEl = document.getElementById('x_' + id);
+    const yEl = document.getElementById('y_' + id);
+    if (!xEl || !yEl) return;
+    const xMm = parseFloat(xEl.value);
+    const yMm = parseFloat(yEl.value);
+    const el = document.getElementById(id);
+    if (el) {
+        el.style.left = mmToPx(xMm) + 'px';
+        el.style.top = mmToPx(yMm) + 'px';
+        updateStats();
+        autoSave();
+    }
+}
+function updateCfFont(id) {
+    const el = document.getElementById(id);
+    const sizeEl = document.getElementById('size_' + id);
+    const fontEl = document.getElementById('font_' + id);
+    if (!el || !sizeEl || !fontEl) return;
+    const sizePx = Math.round(parseFloat(sizeEl.value) * 1.33);
+    el.style.fontSize = sizePx + 'px';
+    el.style.fontFamily = fontEl.value;
     autoSave();
 }
 
@@ -1163,6 +1315,11 @@ function updateInputFieldsAfterDrag(elementId, xPx, yPx) {
     } else if (elementId.startsWith('extra')) {
         document.getElementById(`x_${elementId}`).value = xMm;
         document.getElementById(`y_${elementId}`).value = yMm;
+    } else if (elementId.match(/^cf\d+$/)) {
+        const xEl = document.getElementById('x_' + elementId);
+        const yEl = document.getElementById('y_' + elementId);
+        if (xEl) xEl.value = xMm;
+        if (yEl) yEl.value = yMm;
     } else {
         const base = elementId.replace('lbl', '');
         document.getElementById(`x${base}`).value = xMm;
@@ -1272,6 +1429,22 @@ async function saveDesignToDB(){
                     fontFamily: el.style.fontFamily,
                     color: el.style.color || '#000000',
                     visible: elementStates[id.replace('-container', '')] !== false
+                };
+            }
+        });
+
+        // جمع بيانات الحقول المخصصة (cf1, cf2, ...)
+        (customFieldIds || []).forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                designData.elements[id] = {
+                    text: el.innerText,
+                    left: el.style.left,
+                    top: el.style.top,
+                    fontSize: el.style.fontSize,
+                    fontFamily: el.style.fontFamily,
+                    color: el.style.color || '#000000',
+                    visible: elementStates[id] !== false
                 };
             }
         });
@@ -1390,7 +1563,7 @@ function applyDesign(design) {
             document.getElementById('barcodeFontSize').value = design.barcode_settings.font_size || 10;
         }
 
-        // تطبيق العناصر الأساسية
+        // تطبيق العناصر الأساسية + الحقول المخصصة
         if (design.elements) {
             Object.keys(design.elements).forEach(id => {
                 const elementData = design.elements[id];
@@ -1399,6 +1572,10 @@ function applyDesign(design) {
                 if (el) {
                     if (id === 'barcode-container') {
                         document.getElementById('txtBarcode').value = elementData.text || '123456789012';
+                    } else if (id.match(/^cf\d+$/)) {
+                        el.innerText = elementData.text || '';
+                        const txtCf = document.getElementById('txt_' + id);
+                        if (txtCf) txtCf.value = elementData.text || '';
                     } else {
                         el.innerText = elementData.text || '';
                         document.getElementById(`txt${id.replace('lbl', '')}`).value = elementData.text || '';
@@ -1411,7 +1588,18 @@ function applyDesign(design) {
                     el.style.color = elementData.color || '#000000';
 
                     // تحديث حقول الإدخال
-                    if (id !== 'barcode-container') {
+                    if (id.match(/^cf\d+$/)) {
+                        const leftMm = pxToMm(parseInt(elementData.left));
+                        const topMm = pxToMm(parseInt(elementData.top));
+                        const xEl = document.getElementById('x_' + id);
+                        const yEl = document.getElementById('y_' + id);
+                        const sizeEl = document.getElementById('size_' + id);
+                        const fontEl = document.getElementById('font_' + id);
+                        if (xEl) xEl.value = leftMm || 5;
+                        if (yEl) yEl.value = topMm || 5;
+                        if (sizeEl) sizeEl.value = Math.round(parseInt(elementData.fontSize) / 1.33) || 10;
+                        if (fontEl) fontEl.value = elementData.fontFamily || 'Arial';
+                    } else if (id !== 'barcode-container') {
                         const base = id.replace('lbl', '');
                         const leftMm = pxToMm(parseInt(elementData.left));
                         const topMm = pxToMm(parseInt(elementData.top));
@@ -1428,7 +1616,8 @@ function applyDesign(design) {
                     }
 
                     if (elementData.visible === false) {
-                        toggleElement(id.replace('-container', ''));
+                        const toggleId = id === 'barcode-container' ? 'barcode' : id;
+                        if (elementStates[toggleId] !== false) toggleElement(toggleId);
                     }
                 }
             });
@@ -1754,6 +1943,83 @@ function showNotification(message, type = 'info') {
             notification.remove();
         }, 300);
     }, 3000);
+}
+
+/* ========== طباعة باركود حسب المقاس/اللون — كل لون يجمع المقاسات تحته ========== */
+async function loadProductCombinations() {
+    const productId = document.getElementById('barcodeSelectedProductId').value;
+    if (!productId) {
+        showNotification('⚠️ اختر منتجاً أولاً', 'warning');
+        return;
+    }
+    try {
+        const response = await fetch(PRODUCT_VARIATIONS_URL + '/' + productId);
+        const result = await response.json();
+        if (!result.success) {
+            showNotification('❌ ' + (result.message || 'فشل تحميل المقاسات'), 'error');
+            return;
+        }
+        currentBarcodeProduct = result.product;
+        currentBarcodeByColor = result.by_color || null;
+        currentBarcodeCombinations = result.combinations || [];
+
+        const container = document.getElementById('barcodeCombinationsList');
+        if (currentBarcodeByColor && currentBarcodeByColor.length > 0) {
+            let html = '';
+            currentBarcodeByColor.forEach(function(colorGroup, colorIdx) {
+                html += '<div class="barcode-color-group">';
+                html += '<div class="barcode-color-heading">' + (colorGroup.color || '') + '</div>';
+                (colorGroup.sizes || []).forEach(function(s, sizeIdx) {
+                    const price = s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(2) + ' د.أ' : '';
+                    html += '<div class="barcode-combo-item">';
+                    html += '<div><span class="combo-label">' + (s.size || s.label || s.sub_sku) + '</span>';
+                    html += ' <span class="combo-sku">' + (s.sub_sku || '') + ' ' + price + '</span></div>';
+                    html += '<button type="button" class="btn btn-primary btn-print-one" onclick="printOneCombo(' + colorIdx + ',' + sizeIdx + ')">🖨️ اطبع</button>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            });
+            container.innerHTML = html;
+        } else if (currentBarcodeCombinations.length > 0) {
+            container.innerHTML = currentBarcodeCombinations.map(function(c, i) {
+                const price = c.sell_price_inc_tax != null ? parseFloat(c.sell_price_inc_tax).toFixed(2) + ' د.أ' : '';
+                return '<div class="barcode-combo-item"><div><span class="combo-label">' + (c.label || c.value || c.sub_sku) + '</span> <span class="combo-sku">' + (c.sub_sku || '') + ' ' + price + '</span></div><button type="button" class="btn btn-primary btn-print-one" onclick="printOneFlat(' + i + ')">🖨️ اطبع</button></div>';
+            }).join('');
+        } else {
+            container.innerHTML = '<div class="p-2 text-muted text-center">لا توجد توليفات. أضف ألواناً ومقاسات في صفحة إضافة المنتج.</div>';
+        }
+        container.style.display = 'block';
+        showNotification('✅ تم تحميل المقاسات والألوان', 'success');
+    } catch (error) {
+        console.error('خطأ تحميل المقاسات:', error);
+        showNotification('❌ حدث خطأ أثناء التحميل', 'error');
+    }
+}
+
+function printOneCombo(colorIdx, sizeIdx) {
+    if (!currentBarcodeProduct || !currentBarcodeByColor || !currentBarcodeByColor[colorIdx]) return;
+    const sizes = currentBarcodeByColor[colorIdx].sizes;
+    if (!sizes || !sizes[sizeIdx]) return;
+    const s = sizes[sizeIdx];
+    document.getElementById('txtBarcode').value = s.sub_sku || '';
+    document.getElementById('txtName').value = (currentBarcodeProduct.name || '') + ' - ' + (s.label || s.size || s.sub_sku);
+    document.getElementById('txtPrice').value = s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(2) : '0.00';
+    document.getElementById('lblName').innerText = document.getElementById('txtName').value;
+    document.getElementById('lblPrice').innerText = document.getElementById('txtPrice').value;
+    updateBarcode();
+    setTimeout(function() { printLabel(); showNotification('🖨️ جاري طباعة: ' + (s.label || s.sub_sku), 'info'); }, 100);
+}
+
+function printOneFlat(index) {
+    if (!currentBarcodeProduct || !currentBarcodeCombinations[index]) return;
+    const c = currentBarcodeCombinations[index];
+    document.getElementById('txtBarcode').value = c.sub_sku || '';
+    document.getElementById('txtName').value = (currentBarcodeProduct.name || '') + ' - ' + (c.label || c.value || c.sub_sku);
+    document.getElementById('txtPrice').value = c.sell_price_inc_tax != null ? parseFloat(c.sell_price_inc_tax).toFixed(2) : '0.00';
+    document.getElementById('lblName').innerText = document.getElementById('txtName').value;
+    document.getElementById('lblPrice').innerText = document.getElementById('txtPrice').value;
+    updateBarcode();
+    setTimeout(function() { printLabel(); showNotification('🖨️ جاري طباعة: ' + (c.label || c.sub_sku), 'info'); }, 100);
 }
 
 async function testConnection() {

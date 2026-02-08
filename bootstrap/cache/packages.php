@@ -1,13 +1,13 @@
 <?php return array (
   'aloha/twilio' => 
   array (
-    'providers' => 
-    array (
-      0 => 'Aloha\\Twilio\\Support\\Laravel\\ServiceProvider',
-    ),
     'aliases' => 
     array (
       'Twilio' => 'Aloha\\Twilio\\Support\\Laravel\\Facade',
+    ),
+    'providers' => 
+    array (
+      0 => 'Aloha\\Twilio\\Support\\Laravel\\ServiceProvider',
     ),
   ),
   'arcanedev/log-viewer' => 
@@ -50,13 +50,13 @@
   ),
   'knox/pesapal' => 
   array (
-    'providers' => 
-    array (
-      0 => 'Knox\\Pesapal\\PesapalServiceProvider',
-    ),
     'aliases' => 
     array (
       'Pesapal' => 'Knox\\Pesapal\\Facades\\Pesapal',
+    ),
+    'providers' => 
+    array (
+      0 => 'Knox\\Pesapal\\PesapalServiceProvider',
     ),
   ),
   'knuckleswtf/scribe' => 
@@ -119,14 +119,14 @@
   ),
   'milon/barcode' => 
   array (
-    'providers' => 
-    array (
-      0 => 'Milon\\Barcode\\BarcodeServiceProvider',
-    ),
     'aliases' => 
     array (
       'DNS1D' => 'Milon\\Barcode\\Facades\\DNS1DFacade',
       'DNS2D' => 'Milon\\Barcode\\Facades\\DNS2DFacade',
+    ),
+    'providers' => 
+    array (
+      0 => 'Milon\\Barcode\\BarcodeServiceProvider',
     ),
   ),
   'myfatoorah/laravel-package' => 
@@ -170,13 +170,13 @@
   ),
   'nwidart/laravel-modules' => 
   array (
-    'providers' => 
-    array (
-      0 => 'Nwidart\\Modules\\LaravelModulesServiceProvider',
-    ),
     'aliases' => 
     array (
       'Module' => 'Nwidart\\Modules\\Facades\\Module',
+    ),
+    'providers' => 
+    array (
+      0 => 'Nwidart\\Modules\\LaravelModulesServiceProvider',
     ),
   ),
   'openai-php/laravel' => 
@@ -220,13 +220,13 @@
   ),
   'spatie/laravel-signal-aware-command' => 
   array (
-    'providers' => 
-    array (
-      0 => 'Spatie\\SignalAwareCommand\\SignalAwareCommandServiceProvider',
-    ),
     'aliases' => 
     array (
       'Signal' => 'Spatie\\SignalAwareCommand\\Facades\\Signal',
+    ),
+    'providers' => 
+    array (
+      0 => 'Spatie\\SignalAwareCommand\\SignalAwareCommandServiceProvider',
     ),
   ),
   'srmklive/paypal' => 
@@ -253,13 +253,13 @@
   ),
   'yajra/laravel-datatables-oracle' => 
   array (
-    'providers' => 
-    array (
-      0 => 'Yajra\\DataTables\\DataTablesServiceProvider',
-    ),
     'aliases' => 
     array (
       'DataTables' => 'Yajra\\DataTables\\Facades\\DataTables',
+    ),
+    'providers' => 
+    array (
+      0 => 'Yajra\\DataTables\\DataTablesServiceProvider',
     ),
   ),
 );

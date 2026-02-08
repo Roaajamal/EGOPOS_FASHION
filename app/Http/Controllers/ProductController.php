@@ -109,6 +109,7 @@ class ProductController extends Controller
                 }
             }
 
+            // صف لكل تباين (لون/مقاس) — المنتج يظهر أكثر من مرة حسب التوليفات
             $products = $query->select(
                 'products.id',
                 'products.name as product',
@@ -127,22 +128,41 @@ class ProductController extends Controller
                 'products.product_custom_field7', 'products.product_custom_field8', 'products.product_custom_field9',
                 'products.product_custom_field10', 'products.product_custom_field11', 'products.product_custom_field12',
                 'products.product_custom_field13', 'products.product_custom_field14', 'products.product_custom_field15',
-                'products.product_custom_field16', 'products.product_custom_field17', 'products.product_custom_field18', 
+                'products.product_custom_field16', 'products.product_custom_field17', 'products.product_custom_field18',
                 'products.product_custom_field19', 'products.product_custom_field20',
                 'products.alert_quantity',
+                'v.id as variation_id',
+                'v.name as variation_name',
+                'v.sub_sku as variation_sub_sku',
                 DB::raw('SUM(vld.qty_available) as current_stock'),
-                DB::raw('MAX(v.sell_price_inc_tax) as max_price'),
-                DB::raw('MIN(v.sell_price_inc_tax) as min_price'),
-                DB::raw('MAX(v.dpp_inc_tax) as max_purchase_price'),
-                DB::raw('MIN(v.dpp_inc_tax) as min_purchase_price')
-                );
+                'v.sell_price_inc_tax as max_price',
+                'v.sell_price_inc_tax as min_price',
+                'v.dpp_inc_tax as max_purchase_price',
+                'v.dpp_inc_tax as min_purchase_price'
+            );
 
             //if woocomerce enabled add field to query
             if ($is_woocommerce) {
                 $products->addSelect('woocommerce_disable_sync');
             }
 
-            $products->groupBy('products.id');
+            $products->groupBy(
+                'products.id', 'products.name', 'products.type', 'products.sku', 'products.image', 'products.enable_stock',
+                'products.is_inactive', 'products.not_for_selling', 'products.alert_quantity',
+                'products.category_id', 'products.sub_category_id', 'products.unit_id', 'products.brand_id', 'products.tax',
+                'products.product_custom_field1', 'products.product_custom_field2', 'products.product_custom_field3',
+                'products.product_custom_field4', 'products.product_custom_field5', 'products.product_custom_field6',
+                'products.product_custom_field7', 'products.product_custom_field8', 'products.product_custom_field9',
+                'products.product_custom_field10', 'products.product_custom_field11', 'products.product_custom_field12',
+                'products.product_custom_field13', 'products.product_custom_field14', 'products.product_custom_field15',
+                'products.product_custom_field16', 'products.product_custom_field17', 'products.product_custom_field18',
+                'products.product_custom_field19', 'products.product_custom_field20',
+                'c1.name', 'c2.name', 'units.actual_name', 'brands.name', 'tax_rates.name',
+                'v.id', 'v.name', 'v.sub_sku', 'v.sell_price_inc_tax', 'v.dpp_inc_tax'
+            );
+            if ($is_woocommerce) {
+                $products->groupBy('products.woocommerce_disable_sync');
+            }
 
             $type = request()->get('type', null);
             if (! empty($type)) {
@@ -292,6 +312,23 @@ class ProductController extends Controller
                     'selling_price',
                     '<div style="white-space: nowrap;">@format_currency($min_price) @if($max_price != $min_price && $type == "variable") -  @format_currency($max_price)@endif </div>'
                 )
+                ->editColumn('sku', function ($row) {
+                    return e($row->variation_sub_sku ?? $row->sku ?? '');
+                })
+                ->editColumn('product_custom_field1', function ($row) {
+                    if (! empty($row->variation_name)) {
+                        $parts = array_map('trim', explode(' - ', (string) $row->variation_name, 2));
+                        return e($parts[0] ?? '');
+                    }
+                    return e($row->product_custom_field1 ?? '');
+                })
+                ->editColumn('product_custom_field2', function ($row) {
+                    if (! empty($row->variation_name)) {
+                        $parts = array_map('trim', explode(' - ', (string) $row->variation_name, 2));
+                        return e($parts[1] ?? '');
+                    }
+                    return e($row->product_custom_field2 ?? '');
+                })
                 ->filterColumn('products.sku', function ($query, $keyword) {
                     $query->whereHas('variations', function ($q) use ($keyword) {
                         $q->where('sub_sku', 'like', "%{$keyword}%");
@@ -407,6 +444,35 @@ class ProductController extends Controller
             if (! empty($duplicate_product->id)) {
                 $rack_details = $this->productUtil->getRackDetails($business_id, $duplicate_product->id);
             }
+        } elseif (session()->has('product_form_old_input')) {
+            // استعادة المدخلات بعد «حفظ وطباعة» (تحديث الصفحة مع الإبقاء على البيانات)
+            $old = session('product_form_old_input');
+            session()->forget('product_form_old_input');
+            $duplicate_product = new \stdClass;
+            foreach ($old as $k => $v) {
+                $duplicate_product->$k = $v;
+            }
+            $duplicate_product->id = 0;
+            // حقول اختيارية قد لا ترد في الطلب (مثلاً عند عدم تحديد checkbox) — تجنّب Undefined property
+            $optionalDefaults = [
+                'enable_sr_no' => 0,
+                'not_for_selling' => 0,
+                'enable_stock' => isset($duplicate_product->enable_stock) ? $duplicate_product->enable_stock : 1,
+                'alert_quantity' => null,
+                'weight' => null,
+                'product_description' => null,
+            ];
+            foreach ($optionalDefaults as $key => $default) {
+                if (! property_exists($duplicate_product, $key)) {
+                    $duplicate_product->$key = $default;
+                }
+            }
+            if (! empty($duplicate_product->category_id)) {
+                $sub_categories = Category::where('business_id', $business_id)
+                        ->where('parent_id', $duplicate_product->category_id)
+                        ->pluck('name', 'id')
+                        ->toArray();
+            }
         }
 
         $selling_price_group_count = SellingPriceGroup::countSellingPriceGroups($business_id);
@@ -414,7 +480,7 @@ class ProductController extends Controller
         $module_form_parts = $this->moduleUtil->getModuleData('product_form_part');
         $product_types = $this->product_types();
 
-        $common_settings = session()->get('business.common_settings');
+        $common_settings = session()->get('business.common_settings') ?? [];
         $warranties = Warranty::forDropdown($business_id);
 
         //product screen view from module
@@ -510,79 +576,60 @@ class ProductController extends Controller
                 $product->product_locations()->sync($product_locations);
             }
             // ============================================
-// معالجة المنتجات المتغيرة (الألوان والمقاسات)
-// ============================================
-if ($request->input('type') == 'variable' && $request->has('size_color_qty')) {
-    $size_color_data = $request->input('size_color_qty');
-    $products_created = 0;
-    
-    $default_location = BusinessLocation::where('business_id', $business_id)->first();
-    $default_location_id = $default_location ? $default_location->id : null;
-    
-    foreach ($size_color_data as $color => $sizes) {
-        foreach ($sizes as $size => $quantity) {
-            if ($quantity > 0) {
-                $newProduct = $product->replicate();
-                $newProduct-> sku + 1  ;
-                $newProduct->name;
-                $newProduct->type = 'single';
-                $newProduct->product_custom_field1 = $size;
-                $newProduct->product_custom_field2 = $color;
-                $newProduct->save();
-                
-                $this->productUtil->createSingleProductVariation(
-                    $newProduct->id, 
-                    $newProduct->sku + 1, 
-                    $request->input('single_dpp', 0), 
-                    $request->input('single_dpp_inc_tax', 0), 
-                    $request->input('profit_percent', 0), 
-                    $request->input('single_dsp', 0), 
-                    $request->input('single_dsp_inc_tax', 0)
-                );
-                
-                if ($newProduct->enable_stock == 1 && $quantity > 0 && $default_location_id) {
-                    $variation = Variation::where('product_id', $newProduct->id)->first();
-                    if ($variation) {
-                        $this->productUtil->updateProductQuantity(
-                            $default_location_id,
-                            $newProduct->id,
-                            $variation->id,
-                            $quantity,
-                            0
-                        );
-                    }
+            // معالجة المنتجات المتغيرة (الألوان والمقاسات) — منتج واحد مع توليفات محفوظة للباركود
+            // ============================================
+            if ($request->input('type') == 'variable' && $request->has('size_color_qty')) {
+                $size_color_data = $request->input('size_color_qty');
+                $default_location = BusinessLocation::where('business_id', $business_id)->first();
+                $location_id = $default_location ? $default_location->id : null;
+
+                // سعر البيع: من مربع «سعر واحد لجميع المقاسات» أو من single_dsp إن وُجد
+                $single_dsp = $request->input('single_dsp');
+                $single_dsp_inc_tax = $request->input('single_dsp_inc_tax');
+                $variable_price = $request->input('variable_single_price');
+                if ((empty($single_dsp) || (float) $single_dsp == 0) && $request->filled('variable_single_price')) {
+                    $single_dsp = $variable_price;
+                    $single_dsp_inc_tax = $variable_price;
                 }
-                
-                $products_created++;
+
+                $this->productUtil->createSizeColorMatrixAndSaveCombinations($product, $size_color_data, [
+                    'single_dsp' => $single_dsp,
+                    'single_dsp_inc_tax' => $single_dsp_inc_tax,
+                    'single_dpp' => $request->input('single_dpp', 0),
+                    'single_dpp_inc_tax' => $request->input('single_dpp_inc_tax', 0),
+                    'profit_percent' => $request->input('profit_percent', 0),
+                    'location_id' => $location_id,
+                ]);
+
+                DB::commit();
+                $output = ['success' => 1, 'msg' => __('product.product_added_success')];
+
+                if ($request->input('submit_type') == 'submit_n_print') {
+                    $print_copies = (int) $request->input('print_copies', 1);
+                    $print_send_mode = $request->input('print_send_mode', 'one_by_one');
+                    if ($print_copies < 1) $print_copies = 1;
+                    if ($print_copies > 999) $print_copies = 999;
+                    $business = Business::find($business_id);
+                    $common = $business && $business->common_settings ? $business->common_settings : [];
+                    $default_printer = isset($common['default_barcode_printer']) ? $common['default_barcode_printer'] : '';
+                    $print_url = url('print-barcode?product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer));
+                    if ($request->ajax() || $request->wantsJson()) {
+                        $request->session()->flash('product_form_old_input', $request->except('_token', 'image'));
+                        $output['print_url'] = $print_url;
+                        $output['redirect_url'] = action([\App\Http\Controllers\ProductController::class, 'create']);
+                        return response()->json($output);
+                    }
+                    $url = 'products?print_product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer);
+                    return redirect($url)->with('status', $output);
+                }
+                if ($request->input('submit_type') == 'submit_n_add_selling_prices') {
+                    return redirect()->action([\App\Http\Controllers\ProductController::class, 'addSellingPrices'], [$product->id]);
+                }
+                if ($request->input('submit_type') == 'save_n_add_another') {
+                    return redirect()->action([\App\Http\Controllers\ProductController::class, 'create'])->with('status', $output);
+                }
+                return redirect('products')->with('status', $output);
             }
-        }
-    }
-    
-    $product->delete();
-    
-    DB::commit();
-    $output = ['success' => 1,
-        'msg' => __('product.product_added_success') . ' (' . $products_created . ' منتجات)',
-    ];
-    
-    // معالجة نوع الحفظ
-    if ($request->input('submit_type') == 'submit_n_add_opening_stock') {
-        return redirect()->action([\App\Http\Controllers\OpeningStockController::class, 'add'],
-            ['product_id' => $product->id]
-        );
-    } elseif ($request->input('submit_type') == 'submit_n_add_selling_prices') {
-        return redirect()->action([\App\Http\Controllers\ProductController::class, 'addSellingPrices'],
-            [$product->id]
-        );
-    } elseif ($request->input('submit_type') == 'save_n_add_another') {
-        return redirect()->action([\App\Http\Controllers\ProductController::class, 'create']
-        )->with('status', $output);
-    }
-    
-    return redirect('products')->with('status', $output);
-}
-
-
 
             if ($product->type == 'single') {
                 $this->productUtil->createSingleProductVariation($product->id, $product->sku, $request->input('single_dpp'), $request->input('single_dpp_inc_tax'), $request->input('profit_percent'), $request->input('single_dsp'), $request->input('single_dsp_inc_tax'));
@@ -638,6 +685,9 @@ if ($request->input('type') == 'variable' && $request->has('size_color_qty')) {
                 'msg' => __('messages.something_went_wrong'),
             ];
 
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json($output);
+            }
             return redirect('products')->with('status', $output);
         }
 
@@ -645,6 +695,25 @@ if ($request->input('type') == 'variable' && $request->has('size_color_qty')) {
             return redirect()->action([\App\Http\Controllers\OpeningStockController::class, 'add'],
                 ['product_id' => $product->id]
             );
+        }
+        if ($request->input('submit_type') == 'submit_n_print') {
+            $print_copies = (int) $request->input('print_copies', 1);
+            $print_send_mode = $request->input('print_send_mode', 'one_by_one');
+            if ($print_copies < 1) $print_copies = 1;
+            if ($print_copies > 999) $print_copies = 999;
+            $business_id = $request->session()->get('user.business_id');
+            $business = Business::find($business_id);
+            $common = $business && $business->common_settings ? $business->common_settings : [];
+            $default_printer = isset($common['default_barcode_printer']) ? $common['default_barcode_printer'] : '';
+            $print_url = url('print-barcode?product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer));
+            if ($request->ajax() || $request->wantsJson()) {
+                $request->session()->flash('product_form_old_input', $request->except('_token', 'image'));
+                $output['print_url'] = $print_url;
+                $output['redirect_url'] = action([\App\Http\Controllers\ProductController::class, 'create']);
+                return response()->json($output);
+            }
+            $url = 'products?print_product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer);
+            return redirect($url)->with('status', $output);
         } elseif ($request->input('submit_type') == 'submit_n_add_selling_prices') {
             return redirect()->action([\App\Http\Controllers\ProductController::class, 'addSellingPrices'],
                 [$product->id]

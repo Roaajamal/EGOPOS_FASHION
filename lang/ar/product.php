@@ -47,4 +47,5 @@
      'import_products' => 'استيراد المنتجات',
      'file_to_import' => 'ملف للاستيراد',
      'file_imported_successfully' => 'تم استيراد الملف بنجاح',
+    'size_color_combinations' => 'الألوان والمقاسات',
  ];
