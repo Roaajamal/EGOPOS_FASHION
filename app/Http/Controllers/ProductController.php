@@ -398,6 +398,12 @@ class ProductController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        if (request()->get('clear_form') == '1') {
+            request()->session()->forget('product_form_old_input');
+            request()->session()->forget('opening_stock_return_to_create');
+            return redirect()->action([\App\Http\Controllers\ProductController::class, 'create']);
+        }
+
         $business_id = request()->session()->get('user.business_id');
 
         //Check if subscribed or not, then check for products quota
@@ -473,8 +479,10 @@ class ProductController extends Controller
                         ->pluck('name', 'id')
                         ->toArray();
             }
+            $form_restored_from_session = true;
         }
 
+        $form_restored_from_session = $form_restored_from_session ?? false;
         $selling_price_group_count = SellingPriceGroup::countSellingPriceGroups($business_id);
 
         $module_form_parts = $this->moduleUtil->getModuleData('product_form_part');
@@ -487,7 +495,7 @@ class ProductController extends Controller
         $pos_module_data = $this->moduleUtil->getModuleData('get_product_screen_top_view');
 
         return view('product.create')
-            ->with(compact('categories', 'brands', 'units', 'taxes', 'barcode_types', 'default_profit_percent', 'tax_attributes', 'barcode_default', 'business_locations', 'duplicate_product', 'sub_categories', 'rack_details', 'selling_price_group_count', 'module_form_parts', 'product_types', 'common_settings', 'warranties', 'pos_module_data'));
+            ->with(compact('categories', 'brands', 'units', 'taxes', 'barcode_types', 'default_profit_percent', 'tax_attributes', 'barcode_default', 'business_locations', 'duplicate_product', 'sub_categories', 'rack_details', 'selling_price_group_count', 'module_form_parts', 'product_types', 'common_settings', 'warranties', 'pos_module_data', 'form_restored_from_session'));
     }
 
     private function product_types()

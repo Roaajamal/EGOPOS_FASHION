@@ -473,6 +473,10 @@
 
                     <a href="{{ action([\App\Http\Controllers\ProductController::class, 'create']) }}" id="clear_form_button" class="tw-dw-btn tw-dw-btn-lg tw-dw-btn-default btn-for-variable" style="display: none;">حذف المدخلات</a>
 
+                    @if(!empty($form_restored_from_session))
+                    <a href="{{ action([\App\Http\Controllers\ProductController::class, 'create'], ['clear_form' => 1]) }}" class="tw-dw-btn tw-dw-btn-lg tw-dw-btn-default" id="clear_restored_form_btn">حذف المدخلات</a>
+                    @endif
+
                     <button type="submit" value="save_n_add_another" class="tw-dw-btn tw-dw-btn-lg bg-maroon submit_product_form btn-for-single">@lang('lang_v1.save_n_add_another')</button>
 
                     <button type="submit" value="submit" class="tw-dw-btn tw-dw-btn-primary tw-dw-btn-lg tw-text-white submit_product_form btn-for-single">@lang('messages.save')</button>
