@@ -365,7 +365,7 @@
             <div class="col-sm-12" style="margin-bottom: 16px;">
                 <div class="form-group" style="max-width: 280px;">
                     <label for="variable_single_price">سعر واحد لجميع المقاسات:</label>
-                    <input type="text" id="variable_single_price" name="variable_single_price" class="form-control input_number" placeholder="مثال: 10.00" step="0.01" />
+                    <input type="text" id="variable_single_price" name="variable_single_price" class="form-control input_number" placeholder="مثال: 10.00" step="0.01" value="{{ isset($duplicate_product->variable_single_price) ? $duplicate_product->variable_single_price : '' }}" />
                 </div>
             </div>
             <div class="clearfix"></div>
@@ -426,7 +426,7 @@
 
     </div>
     @endcomponent
-    <div class="row" style="margin-bottom: 16px;">
+    <div class="row" style="margin-bottom: 16px; display: none;" id="print_settings_row">
         <div class="col-sm-12">
             <div class="panel panel-default">
                 <div class="panel-heading">
@@ -462,14 +462,20 @@
             <div class="text-center">
                 <div class="btn-group">
                     @if($selling_price_group_count)
-                    <button type="submit" value="submit_n_add_selling_prices" class="tw-dw-btn tw-dw-btn-warning tw-dw-btn-lg tw-text-white submit_product_form">@lang('lang_v1.save_n_add_selling_price_group_prices')</button>
+                    <button type="submit" value="submit_n_add_selling_prices" class="tw-dw-btn tw-dw-btn-warning tw-dw-btn-lg tw-text-white submit_product_form btn-for-single">@lang('lang_v1.save_n_add_selling_price_group_prices')</button>
                     @endif
 
-                    <button id="save_and_print_button" type="submit" value="submit_n_print" class="tw-dw-btn tw-dw-btn-lg tw-text-white bg-purple submit_product_form">🖨️ حفظ وطباعة</button>
+                    @can('product.opening_stock')
+                    <button id="opening_stock_button" type="submit" value="submit_n_add_opening_stock" class="tw-dw-btn tw-dw-btn-lg tw-text-white bg-purple submit_product_form btn-for-single" @if(!empty($duplicate_product) && $duplicate_product->enable_stock == 0) disabled @endif>@lang('lang_v1.save_n_add_opening_stock')</button>
+                    @endcan
 
-                    <button type="submit" value="save_n_add_another" class="tw-dw-btn tw-dw-btn-lg bg-maroon submit_product_form">@lang('lang_v1.save_n_add_another')</button>
+                    <button id="save_and_print_button" type="submit" value="submit_n_print" class="tw-dw-btn tw-dw-btn-lg tw-text-white bg-purple submit_product_form btn-for-variable" style="display: none;">🖨️ حفظ وطباعة</button>
 
-                    <button type="submit" value="submit" class="tw-dw-btn tw-dw-btn-primary tw-dw-btn-lg tw-text-white submit_product_form">@lang('messages.save')</button>
+                    <a href="{{ action([\App\Http\Controllers\ProductController::class, 'create']) }}" id="clear_form_button" class="tw-dw-btn tw-dw-btn-lg tw-dw-btn-default btn-for-variable" style="display: none;">حذف المدخلات</a>
+
+                    <button type="submit" value="save_n_add_another" class="tw-dw-btn tw-dw-btn-lg bg-maroon submit_product_form btn-for-single">@lang('lang_v1.save_n_add_another')</button>
+
+                    <button type="submit" value="submit" class="tw-dw-btn tw-dw-btn-primary tw-dw-btn-lg tw-text-white submit_product_form btn-for-single">@lang('messages.save')</button>
                 </div>
 
             </div>
@@ -486,6 +492,12 @@
 
 <script src="{{ asset('js/product.js?v=' . $asset_v) }}"></script>
 
+@php
+    $restore_size_color_qty = (isset($duplicate_product->size_color_qty) && is_array($duplicate_product->size_color_qty)) ? $duplicate_product->size_color_qty : [];
+@endphp
+<script type="text/javascript">
+    window.__restoreSizeColorQty = @json($restore_size_color_qty);
+</script>
 <script type="text/javascript">
     $(document).ready(function() {
         __page_leave_confirmation('#product_add_form');
@@ -513,6 +525,20 @@
         var allSizes = [];      // جميع الأحجام المضافة
         var colorTables = {};   // تخزين جداول الألوان
         
+        // إظهار أزرار الحفظ حسب نوع المنتج: فردي = حفظ + أضف كمية | متباين = حفظ وطباعة
+        function toggleSubmitButtonsByType() {
+            var isVariable = ($('#type').val() === 'variable');
+            if (isVariable) {
+                $('.btn-for-single').hide();
+                $('.btn-for-variable').show();
+                $('#print_settings_row').show();
+            } else {
+                $('.btn-for-single').show();
+                $('.btn-for-variable').hide();
+                $('#print_settings_row').hide();
+            }
+        }
+        
         // عند «تباين»: إخفاء جدول السعر/التباين التقليدي، إظهار قسم اللون والمقاسات فقط مع مربع السعر الواحد
         function toggleSizeColorSection() {
             if ($('#type').val() === 'variable') {
@@ -538,6 +564,7 @@
                 $('#size_color_combo_section').hide();
                 if (typeof clearSizeColorForm === 'function') clearSizeColorForm();
             }
+            toggleSubmitButtonsByType();
         }
         $('#type').change(function() {
             if ($(this).val() === 'variable') {
@@ -549,8 +576,37 @@
                 $('#size_color_combo_section').hide();
                 if (typeof clearSizeColorForm === 'function') clearSizeColorForm();
             }
+            toggleSubmitButtonsByType();
         });
         toggleSizeColorSection();
+        toggleSubmitButtonsByType();
+
+        // استعادة بيانات الألوان والمقاسات بعد تحديث الصفحة (حفظ وطباعة)
+        if ($('#type').val() === 'variable' && window.__restoreSizeColorQty && Object.keys(window.__restoreSizeColorQty).length > 0) {
+            var data = window.__restoreSizeColorQty;
+            for (var colorName in data) {
+                if (data.hasOwnProperty(colorName) && allColors.indexOf(colorName) === -1) {
+                    allColors.push(colorName);
+                    if (typeof createColorTable === 'function') createColorTable(colorName);
+                }
+                var sizesObj = data[colorName];
+                if (sizesObj && typeof sizesObj === 'object') {
+                    var sizesList = Object.keys(sizesObj);
+                    sizesList.forEach(function(s) {
+                        if (allSizes.indexOf(s) === -1) allSizes.push(s);
+                    });
+                    if (typeof addSizesToColorTable === 'function') addSizesToColorTable(colorName, sizesList);
+                    for (var sizeName in sizesObj) {
+                        if (sizesObj.hasOwnProperty(sizeName)) {
+                            var qtyVal = sizesObj[sizeName];
+                            $('input[name="size_color_qty[' + colorName + '][' + sizeName + ']"]').val(qtyVal).trigger('input');
+                        }
+                    }
+                }
+            }
+            if (typeof updateSummary === 'function') updateSummary();
+            if (typeof syncVariablePriceToForm === 'function') syncVariablePriceToForm();
+        }
 
         // نسخ السعر من مربع «السعر لجميع المقاسات» إلى الحقول المرسلة (رقم بصيغة نقطة عشرية)
         function syncVariablePriceToForm() {
@@ -632,8 +688,8 @@
                 addSizesToColorTable(color, newSizes);
             });
             
-            // مسح الحقل
-            $('#new_size').val('');
+            // الإبقاء على النص في الحقل لاستخدامه مع ألوان أخرى
+            updateSummary();
             
             toastr.success('تم إضافة ' + newSizes.length + ' حجم');
         });

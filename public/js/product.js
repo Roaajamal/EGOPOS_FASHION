@@ -227,11 +227,52 @@ $(document).ready(function() {
     $(document).on('click', '.submit_product_form', function(e) {
         e.preventDefault();
 
-        var is_valid_product_form = true;
+        var submit_type = $(this).attr('value');
+
+        // «حفظ وطباعة»: إرسال عبر AJAX وفتح نافذة الطباعة دون مغادرة الصفحة أو مسح المدخلات
+        if (submit_type === 'submit_n_print') {
+            var form = $('form#product_add_form');
+            if (!form.length) return;
+            var formData = new FormData(form[0]);
+            formData.set('submit_type', 'submit_n_print');
+            var $btns = form.find('button[type="submit"]');
+            if (typeof __disable_submit_button === 'function') __disable_submit_button($btns);
+            else $btns.prop('disabled', true);
+            $.ajax({
+                url: form.attr('action'),
+                method: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                dataType: 'json',
+                beforeSend: function(xhr) {
+                    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                },
+                success: function(res) {
+                    if (typeof __enable_submit_button === 'function') __enable_submit_button($btns);
+                    else $btns.prop('disabled', false);
+                    if (res.success && res.print_url) {
+                        window.open(res.print_url, 'print_barcode_popup', 'width=400,height=320,scrollbars=no,menubar=no,toolbar=no');
+                        if (typeof toastr !== 'undefined') toastr.success(res.msg);
+                        if (res.redirect_url) {
+                            window.onbeforeunload = null;
+                            window.location.href = res.redirect_url;
+                        }
+                    } else {
+                        if (typeof toastr !== 'undefined') toastr.error(res.msg || (res.msg || ''));
+                    }
+                },
+                error: function(xhr) {
+                    if (typeof __enable_submit_button === 'function') __enable_submit_button($btns);
+                    else $btns.prop('disabled', false);
+                    var msg = (xhr.responseJSON && xhr.responseJSON.msg) ? xhr.responseJSON.msg : (typeof LANG !== 'undefined' && LANG.something_went_wrong) ? LANG.something_went_wrong : 'Something went wrong';
+                    if (typeof toastr !== 'undefined') toastr.error(msg);
+                }
+            });
+            return;
+        }
 
         var variation_skus = [];
-
-        var submit_type  = $(this).attr('value');
 
         $('#product_form_part').find('.input_sub_sku').each( function(){
             var element = $(this);

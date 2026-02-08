@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Business;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -36,8 +37,14 @@ class PrintBarcodeController extends Controller
             $print_send_mode = request()->get('print_send_mode', 'one_by_one');
             if ($print_copies < 1) $print_copies = 1;
             if ($print_copies > 999) $print_copies = 999;
-            
-            return view('printbarcode.printbar', compact('products', 'designData', 'print_after_save_product_id', 'print_after_save_all', 'print_copies', 'print_send_mode'));
+            $auto_print = (bool) request()->get('auto_print', 0);
+            $default_printer = request()->get('default_printer', '');
+            if ($default_printer === '' && Auth::check()) {
+                $business = Business::find($business_id);
+                $common = $business && $business->common_settings ? $business->common_settings : [];
+                $default_printer = $common['default_barcode_printer'] ?? '';
+            }
+            return view('printbarcode.printbar', compact('products', 'designData', 'print_after_save_product_id', 'print_after_save_all', 'print_copies', 'print_send_mode', 'auto_print', 'default_printer'));
             
         } catch (\Exception $e) {
             Log::error('❌ خطأ في صفحة الباركود: ' . $e->getMessage());
@@ -610,5 +617,26 @@ class PrintBarcodeController extends Controller
             Log::error('PrintBarcodeController@getProductVariations: ' . $e->getMessage());
             return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * حفظ الطابعة الافتراضية للباركود (تُستخدم عند «حفظ وطباعة»).
+     */
+    public function saveDefaultPrinter(Request $request)
+    {
+        $printer = $request->input('printer_name', '');
+        if (! Auth::check()) {
+            return response()->json(['success' => false], 403);
+        }
+        $business_id = Auth::user()->business_id;
+        $business = Business::find($business_id);
+        if (! $business) {
+            return response()->json(['success' => false], 404);
+        }
+        $common = $business->common_settings ?? [];
+        $common['default_barcode_printer'] = $printer;
+        $business->common_settings = $common;
+        $business->save();
+        return response()->json(['success' => true]);
     }
 }

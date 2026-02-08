@@ -444,6 +444,35 @@ class ProductController extends Controller
             if (! empty($duplicate_product->id)) {
                 $rack_details = $this->productUtil->getRackDetails($business_id, $duplicate_product->id);
             }
+        } elseif (session()->has('product_form_old_input')) {
+            // استعادة المدخلات بعد «حفظ وطباعة» (تحديث الصفحة مع الإبقاء على البيانات)
+            $old = session('product_form_old_input');
+            session()->forget('product_form_old_input');
+            $duplicate_product = new \stdClass;
+            foreach ($old as $k => $v) {
+                $duplicate_product->$k = $v;
+            }
+            $duplicate_product->id = 0;
+            // حقول اختيارية قد لا ترد في الطلب (مثلاً عند عدم تحديد checkbox) — تجنّب Undefined property
+            $optionalDefaults = [
+                'enable_sr_no' => 0,
+                'not_for_selling' => 0,
+                'enable_stock' => isset($duplicate_product->enable_stock) ? $duplicate_product->enable_stock : 1,
+                'alert_quantity' => null,
+                'weight' => null,
+                'product_description' => null,
+            ];
+            foreach ($optionalDefaults as $key => $default) {
+                if (! property_exists($duplicate_product, $key)) {
+                    $duplicate_product->$key = $default;
+                }
+            }
+            if (! empty($duplicate_product->category_id)) {
+                $sub_categories = Category::where('business_id', $business_id)
+                        ->where('parent_id', $duplicate_product->category_id)
+                        ->pluck('name', 'id')
+                        ->toArray();
+            }
         }
 
         $selling_price_group_count = SellingPriceGroup::countSellingPriceGroups($business_id);
@@ -580,7 +609,17 @@ class ProductController extends Controller
                     $print_send_mode = $request->input('print_send_mode', 'one_by_one');
                     if ($print_copies < 1) $print_copies = 1;
                     if ($print_copies > 999) $print_copies = 999;
-                    $url = 'products?print_product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode);
+                    $business = Business::find($business_id);
+                    $common = $business && $business->common_settings ? $business->common_settings : [];
+                    $default_printer = isset($common['default_barcode_printer']) ? $common['default_barcode_printer'] : '';
+                    $print_url = url('print-barcode?product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer));
+                    if ($request->ajax() || $request->wantsJson()) {
+                        $request->session()->flash('product_form_old_input', $request->except('_token', 'image'));
+                        $output['print_url'] = $print_url;
+                        $output['redirect_url'] = action([\App\Http\Controllers\ProductController::class, 'create']);
+                        return response()->json($output);
+                    }
+                    $url = 'products?print_product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer);
                     return redirect($url)->with('status', $output);
                 }
                 if ($request->input('submit_type') == 'submit_n_add_selling_prices') {
@@ -646,15 +685,34 @@ class ProductController extends Controller
                 'msg' => __('messages.something_went_wrong'),
             ];
 
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json($output);
+            }
             return redirect('products')->with('status', $output);
         }
 
+        if ($request->input('submit_type') == 'submit_n_add_opening_stock') {
+            return redirect()->action([\App\Http\Controllers\OpeningStockController::class, 'add'],
+                ['product_id' => $product->id]
+            );
+        }
         if ($request->input('submit_type') == 'submit_n_print') {
             $print_copies = (int) $request->input('print_copies', 1);
             $print_send_mode = $request->input('print_send_mode', 'one_by_one');
             if ($print_copies < 1) $print_copies = 1;
             if ($print_copies > 999) $print_copies = 999;
-            $url = 'products?print_product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode);
+            $business_id = $request->session()->get('user.business_id');
+            $business = Business::find($business_id);
+            $common = $business && $business->common_settings ? $business->common_settings : [];
+            $default_printer = isset($common['default_barcode_printer']) ? $common['default_barcode_printer'] : '';
+            $print_url = url('print-barcode?product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer));
+            if ($request->ajax() || $request->wantsJson()) {
+                $request->session()->flash('product_form_old_input', $request->except('_token', 'image'));
+                $output['print_url'] = $print_url;
+                $output['redirect_url'] = action([\App\Http\Controllers\ProductController::class, 'create']);
+                return response()->json($output);
+            }
+            $url = 'products?print_product_id=' . $product->id . '&print_all=1&print_copies=' . $print_copies . '&print_send_mode=' . urlencode($print_send_mode) . '&auto_print=1&default_printer=' . urlencode($default_printer);
             return redirect($url)->with('status', $output);
         } elseif ($request->input('submit_type') == 'submit_n_add_selling_prices') {
             return redirect()->action([\App\Http\Controllers\ProductController::class, 'addSellingPrices'],

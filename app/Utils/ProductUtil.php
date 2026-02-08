@@ -75,7 +75,7 @@ class ProductUtil extends Util
      * @param $input_variations
      * @return bool
      */
-    public function createVariableProductVariations($product, $input_variations, $sku_type, $business_id = null, )
+    public function createVariableProductVariations($product, $input_variations, $sku_type, $business_id = null)
     {
         if (! is_object($product)) {
             $product = Product::find($product);

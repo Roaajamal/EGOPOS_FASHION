@@ -871,16 +871,18 @@
             });
         });
 
-        // بعد «حفظ وطباعة»: فتح نافذة منبثقة للطباعة مع عدد النسخ وطريقة الإرسال
+        // بعد «حفظ وطباعة»: فتح نافذة صغيرة للطباعة المباشرة ثم إغلاقها (بدون نقل الصفحة الرئيسية)
         $(function() {
             var params = new URLSearchParams(window.location.search);
             var printProductId = params.get('print_product_id');
             var printAll = params.get('print_all');
             var printCopies = params.get('print_copies') || '1';
             var printSendMode = params.get('print_send_mode') || 'one_by_one';
+            var autoPrint = params.get('auto_print') || '0';
+            var defaultPrinter = params.get('default_printer') || '';
             if (printProductId && printAll) {
-                var printUrl = '{{ url("/print-barcode") }}?product_id=' + encodeURIComponent(printProductId) + '&print_all=1&print_copies=' + encodeURIComponent(printCopies) + '&print_send_mode=' + encodeURIComponent(printSendMode);
-                window.open(printUrl, 'print_barcode_popup', 'width=620,height=520,scrollbars=yes');
+                var printUrl = '{{ url("/print-barcode") }}?product_id=' + encodeURIComponent(printProductId) + '&print_all=1&print_copies=' + encodeURIComponent(printCopies) + '&print_send_mode=' + encodeURIComponent(printSendMode) + '&auto_print=1&default_printer=' + encodeURIComponent(defaultPrinter);
+                window.open(printUrl, 'print_barcode_popup', 'width=400,height=320,scrollbars=no,menubar=no,toolbar=no');
                 if (window.history && window.history.replaceState) {
                     window.history.replaceState({}, document.title, window.location.pathname);
                 }

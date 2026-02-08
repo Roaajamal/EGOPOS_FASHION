@@ -17,6 +17,7 @@ Route::middleware(['auth', 'SetSessionData', 'language', 'timezone', 'AdminSideb
         Route::get('/search', [PrintBarcodeController::class, 'search'])->name('search');
         Route::get('/design', [PrintBarcodeController::class, 'getDesign'])->name('design.get');
         Route::get('/product-variations/{product_id}', [PrintBarcodeController::class, 'getProductVariations'])->name('product-variations');
+        Route::post('/save-default-printer', [PrintBarcodeController::class, 'saveDefaultPrinter'])->name('save-default-printer');
         Route::post('/print-preview', [PrintBarcodeController::class, 'printPreview'])->name('print-preview');
         Route::post('/print', [PrintBarcodeController::class, 'printBarcodes'])->name('print');
         Route::post('/print-send', [PrintBarcodeController::class, 'sendToPrinter'])->name('print-send');

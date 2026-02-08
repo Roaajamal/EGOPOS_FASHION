@@ -695,6 +695,8 @@
         const printAfterSaveAll = {{ $print_after_save_all ?? 0 }};
         const printCopiesFromCreate = {{ (int)($print_copies ?? 1) }};
         const printSendModeFromCreate = "{{ $print_send_mode ?? 'one_by_one' }}";
+        const autoPrintMode = {{ isset($auto_print) && $auto_print ? 'true' : 'false' }};
+        const defaultPrinterName = @json($default_printer ?? '');
 // --- بداية كود الأمان المضاف ---
 
 // 1. تحديد الخوارزمية لتطابق ملف PHP (هام جداً)
@@ -818,6 +820,12 @@ qz.security.setSignaturePromise(function(toSign) {
             
             // الأحداث
             $('#refreshPrinters').on('click', listPrinters);
+            $('#printers').on('change', function() {
+                var name = $(this).val();
+                if (name) {
+                    $.post('{{ url("/print-barcode/save-default-printer") }}', { printer_name: name, _token: '{{ csrf_token() }}' });
+                }
+            });
             $('#printSingleBtn').on('click', onPrintSingle);
             $('#printSelectedBtn').on('click', onPrintSelected);
             $('#searchBtn').on('click', performSearch);
@@ -1069,13 +1077,21 @@ qz.security.setSignaturePromise(function(toSign) {
                 }
             });
 
-            // بعد «حفظ وطباعة»: انتظار الطابعات ثم اختيار الأولى (ديفولت) وطباعة كل المقاسات ثم إغلاق النافذة
+            // بعد «حفظ وطباعة»: اختيار الطابعة المحفوظة (أو الأولى) ثم طباعة كل المقاسات وإغلاق النافذة
             if (printAfterSaveProductId && printAfterSaveAll) {
                 function runAutoPrint() {
                     var $sel = $('#printers');
                     if ($sel.find('option').length > 1) {
-                        var firstVal = $sel.find('option').eq(1).val();
-                        if (firstVal) $sel.val(firstVal);
+                        var hasDefault = false;
+                        if (typeof defaultPrinterName === 'string' && defaultPrinterName) {
+                            $sel.find('option').each(function() {
+                                if ($(this).val() === defaultPrinterName) { $sel.val(defaultPrinterName); hasDefault = true; return false; }
+                            });
+                        }
+                        if (!hasDefault) {
+                            var firstVal = $sel.find('option').eq(1).val();
+                            if (firstVal) $sel.val(firstVal);
+                        }
                     }
                     $.get(productVariationsUrl + '/' + printAfterSaveProductId).done(function(res){
                         if (!res.success) return;
@@ -1148,6 +1164,9 @@ qz.security.setSignaturePromise(function(toSign) {
                     return;
                 }
                 printers.forEach(p => sel.append($('<option/>').val(p).text(p)));
+                if (typeof defaultPrinterName === 'string' && defaultPrinterName && printers.indexOf(defaultPrinterName) !== -1) {
+                    sel.val(defaultPrinterName);
+                }
                 $('#printerStatus').removeClass('status-disconnected').addClass('status-connected');
             } catch (err) {
                 console.error('خطأ في جلب الطابعات:', err);
