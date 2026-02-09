@@ -124,12 +124,14 @@
                                         <th>@lang('sale.invoice_no')</th>
                                         <th>@lang('messages.date')</th>
                                         <th>@lang('sale.qty')</th>
+                                        <th>@lang('sale.purchase_price_inc_tax')</th>
                                         <th>@lang('sale.unit_price')</th>
                                         <th>@lang('sale.discount')</th>
                                         <th>@lang('sale.tax')</th>
                                         <th>@lang('sale.price_inc_tax')</th>
                                         <th>@lang('sale.total')</th>
                                         <th>@lang('lang_v1.payment_method')</th>
+                                        <th>@lang('sale.added_by')</th>
                                     </tr>
                                 </thead>
                                 <tfoot>

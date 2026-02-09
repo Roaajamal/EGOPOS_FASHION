@@ -1,3 +1,15 @@
+@php 
+    $custom_labels = json_decode(session('business.custom_labels'), true);
+    $p_labels = $custom_labels['product'] ?? [];
+    
+    // حساب عدد الأعمدة الديناميكي للـ colspan في تذييل الجدول
+    // الأعمدة الأساسية: الوصف (1)، الكمية (1)، س (1)، ج (1)، الحذف (1) = المجموع 5
+    $dynamic_colspan = 2; // (الوصف + الكمية)
+    if (!empty($p_labels['custom_field_1'])) $dynamic_colspan++;
+    if (!empty($p_labels['custom_field_2'])) $dynamic_colspan++;
+    if (!empty($p_labels['custom_field_3'])) $dynamic_colspan++;
+@endphp
+
 @extends('layouts.app')
 @section('title', __('stock_adjustment.add'))
 
@@ -45,78 +57,105 @@
                 <div class="col-sm-3">
                     <div class="form-group">
                         {!! Form::label('adjustment_type', __('stock_adjustment.out_type') . ':*') !!}
-                        {!! Form::select('adjustment_type', ['normal' => __('stock_adjustment.normal'), 'abnormal' => __('stock_adjustment.abnormal')], null, ['class' => 'form-control select2', 'placeholder' => __('messages.please_select'), 'required']) !!}
+                        {!! Form::select('adjustment_type', [
+                            'normal' => __('stock_adjustment.normal'), 
+                            'abnormal' => __('stock_adjustment.abnormal'),
+                              ], null, ['class' => 'form-control select2', 'placeholder' => __('messages.please_select'), 'required']) !!}
+                    </div> 
+                </div>
+            </div>
+        @endcomponent
+
+        @component('components.widget', ['class' => 'box-solid'])
+            <div class="row">
+                <div class="col-sm-10 col-sm-offset-1">
+                    <div class="row">
+                        <div class="col-sm-9">
+                            <div class="form-group">
+                                <div class="input-group">
+                                    <span class="input-group-addon">
+                                        <i class="fa fa-search"></i>
+                                    </span>
+                                    {!! Form::text('search_product', null, [
+                                        'class' => 'form-control',
+                                        'id' => 'search_product_for_srock_adjustment',
+                                        'placeholder' => __('stock_adjustment.search_product'),
+                                        'disabled'
+                                    ]) !!}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-sm-3">
+                            <button type="button" class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-dw-btn-sm tw-w-full" 
+                                    style="height: 34px; width: 100%;" 
+                                    data-toggle="modal" 
+                                    data-target="#export_quantity_products_modal">
+                                <i class="fa fa-file-excel-o"></i> @lang('stock_adjustment.export')
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-sm-12">
+                    <input type="hidden" id="product_row_index" value="0">
+                    <input type="hidden" id="total_amount" name="final_total" value="0">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-striped table-condensed" id="stock_adjustment_product_table">
+                            <thead>
+                                <tr>
+                                    @if(!empty($p_labels['custom_field_1']))
+                                        <th class="text-center">{{ $p_labels['custom_field_1'] }}</th>
+                                    @endif
+                                    <th class="text-center">@lang('product.sku')</th>
+                                    <th class="text-center">@lang('lang_v1.description')</th>
+                                    <th class="text-center">@lang('sale.qty')</th>
+                                    
+                                    @if(!empty($p_labels['custom_field_2']))
+                                        <th class="text-center">{{ $p_labels['custom_field_2'] }}</th>
+                                    @endif
+                                    
+                                    @if(!empty($p_labels['custom_field_3']))
+                                        <th class="text-center">{{ $p_labels['custom_field_3'] }}</th>
+                                    @endif
+                                    
+                                    <th class="text-center"> @lang('lang_v1.cost') </th>
+                                    <th class="text-center"> @lang('stock_adjustment.total') </th>
+                                    <th class="text-center"><i class="fa fa-trash"></i></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {{-- سيتم إضافة الأسطر هنا بواسطة JS --}}
+                            </tbody>
+                            <tfoot>
+        @php
+    // زدنا الرقم الأساسي ليصبح 3 (SKU + وصف + كمية)
+    $footer_colspan = 3; 
+    if(!empty($p_labels['custom_field_1'])) $footer_colspan++;
+    if(!empty($p_labels['custom_field_2'])) $footer_colspan++;
+    if(!empty($p_labels['custom_field_3'])) $footer_colspan++;
+    $footer_colspan++; // عمود السعر "س"
+@endphp
+<td colspan="{{ $footer_colspan }}"></td>
+        
+        <td class="text-center">
+            <b> @lang('stock_adjustment.total_amount'):</b>
+        </td>
+        <td class="text-center">
+            <span id="total_adjustment">0.00</span>
+            {{-- حقل مخفي لإرسال القيمة للفورم --}}
+            <input type="hidden" name="final_total" id="total_adjustment_value" value="{{ $stock_adjustment->final_total ?? 0 }}">
+        </td>
+        <td></td>
+    </tr>
+</tfoot>
+                        </table>
                     </div>
                 </div>
             </div>
         @endcomponent
 
-      @component('components.widget', ['class' => 'box-solid'])
-    <div class="row">
-        <div class="col-sm-10 col-sm-offset-1">
-            <div class="row">
-                {{-- خانة البحث تأخذ 9 أجزاء من المساحة --}}
-                <div class="col-sm-9">
-                    <div class="form-group">
-                        <div class="input-group">
-                            <span class="input-group-addon">
-                                <i class="fa fa-search"></i>
-                            </span>
-                            {!! Form::text('search_product', null, [
-                                'class' => 'form-control',
-                                'id' => 'search_product_for_srock_adjustment',
-                                'placeholder' => __('stock_adjustment.search_product'),
-                                'disabled'
-                            ]) !!}
-                        </div>
-                    </div>
-                </div>
-
-                {{-- زر الاستيراد يأخذ 3 أجزاء ويظهر على اليمين تماماً --}}
-                <div class="col-sm-3">
-                    <button type="button" class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-dw-btn-sm tw-w-full" 
-                            style="height: 34px; width: 100%;" 
-                            data-toggle="modal" 
-                            data-target="#export_quantity_products_modal">
-                        <i class="fa fa-file-excel-o"></i> @lang('stock_adjustment.export')
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row">
-        <div class="col-sm-10 col-sm-offset-1">
-            <input type="hidden" id="product_row_index" value="0">
-            <input type="hidden" id="total_amount" name="final_total" value="0">
-            <div class="table-responsive">
-                <table class="table table-bordered table-striped table-condensed" id="stock_adjustment_product_table">
-                    <thead>
-                        <tr>
-                            <th class="col-sm-4 text-center">@lang('sale.product')</th>
-                            <th class="col-sm-2 text-center">@lang('sale.qty')</th>
-                            <th class="col-sm-2 text-center show_price_with_permission">@lang('sale.unit_price')</th>
-                            <th class="col-sm-2 text-center show_price_with_permission">@lang('sale.subtotal')</th>
-                            <th class="col-sm-2 text-center"><i class="fa fa-trash"></i></th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                    <tfoot>
-                        <tr class="text-center show_price_with_permission">
-                            <td colspan="3"></td>
-                            <td>
-                                <div class="pull-right">
-                                    <b>@lang('stock_adjustment.total_amount'):</b> 
-                                    <span id="total_adjustment">0.00</span>
-                                </div>
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        </div>
-    </div>
-@endcomponent
         @component('components.widget', ['class' => 'box-solid'])
             <div class="row">
                 <div class="col-sm-4">
@@ -142,12 +181,13 @@
     </section>
 
     @include('stock_adjustment.partials.export_quantity_products_modal')
-
 @stop
 
 @section('javascript')
     <script src="{{ asset('js/stock_adjustment.js?v=' . $asset_v) }}"></script>
     <script type="text/javascript">
-        __page_leave_confirmation('#stock_adjustment_form');
+        $(document).ready(function() {
+            __page_leave_confirmation('#stock_adjustment_form');
+        });
     </script>
 @endsection

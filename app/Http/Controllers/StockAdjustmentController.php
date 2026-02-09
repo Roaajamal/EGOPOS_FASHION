@@ -1,7 +1,7 @@
 <?php
 
 namespace App\Http\Controllers;
-
+use App\Exports\DataExport;
 use App\BusinessLocation;
 use App\PurchaseLine;
 use App\Transaction;
@@ -104,9 +104,19 @@ class StockAdjustmentController extends Controller
             }
 
             return Datatables::of($stock_adjustments)
-                ->addColumn('action', '<button type="button" data-href="{{action([\App\Http\Controllers\StockAdjustmentController::class, \'show\'], [$id]) }}" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline  tw-dw-btn-primary btn-modal" data-container=".view_modal"><i class="fa fa-eye" aria-hidden="true"></i> @lang("messages.view")</button>
-                 &nbsp;
-                    <button type="button" data-href="{{  action([\App\Http\Controllers\StockAdjustmentController::class, \'destroy\'], [$id]) }}" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline  tw-dw-btn-error delete_stock_adjustment '.$hide.'"><i class="fa fa-trash" aria-hidden="true"></i> @lang("messages.delete")</button>')
+                ->addColumn('action', function($row) use ($hide) {
+    $show_url = action([\App\Http\Controllers\StockAdjustmentController::class, 'show'], [$row->id]);
+    $edit_url = action([\App\Http\Controllers\StockAdjustmentController::class, 'edit'], [$row->id]);
+    $delete_url = action([\App\Http\Controllers\StockAdjustmentController::class, 'destroy'], [$row->id]);
+
+    $html = '<button type="button" data-href="' . $show_url . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-primary btn-modal" data-container=".view_modal"><i class="fa fa-eye"></i> ' . __("messages.view") . '</button>';
+    
+    $html .= '&nbsp;<a href="' . $edit_url . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-info"><i class="fa fa-edit"></i> ' . __("messages.edit") . '</a>';
+    
+    $html .= '&nbsp;<button type="button" data-href="' . $delete_url . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-error delete_stock_adjustment ' . $hide . '"><i class="fa fa-trash"></i> ' . __("messages.delete") . '</button>';
+
+    return $html;
+})
                 ->removeColumn('id')
                 ->editColumn(
                     'final_total',
@@ -175,7 +185,7 @@ class StockAdjustmentController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-   public function store(Request $request)
+ public function store(Request $request)
 {
     if (! auth()->user()->can('stock_adjustment.create')) {
         abort(403, 'Unauthorized action.');
@@ -302,7 +312,7 @@ class StockAdjustmentController extends Controller
     return redirect('stock-adjustments')->with('status', $output);
 }
     //////////////// export from excel 001
- public function import(Request $request)
+public function import(Request $request)
 {
     try {
         $request->validate([
@@ -324,7 +334,7 @@ class StockAdjustmentController extends Controller
 
         $html = '';
         $imported_count = 0;
-        $skipped_products = []; // مصفوفة لتخزين البيانات المرفوضة
+        $skipped_products = [];
 
         foreach ($imported_data as $value) {
             if (empty($value[0])) continue;
@@ -344,16 +354,20 @@ class StockAdjustmentController extends Controller
                     'variations.id as variation_id',
                     'p.id as product_id',
                     'p.name as product_name',
+                    'p.image as image', // أضفنا الصورة هنا
                     'variations.sub_sku',
                     'p.enable_stock',
                     'u.short_name as unit',
+                    // جلب الحقول المخصصة من جدول المنتجات
+                    'p.product_custom_field1',
+                    'p.product_custom_field2',
+                    'p.product_custom_field3',
                     'variations.default_purchase_price as last_purchased_price',
                     \DB::raw('COALESCE(vld.qty_available, 0) as qty_available')
                 ])->first();
 
             $quantity_requested = isset($value[1]) && is_numeric($value[1]) ? (float)$value[1] : 0;
 
-            // إذا لم يوجد المنتج أو الكمية المطلوبة أكبر من المتوفر
             if (!$product || ($product->enable_stock == 1 && $quantity_requested > $product->qty_available)) {
                 $skipped_products[] = [
                     'SKU' => $sku,
@@ -363,8 +377,9 @@ class StockAdjustmentController extends Controller
                 continue;
             }
 
-            // بناء السطر للناجحين فقط
             $price = isset($value[2]) && is_numeric($value[2]) ? (float)$value[2] : $product->last_purchased_price;
+            
+            // تمرير البيانات لملف الـ partial الذي قمنا بتعديله سابقاً
             $html .= view('stock_adjustment.partials.product_table_row', [
                 'product' => $product,
                 'row_index' => $row_index,
@@ -384,7 +399,6 @@ class StockAdjustmentController extends Controller
             'download_url' => null
         ];
 
-        // إذا وجدنا منتجات مرفوضة، ننشئ ملف إكسل لها
         if (count($skipped_products) > 0) {
             $file_name = 'skipped_products_' . time() . '.xlsx';
             $folder_path = 'temp_excel/';
@@ -440,10 +454,40 @@ class StockAdjustmentController extends Controller
      * @param  \App\Transaction  $stockAdjustment
      * @return \Illuminate\Http\Response
      */
-    public function edit(Transaction $stockAdjustment)
-    {
-        //
+    public function edit($id)
+{
+    if (! auth()->user()->can('stock_adjustment.create')) {
+        abort(403, 'Unauthorized action.');
     }
+
+    $business_id = request()->session()->get('user.business_id');
+
+    $stock_adjustment = Transaction::where('business_id', $business_id)
+        ->where('id', $id)
+        ->with([
+            'stock_adjustment_lines' => function($query) {
+                // هنا نقوم بتهيئة البيانات لتشبه مخرجات دالة get_product_row
+                $query->join('variations as v', 'v.id', '=', 'stock_adjustment_lines.variation_id')
+                      ->join('products as p', 'p.id', '=', 'v.product_id')
+                      ->select([
+                          'stock_adjustment_lines.*',
+                          'v.sub_sku as sku', // توحيد مسمى الـ SKU
+                          'p.name as product_name',
+                          'p.product_custom_field1',
+                          'p.product_custom_field2',
+                          'p.product_custom_field3',
+                          'v.default_purchase_price as last_purchased_price'
+                      ]);
+            },
+            'location'
+        ])
+        ->firstOrFail();
+
+    $business_locations = BusinessLocation::forDropdown($business_id);
+
+    return view('stock_adjustment.edit')
+            ->with(compact('stock_adjustment', 'business_locations'));
+}
 
     /**
      * Update the specified resource in storage.
@@ -452,9 +496,84 @@ class StockAdjustmentController extends Controller
      * @param  \App\Transaction  $stockAdjustment
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, Transaction $stockAdjustment)
+    public function update(Request $request, $id)
     {
-        //
+        if (! auth()->user()->can('stock_adjustment.create')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        try {
+            $business_id = $request->session()->get('user.business_id');
+            $products = $request->input('products');
+
+            DB::beginTransaction();
+
+            $stock_adjustment = Transaction::where('business_id', $business_id)
+                                    ->where('type', 'stock_adjustment')
+                                    ->with(['stock_adjustment_lines'])
+                                    ->findOrFail($id);
+
+            // 1. استرجاع الكميات القديمة إلى المخزن قبل التعديل
+            foreach ($stock_adjustment->stock_adjustment_lines as $old_line) {
+                $this->productUtil->updateProductQuantity(
+                    $stock_adjustment->location_id,
+                    $old_line->product_id,
+                    $old_line->variation_id,
+                    $this->productUtil->num_f($old_line->quantity)
+                );
+            }
+
+            // 2. تحديث بيانات السند الأساسية
+            $input_data = $request->only(['transaction_date', 'adjustment_type', 'additional_notes', 'total_amount_recovered', 'final_total']);
+            $input_data['transaction_date'] = $this->productUtil->uf_date($input_data['transaction_date'], true);
+            $input_data['total_amount_recovered'] = $this->productUtil->num_uf($input_data['total_amount_recovered']);
+            $input_data['final_total'] = $this->productUtil->num_uf($input_data['final_total']);
+
+            $stock_adjustment->update($input_data);
+
+            // 3. مسح الأسطر القديمة وإضافة الجديدة مع خصم المخزن
+            $stock_adjustment->stock_adjustment_lines()->delete();
+
+            $product_data = [];
+            foreach ($products as $product) {
+                $qty = $this->productUtil->num_uf($product['quantity']);
+                $product_data[] = [
+                    'product_id' => $product['product_id'],
+                    'variation_id' => $product['variation_id'],
+                    'quantity' => $qty,
+                    'unit_price' => $this->productUtil->num_uf($product['unit_price']),
+                ];
+
+                // خصم الكمية الجديدة من المخزن
+                $this->productUtil->decreaseProductQuantity(
+                    $product['product_id'],
+                    $product['variation_id'],
+                    $stock_adjustment->location_id,
+                    $qty
+                );
+            }
+            $stock_adjustment->stock_adjustment_lines()->createMany($product_data);
+
+            // 4. إعادة ربط الحسابات (Mapping)
+            $business = [
+                'id' => $business_id,
+                'accounting_method' => $request->session()->get('business.accounting_method'),
+                'location_id' => $stock_adjustment->location_id,
+            ];
+            $this->transactionUtil->mapPurchaseSell($business, $stock_adjustment->stock_adjustment_lines, 'stock_adjustment');
+
+            event(new StockAdjustmentCreatedOrModified($stock_adjustment, 'modified'));
+
+            DB::commit();
+            $output = ['success' => 1, 'msg' => __('stock_adjustment.stock_adjustment_added_successfully')];
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::emergency("File:" . $e->getFile(). "Line:" . $e->getLine(). "Message:" . $e->getMessage());
+            $output = ['success' => 0, 'msg' => __('messages.something_went_wrong')];
+        }
+
+        return redirect('stock-adjustments')->with('status', $output);
     }
 
     /**
@@ -525,38 +644,67 @@ class StockAdjustmentController extends Controller
      * @return \Illuminate\Http\Response
      */
     public function getProductRow(Request $request)
-    {
-        if (request()->ajax()) {
-            $row_index = $request->input('row_index');
-            $variation_id = $request->input('variation_id');
-            $location_id = $request->input('location_id');
+{
+    if (request()->ajax()) {
+        $row_index = $request->input('row_index');
+        $variation_id = $request->input('variation_id');
+        $location_id = $request->input('location_id');
+        $business_id = $request->session()->get('user.business_id');
 
-            $business_id = $request->session()->get('user.business_id');
-            $product = $this->productUtil->getDetailsFromVariation($variation_id, $business_id, $location_id);
-            $product->formatted_qty_available = $this->productUtil->num_f($product->qty_available);
-            $type = ! empty($request->input('type')) ? $request->input('type') : 'stock_adjustment';
+        // تعديل البحث لجلب كافة تفاصيل جدول products بالاشتراك مع الـ variation
+       $product = \App\Variation::where('variations.id', $variation_id)
+             ->with(['product'])
+            ->join('products as p', 'p.id', '=', 'variations.product_id')
+            ->join('units as u', 'u.id', '=', 'p.unit_id')
+            ->leftJoin('variation_location_details as vld', function ($join) use ($location_id) {
+                $join->on('variations.id', '=', 'vld.variation_id')
+                     ->where('vld.location_id', '=', $location_id);
+            })
+            ->where('p.business_id', $business_id)
+            ->select([
+                'p.id as product_id',
+                'p.name as product_name',
+                'p.image',
+                'p.enable_stock',
+                // جلب الحقول المخصصة الثلاثة المطلوبة في نهاية الجدول
+                'p.product_custom_field1',
+                'p.product_custom_field2',
+                'p.product_custom_field3',
+                'variations.id as variation_id',
+                'variations.sub_sku as sku',
+                'u.short_name as unit',
+                'u.id as unit_id',
+                'variations.dpp_inc_tax as last_purchased_price',
+                \DB::raw('COALESCE(vld.qty_available, 0) as qty_available')
+            ])->first();
+        $product->formatted_qty_available = $this->productUtil->num_f($product->qty_available);
+        $type = ! empty($request->input('type')) ? $request->input('type') : 'stock_adjustment';
 
-            //Get lot number dropdown if enabled
-            $lot_numbers = [];
-            if (request()->session()->get('business.enable_lot_number') == 1 || request()->session()->get('business.enable_product_expiry') == 1) {
-                $lot_number_obj = $this->transactionUtil->getLotNumbersFromVariation($variation_id, $business_id, $location_id, true);
-                foreach ($lot_number_obj as $lot_number) {
-                    $lot_number->qty_formated = $this->productUtil->num_f($lot_number->qty_available);
-                    $lot_numbers[] = $lot_number;
-                }
-            }
-            $product->lot_numbers = $lot_numbers;
-
-            $sub_units = $this->productUtil->getSubUnits($business_id, $product->unit_id, false, $product->id);
-            if ($type == 'stock_transfer') {
-                return view('stock_transfer.partials.product_table_row')
-                    ->with(compact('product', 'row_index', 'sub_units'));
-            } else {
-                return view('stock_adjustment.partials.product_table_row')
-                        ->with(compact('product', 'row_index', 'sub_units'));
+        // جلب أرقام اللوت إذا كانت مفعلة
+        $lot_numbers = [];
+        if (request()->session()->get('business.enable_lot_number') == 1 || request()->session()->get('business.enable_product_expiry') == 1) {
+            $lot_number_obj = $this->transactionUtil->getLotNumbersFromVariation($variation_id, $business_id, $location_id, true);
+            foreach ($lot_number_obj as $lot_number) {
+                $lot_number->qty_formated = $this->productUtil->num_f($lot_number->qty_available);
+                $lot_numbers[] = $lot_number;
             }
         }
+        $product->lot_numbers = $lot_numbers;
+
+        $sub_units = $this->productUtil->getSubUnits($business_id, $product->unit_id, false, $product->product_id);
+
+        $unit_price = $product->last_purchased_price;
+
+        // إرجاع ملف الـ View مع كل البيانات الجديدة
+        if ($type == 'stock_transfer') {
+            return view('stock_transfer.partials.product_table_row')
+                ->with(compact('product', 'row_index', 'sub_units'));
+        } else {
+            return view('stock_adjustment.partials.product_table_row')
+                ->with(compact('product', 'row_index', 'sub_units','unit_price'));
+        }
     }
+}
 
     /**
      * Sets expired purchase line as stock adjustmnet

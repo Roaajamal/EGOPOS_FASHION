@@ -84,6 +84,7 @@
             _.extend({}, dateRangeSettings, {
                 timePicker: true,
                 timePicker24Hour: false,
+                timePickerIncrement: 1,
                 startDate: start,
                 endDate: end,
                 locale: {
@@ -91,7 +92,15 @@
                 }
             }), 
             function(start, end) {
-                $('#qer_date_filter').val(start.format(moment_date_format + ' hh:mm A') + ' ~ ' + end.format(moment_date_format + ' hh:mm A'));
+                start = start.startOf('day');  // 12:00 AM
+                end = end.endOf('day');        // 11:59 PM
+    
+               $('#qer_date_filter').val(start.format(moment_date_format + ' hh:mm A') + ' ~ ' + end.format(moment_date_format + ' hh:mm A'));
+    
+               // تحديث DateRangePicker بالأوقات الجديدة
+               $('#qer_date_filter').data('daterangepicker').setStartDate(start);
+               $('#qer_date_filter').data('daterangepicker').setEndDate(end);
+    
                 quantity_entry_report_table.ajax.reload();
             }
         );
@@ -101,6 +110,22 @@
         $('#qer_date_filter').on('cancel.daterangepicker', function(ev, picker) {
             $(this).val('');
             quantity_entry_report_table.ajax.reload();
+        });
+
+        // عند تطبيق التاريخ، تحقق من الوقت واضبطه لليوم الكامل إذا لزم الأمر
+        $('#qer_date_filter').on('apply.daterangepicker', function(ev, picker) {
+            var startTime = picker.startDate.format('HH:mm');
+            var endTime = picker.endDate.format('HH:mm');
+            
+            // إذا كان كلا الوقتين في منتصف الليل، اضبط نهاية اليوم
+            if (startTime === '00:00' && endTime === '00:00') {
+                picker.endDate = picker.endDate.endOf('day');
+                $(this).val(
+                    picker.startDate.format(moment_date_format + ' hh:mm A') + 
+                    ' ~ ' + 
+                    picker.endDate.format(moment_date_format + ' hh:mm A')
+                );
+            }
         });
     }
 
@@ -119,7 +144,7 @@
                     d.end_date = picker.endDate.format('YYYY-MM-DD HH:mm:ss');
                 }
                 d.location_id = $('#location_id').val();
-                d.view_type = $('#view_type').val(); // إرسال النوع (summary أو detailed)
+                d.view_type = $('#view_type').val();
             }
         },
         columns: [

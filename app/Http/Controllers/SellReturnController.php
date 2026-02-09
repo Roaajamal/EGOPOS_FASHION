@@ -493,41 +493,95 @@ class SellReturnController extends Controller
 private function sendCreditInvoiceToFatora($business_id, $transaction)
 {
     try {
-        // التحقق من توفر إعدادات الفوترة للمنشأة
-        // تعديل منطق البحث حسب الفرع 001 
+        // التحقق من وجود بيانات كافية
+        if (!$transaction || !$business_id) {
+            \Log::warning('بيانات غير كافية لإرسال فاتورة المرتجع', [
+                'transaction_exists' => !empty($transaction),
+                'business_id' => $business_id,
+                'transaction_id' => $transaction->id ?? null
+            ]);
+            return [
+                'success' => false,
+                'message' => 'بيانات غير كافية'
+            ];
+        }
+        
+        // الحصول على location_id من الـ transaction
+        $locationId = $transaction->location_id ?? null;
+        
+        if (!$locationId) {
+            \Log::warning('الفرع غير محدد في فاتورة المرتجع', [
+                'transaction_id' => $transaction->id,
+                'business_id' => $business_id,
+                'transaction_type' => $transaction->type ?? null
+            ]);
+            return [
+                'success' => false,
+                'message' => 'الفرع غير محدد'
+            ];
+        }
+        
+        // التحقق من توفر إعدادات الفوترة للبزنس والفرع المحدد
         $fatoraSettings = DB::table('settings_fatora')
             ->where('business_id', $business_id)
-            ->where('is_active', true)
-            ->where(function($query) use ($transaction) {
-                $query->where('location_id', $transaction->location_id) // البحث عن الفرع
-                      ->orWhereNull('location_id'); // أو الإعدادات العامة للشركة
+            ->where(function($query) use ($locationId) {
+                // أولاً: إعدادات خاصة بالفرع
+                $query->where('location_id', $locationId)
+                      // أو إعدادات عامة
+                      ->orWhereNull('location_id');
             })
-            ->orderByRaw('location_id DESC') // لضمان أن السجل الذي يحتوي على رقم فرع يظهر قبل الـ NULL
+            ->where('is_active', true)
+            ->orderBy('location_id', 'DESC') // أولوية لإعدادات الفرع
             ->first();
         
         $invoiceType = $fatoraSettings->invoice_type ?? 'tax_invoice';
-  
+        
+        \Log::debug('نتيجة البحث عن إعدادات الفوترة للمرجع', [
+            'business_id' => $business_id,
+            'location_id' => $locationId,
+            'found_settings' => !empty($fatoraSettings),
+            'settings_id' => $fatoraSettings->id ?? null,
+            'transaction_type' => $transaction->type ?? null
+        ]);
+        
         // التحقق مما إذا كان المرتجع مؤهلاً للإرسال إلى نظام الفوترة
         if ($fatoraSettings && $transaction->type == 'sell_return' && $transaction->status == 'final') {
-            // تصحيح: إضافة location_id هنا
-            $fatoraService = new \App\Services\FatoraService($business_id, $transaction->location_id);
+            
+            // التحقق الإضافي: هل الإعدادات مكتملة؟
+            if (empty($fatoraSettings->client_id) || 
+                empty($fatoraSettings->secret_key) || 
+                empty($fatoraSettings->supplier_income_source)) {
+                
+                \Log::warning('إعدادات الفوترة غير مكتملة للمرجع', [
+                    'business_id' => $business_id,
+                    'location_id' => $locationId,
+                    'transaction_id' => $transaction->id,
+                    'is_credit_invoice' => true
+                ]);
+                
+                return [
+                    'success' => false,
+                    'message' => 'إعدادات الفوترة غير مكتملة للمرجع'
+                ];
+            }
+            
+            $fatoraService = new \App\Services\FatoraService($business_id);
             
             // استخدام السبب المحدد أو السبب الافتراضي
             $returnReason = $transaction->additional_notes ?? __('lang_v1.return_reason_default');
             
             // إرسال فاتورة مرتجع (credit invoice) لنظام الفوترة
-            // ملاحظة: sendCreditInvoice تأخذ 2 باراميتر فقط (transaction_id, return_reason)
-            // إذا كنت تريد تمرير invoice_type، قد تحتاج لتعديل الـ Service
-            $sendResult = $fatoraService->sendCreditInvoice($transaction->id, $returnReason);
+            $sendResult = $fatoraService->sendCreditInvoice($transaction->id, $returnReason, $invoiceType);
             
             // تسجيل نتيجة الإرسال
             \Log::info('فاتورة مرتجع JoFotara إرسال نتيجة', [
                 'transaction_id' => $transaction->id,
                 'business_id' => $business_id,
-                'location_id' => $transaction->location_id, // اضافة الفرع 001
+                'location_id' => $locationId,
                 'success' => $sendResult['success'] ?? false,
                 'message' => $sendResult['message'] ?? 'N/A',
-                'fatora_reference' => $sendResult['data']['reference'] ?? null
+                'fatora_reference' => $sendResult['data']['reference'] ?? null,
+                'settings_type' => $fatoraSettings->location_id ? 'branch' : 'global'
             ]);
             
             // إذا تم الإرسال بنجاح، تحديث بيانات الحركة
@@ -552,7 +606,9 @@ private function sendCreditInvoiceToFatora($business_id, $transaction)
                 'transaction_id' => $transaction->id,
                 'has_fatora_settings' => !empty($fatoraSettings),
                 'transaction_type' => $transaction->type ?? 'N/A',
-                'transaction_status' => $transaction->status ?? 'N/A'
+                'transaction_status' => $transaction->status ?? 'N/A',
+                'business_id' => $business_id,
+                'location_id' => $locationId
             ]);
             
             return [
@@ -564,7 +620,7 @@ private function sendCreditInvoiceToFatora($business_id, $transaction)
         \Log::error('فشل إرسال فاتورة المرتجع لنظام الفوترة: ' . $e->getMessage(), [
             'transaction_id' => $transaction->id ?? 'N/A',
             'business_id' => $business_id,
-            'location_id' => $transaction->location_id ?? 'N/A', // اضافة الفرع 001
+            'location_id' => $locationId ?? null,
             'file' => $e->getFile(),
             'line' => $e->getLine()
         ]);
@@ -575,7 +631,8 @@ private function sendCreditInvoiceToFatora($business_id, $transaction)
             'error' => config('app.env') === 'production' ? null : $e->getMessage()
         ];
     }
-}/////////////////////////////////////////////
+}
+/////////////////////////////////////////////
 // دالة لتحديث بيانات الحركة بمعلومات الفوترة
 private function updateTransactionWithFatoraData($transaction, $fatoraResult)
 {
@@ -784,13 +841,21 @@ private function updateTransactionWithFatoraData($transaction, $fatoraResult)
 
           //  $layout_id = $location_details->invoice_layout_id;
             $layout_design = $location_details->invoice_layout_design; 
-            
-            // جلب إعدادات التخطيط (ضروري جداً لتجنب خطأ Undefined variable layout)
-            $invoice_layout = $this->businessUtil->invoiceLayout($business_id, $layout_design);
-
+            $layout_id = $location_details->invoice_layout_id;
+ 
             if ($transaction->type == 'sell_return') {
-                 $layout_design = 'return_invoice';
+                 $return_layout = \App\InvoiceLayout::where('business_id', $business_id)
+                        ->where(function($q) {
+                            $q->where('design', 'invoice_return')
+                              ->orWhere('name', 'like', '%Return%')
+                              ->orWhere('name', 'like', '%مرتجع%');
+                        })->first();
+
+    if ($return_layout) {
+        $layout_id = $return_layout->id;
+    }
                 }
+           $invoice_layout = \App\InvoiceLayout::find($layout_id);
 
             $receipt_printer_type = is_null($printer_type) ? $location_details->receipt_printer_type : $printer_type;
 
@@ -847,6 +912,7 @@ private function updateTransactionWithFatoraData($transaction, $fatoraResult)
         ];
     }
 }
+
 
     /**
      * Prints invoice for sell

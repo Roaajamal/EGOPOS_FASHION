@@ -132,7 +132,7 @@ class SellController extends Controller
                     }
                 });
             }
- if (!empty(request()->input('fatora_status'))) {
+if (!empty(request()->input('fatora_status'))) {
     $fatora_status = request()->input('fatora_status');
     
     \Log::info('Applying fatora filter', ['status' => $fatora_status]);

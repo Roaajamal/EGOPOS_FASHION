@@ -1,7 +1,4 @@
-@php 
-    $design_name = 'invoice_return';
-    $layout = \App\InvoiceLayout::where('design', $design_name)->first();
-@endphp
+
 
 <style>
     .flex-box { display: flex; justify-content: space-between; align-items: center; width: 100%; margin: 2px 0; }
@@ -20,29 +17,31 @@
     
     {{-- 1. الترويسة (Header) --}}
     <center>
-        @if(!empty($receipt_details->logo))
-            <div style="text-align: center; width: 100%; margin-bottom: 10px;">
-                <img style="max-height: 100px; width: auto; display: block; margin: 0 auto;" src="{{$receipt_details->logo}}">
-            </div>
-        @endif
+       @if(!empty($receipt_details->logo))
+        <div style="text-align: center; width: 100%; margin-bottom: 10px;">
+            <img style="max-height: 100px; width: auto; display: block; margin: 0 auto;" src="{{$receipt_details->logo}}">
+        </div>
+    @endif
 
-        @if(!empty($receipt_details->header_text))
-            <div style="font-size: 16px; font-weight: bold;">{!! $receipt_details->header_text !!}</div>
-        @endif
+       @if(!empty($receipt_details->header_text))
+        <div style="font-size: 16px; font-weight: bold;">{!! $receipt_details->header_text !!}</div>
+    @endif
 
-        @if(!empty($layout->display_name))
-            <h1 style="margin: 5px 0; font-size: 22px; font-weight: bold;">{{$receipt_details->display_name}}</h1>
-        @endif
+         @if(!empty($receipt_details->display_name))
+                <div class="headings" style="font-size: 18px; font-weight: bold; margin-bottom: 5px;">
+                    {{$receipt_details->display_name}}
+                </div>
+            @endif
 
         <div style="font-size: 13px; margin-bottom: 5px;">
-            {!! $layout->address !!}
-            @if(!empty($layout->contact)) <br> هاتف: {{ $layout->contact }} @endif
-            @if(!empty($layout->tax_info1)) <br> <b>{{ $layout->tax_label1 }}</b> {{ $layout->tax_info1 }} @endif
+            {!! $receipt_details->address !!}
+            @if(!empty($receipt_details->contact)) <br> هاتف: {{ $receipt_details->contact }} @endif
+            @if(!empty($receipt_details->tax_info1)) <br> <b>{{ $receipt_details->tax_label1 }}</b> {{ $receipt_details->tax_info1 }} @endif
         </div>
 
-        @if(!empty($receipt_details->invoice_heading))
+      @if(!empty($layout->invoice_heading))
                 <div style="margin-top: 10px;">
-                    <span class="sub-headings" style="font-weight: bold; border-bottom: 1px solid #ddd;">{!! $receipt_details->invoice_heading !!}</span>
+                    <span class="sub-headings" style="font-weight: bold; border-bottom: 1px solid #ddd;">{!! $layout->invoice_heading !!}</span>
                 </div>
             @endif
     </center>
@@ -83,10 +82,10 @@
         <thead>
             <tr style="border-top: 1px solid #000; border-bottom: 1px solid #000; background-color: #f2f2f2;">
                 <th style="padding: 5px; text-align: right;">#</th>
-                <th style="text-align: right;">{{$layout->table_product_label}}</th>
-                <th style="text-align: center;">{{$layout->table_qty_label}}</th>
-                @if(empty($layout->hide_price))
-                    <th style="text-align: left;">{{$layout->table_subtotal_label}}</th>
+                <th style="text-align: right;">{{$receipt_details->table_product_label}}</th>
+                <th style="text-align: center;">{{$receipt_details->table_qty_label}}</th>
+                @if(empty($receipt_details->hide_price))
+                    <th style="text-align: left;">{{$receipt_details->table_subtotal_label}}</th>
                 @endif
             </tr>
         </thead>
@@ -127,10 +126,7 @@
     <div style="margin-top: 10px; border-top: 1px solid #000; padding-top: 5px;">
         @if(empty($layout->hide_price))
             {{-- تم دمج التسمية والقيمة في سطر واحد لمنع التكرار الظاهر بالصورة --}}
-            <div class="flex-box">
-                <p class="sub-headings">{{ $layout->table_subtotal_label }}</p>
-                <p class="sub-headings">{{ $receipt_details->subtotal ?? '' }}</p>
-            </div>
+          
 
             @if(!empty($layout->additional_expenses))
                 @foreach($layout->additional_expenses as $key => $val)
@@ -149,7 +145,7 @@
             @endif
 
             <div class="flex-box" style="border-top: 1px solid #000; margin-top: 5px;">
-                <p class="sub-headings">{!! $layout->total_label !!}</p>
+                <p class="sub-headings">{!! $receipt_details->total_label !!}</p>
                 <p class="sub-headings">{{$receipt_details->total}}</p>
             </div>
             
@@ -190,7 +186,7 @@
             </div>
         @endif
 
-        @if($layout->show_qr_code && !empty($layout->qr_code_text))
+        @if($receipt_details->show_qr_code && !empty($layout->qr_code_text))
             <div class="mt-5">
                 <img style="max-width: 100px;" src="data:image/png;base64,{{DNS2D::getBarcodePNG($receipt_details->qr_code_text, 'QRCODE')}}">
             </div>

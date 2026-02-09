@@ -4,7 +4,7 @@ use App\Http\Controllers\FatoraController;
 
 use App\Http\Controllers\BarcodeDesignController;
 use App\Http\Controllers\QuantityEntryController;
-
+use App\Http\Controllers\MissingProductController;
 
 
 use App\Http\Controllers\PrintBarcodeController;
@@ -118,6 +118,17 @@ Route::group(['middleware' => ['auth', 'language', 'timezone'], 'prefix' => 'rep
         ->name('invoice.statement.export.excel');
 });
 
+
+///////////  route for missing products 005
+    Route::middleware(['auth', 'SetSessionData', 'language', 'timezone', 'AdminSidebarMenu'])
+    ->prefix('missing-products')
+    
+    ->group(function () {
+       Route::get('/', [MissingProductController::class, 'getMissingProducts'])->name('missing-products.index');
+
+    });
+
+
 ///////////// quantity entry routes 001
 Route::group([
     'middleware' => ['auth', 'SetSessionData', 'language', 'timezone', 'AdminSidebarMenu']
@@ -142,6 +153,7 @@ Route::group([
 
         Route::post('/import',[QuantityEntryController::class, 'import'])->name('quantity_entry.import');
         Route::post('/update-stock', [QuantityEntryController::class, 'updateProductStock']);
+         Route::post('/cleanup', [QuantityEntryController::class, 'cleanupFailedTransaction']);
 
 
 
@@ -692,6 +704,9 @@ Route::post('/stock-adjustments/import', [App\Http\Controllers\StockAdjustmentCo
 
     //Stock Transfer
     Route::get('stock-transfers/print/{id}', [StockTransferController::class, 'printInvoice']);
+    ////////////////// 001 route for import excel for stock transfer
+    Route::post('/stock-transfers/import', [StockTransferController::class, 'import'])->name('stock_transfer.export');
+    
     Route::post('stock-transfers/update-status/{id}', [StockTransferController::class, 'updateStatus']);
     Route::resource('stock-transfers', StockTransferController::class);
 

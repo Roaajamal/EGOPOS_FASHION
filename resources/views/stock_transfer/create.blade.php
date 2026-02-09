@@ -76,6 +76,15 @@
         <!-- end-->
         @component('components.widget', ['class' => 'box-solid'])
             <div class="row">
+                 <div class="col-sm-3">
+                    <button type="button" class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-dw-btn-sm tw-w-full" 
+                            id="import_excel_btn"
+                            style="height: 34px; width: 70%;" 
+                            data-toggle="modal" 
+                            data-target="#export_transfer_products_modal" disabled>
+                        <i class="fa fa-file-excel-o"></i> @lang('stock_adjustment.export')
+                    </button>
+                </div>
                 <div class="col-sm-8 col-sm-offset-2">
                     <div class="form-group">
                         <div class="input-group">
@@ -96,6 +105,7 @@
                 <div class="col-sm-10 col-sm-offset-1">
                     <input type="hidden" id="product_row_index" value="0">
                     <input type="hidden" id="total_amount" name="final_total" value="0">
+                    <input type="hidden" id="expected_row_count" name="expected_row_count" value="0">
                     <div class="table-responsive">
                         <table class="table table-bordered table-striped table-condensed" id="stock_adjustment_product_table">
                             <thead>
@@ -164,6 +174,8 @@
         @endcomponent
 
         {!! Form::close() !!}
+
+        @include('stock_transfer.partials.export_transfer_products_modal')
     </section>
 @stop
 @section('javascript')

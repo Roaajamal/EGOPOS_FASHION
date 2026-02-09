@@ -13,24 +13,89 @@ class FatoraService
 {
     protected $settings;
     protected $businessId;
-protected $locationId;
-    public function __construct($businessId,$locationId = null)
+
+    public function __construct($businessId)
     {
         $this->businessId = $businessId;
-           $this->locationId = $locationId;
-        $this->settings = $this->getSettings();
+      //  $this->settings = $this->getSettings();
     }
-
+/**
+ * التحقق من وجود إعدادات فوترة للفرع
+ * 
+ * @param int $businessId
+ * @param int|null $locationId
+ * @return array
+ */
+private function checkBranchFatoraSettings($businessId, $locationId)
+{
+    // أولاً: البحث عن إعدادات خاصة بالفرع
+    $branchSettings = DB::table('settings_fatora')
+        ->where('business_id', $businessId)
+        ->where('location_id', $locationId)
+        ->where('is_active', 1)
+        ->first();
+    
+    if ($branchSettings) {
+        // إذا وجد إعدادات للفرع، تحقق أنها مكتملة
+        if (empty($branchSettings->client_id) || 
+            empty($branchSettings->secret_key) || 
+            empty($branchSettings->supplier_income_source)) {
+            return [
+                'has_settings' => false,
+                'message' => 'إعدادات الفاتورة للفرع غير مكتملة',
+                'settings_type' => 'branch'
+            ];
+        }
+        
+        return [
+            'has_settings' => true,
+            'settings' => $branchSettings,
+            'settings_type' => 'branch'
+        ];
+    }
+    
+    // إذا ما في إعدادات للفرع، تبحث عن إعدادات عامة
+    $globalSettings = DB::table('settings_fatora')
+        ->where('business_id', $businessId)
+        ->whereNull('location_id')
+        ->where('is_active', 1)
+        ->first();
+    
+    if ($globalSettings) {
+        if (empty($globalSettings->client_id) || 
+            empty($globalSettings->secret_key) || 
+            empty($globalSettings->supplier_income_source)) {
+            return [
+                'has_settings' => false,
+                'message' => 'الإعدادات العامة غير مكتملة',
+                'settings_type' => 'global'
+            ];
+        }
+        
+        return [
+            'has_settings' => true,
+            'settings' => $globalSettings,
+            'settings_type' => 'global'
+        ];
+    }
+    
+    // إذا ما في إعدادات ولا للفرع ولا عامة
+    return [
+        'has_settings' => false,
+        'message' => 'لا توجد إعدادات فوترة لهذا الفرع',
+        'settings_type' => 'none'
+    ];
+}
     /**
      * Get Fatora settings for business
      */
-protected function getSettings()
+ protected function getSettings($location_id = null)
 {
-    // إذا في location_id، نبحث عن إعدادات للفرع
-    if ($this->locationId) {
+    // إذا في location_id من الـ transaction، نبحث عنه
+    if ($location_id) {
         $settings = DB::table('settings_fatora')
             ->where('business_id', $this->businessId)
-            ->where('location_id', $this->locationId)
+            ->where('location_id', $location_id)
             ->where('is_active', true)
             ->first();
             
@@ -40,12 +105,12 @@ protected function getSettings()
             }
             return $settings;
         }
-        throw new Exception('إعدادات الفاتورة غير موجودة للفرع المحدد.');
     }
     
-    // إذا ما في location_id، نستخدم الطريقة القديمة
+    // إذا ما في إعدادات للفرع، نبحث عن إعدادات عامة (بدون location_id)
     $settings = DB::table('settings_fatora')
         ->where('business_id', $this->businessId)
+        ->whereNull('location_id')
         ->where('is_active', true)
         ->first();
 
@@ -59,6 +124,7 @@ protected function getSettings()
 
     return $settings;
 }
+
     /**
      * Send invoice to JoFotara system
      *
@@ -66,371 +132,366 @@ protected function getSettings()
      * @param array $options - invoice_type, payment_method
      * @return array
      */
-    public function sendInvoice($transactionId, array $options = [])
-    {
-        // Set locale to C to ensure dot as decimal separator
-        $previousLocale = setlocale(LC_NUMERIC, 0);
-        setlocale(LC_NUMERIC, 'C');
-        
-        try {
-    // Check if already sent
-    $existingInvoice = DB::table('fatora_invoices')
-        ->where('transaction_id', $transactionId)
-        ->where('business_id', $this->businessId)
-        ->first();
-
-    if ($existingInvoice) {
-        $hasQr = !empty($existingInvoice->qr_code);
-        $status = $existingInvoice->status;
-        
-        // فقط الحالتين المسموح بهما: rejected أو sending بدون QR
-        if (($status === 'rejected' || $status === 'sending') && !$hasQr) {
-            // تحديث الحالة والمتابعة
-            DB::table('fatora_invoices')
-                 ->where('business_id', $this->businessId)
-                ->where('transaction_id', $transactionId)
-                ->update(['status' => 'resending']);
-            
-            Log::info('إعادة إرسال فاتورة ' . $status, [
-                'transaction_id' => $transactionId
-            ]);
-            
-            // أكمل العملية
-        } else {
-            // أي حالة أخرى - مانع
-            setlocale(LC_NUMERIC, $previousLocale);
-            return [
-                'success' => false,
-                'message' => 'الفاتورة مرسلة مسبقاً',
-                'data' => $existingInvoice,
-                'previous_status' => $status,
-                'has_qr' => $hasQr
-            ];
-        }
-    }
-
-    // Get transaction data
-    $transaction = $this->getTransaction($transactionId);
-    if (!$transaction) {
-        throw new Exception('Transaction not found');
-    }
-            // Initialize JoFotara Service
-            $invoice = new JoFotaraService(
-                $this->settings->client_id,
-                $this->settings->secret_key
-            );
-
-            // Set basic information
-            $uuid = Str::uuid()->toString();
-            // استخدم 'income' كنوع افتراضي بدلاً من 'general_sales'
-            $invoiceType = $options['invoice_type'] ?? 'income';
-            $paymentMethod = $options['payment_method'] ?? 'cash';
-
-            $invoice->basicInformation()
-                ->setInvoiceId($transaction->invoice_no)
-                ->setUuid($uuid)
-                ->setIssueDate(date('d-m-Y', strtotime($transaction->transaction_date)))
-                ->setInvoiceType($invoiceType);
-
-            // Set payment method
-            if ($paymentMethod === 'cash') {
-                $invoice->basicInformation()->cash();
-            } else {
-                $invoice->basicInformation()->receivable();
-            }
-
-            // Set seller information
-            $sellerTin = !empty($this->settings->tin) 
-                ? preg_replace('/[^0-9]/', '', $this->settings->tin) 
-                : '';
-            
-            $invoice->sellerInformation()
-                ->setName($this->settings->registration_name ?? 'Default Company')
-                ->setTin($sellerTin);
-
-            // Set customer information
-            $customer = $this->getCustomer($transaction->contact_id);
-            
-            // Get customer ID - must be numeric only (9 digits minimum)
-            $customerId = '999999999'; // Default for walk-in customers
-            $customerName = 'Walk-in Customer';
-            
-            if ($customer) {
-                $customerName = $customer->name ?? 'Walk-in Customer';
-                
-                // Priority 1: tax_number (الرقم الضريبي)
-                if (!empty($customer->tax_number)) {
-                    $cleanId = preg_replace('/[^0-9]/', '', $customer->tax_number);
-                    if (strlen($cleanId) >= 6) {
-                        $customerId = $cleanId;
-                    }
-                }
-                
-                // Priority 2: If tax_number not valid, try ID from contact_id column
-                if ($customerId == '999999999' && !empty($customer->contact_id)) {
-                    $cleanId = preg_replace('/[^0-9]/', '', $customer->contact_id);
-                    if (strlen($cleanId) >= 6) {
-                        $customerId = $cleanId;
-                    }
-                }
-                
-                // Priority 3: Use the primary key id as last resort
-                if ($customerId == '999999999' && !empty($customer->id)) {
-                    // Pad with zeros to make it 9 digits
-                    $customerId = str_pad($customer->id, 9, '0', STR_PAD_LEFT);
-                }
-            }
-
-            $invoice->customerInformation()
-                ->setId($customerId, 'TIN')
-                ->setName($customerName);
-
-            // Add phone if available (remove non-numeric characters)
-            if ($customer && !empty($customer->mobile)) {
-                $phone = preg_replace('/[^0-9]/', '', $customer->mobile);
-                if (strlen($phone) >= 9) {
-                    $invoice->customerInformation()->setPhone($phone);
-                }
-            }
-            
-            // Add city code (default Amman)
-            $invoice->customerInformation()->setCityCode('JO-AM');
-
-            // Set supplier income source (REQUIRED)
-            $invoice->supplierIncomeSource($this->settings->supplier_income_source);
-
-            // Add invoice items
-            $items = $this->getTransactionItems($transactionId);
-            $itemCounter = 1;
-
-            foreach ($items as $item) {
-                try {
-                    // Calculate tax percentage if not available - CLEAN all values
-                    $taxPercent = 0;
-                    if (!empty($item->tax_percent)) {
-                        $taxPercent = $this->cleanNumericValue($item->tax_percent);
-                    } elseif (!empty($item->item_tax) && !empty($item->unit_price_before_discount) && $item->unit_price_before_discount > 0) {
-                        $itemTax = $this->cleanNumericValue($item->item_tax);
-                        $priceBeforeDiscount = $this->cleanNumericValue($item->unit_price_before_discount);
-                        if ($priceBeforeDiscount > 0) {
-                            $taxPercent = ($itemTax / $priceBeforeDiscount) * 100;
-                        }
-                    }
-
-                    // Get unit price (without tax) - CLEAN
-                    $unitPrice = $this->cleanNumericValue($item->unit_price_before_discount ?? $item->unit_price ?? 0);
-                    if ($unitPrice <= 0) {
-                        $unitPrice = 1.0;
-                    }
-                    
-                    // Clean quantity
-                    $quantity = $this->cleanNumericValue($item->quantity);
-                    if ($quantity <= 0) {
-                        continue; // Skip zero quantity items
-                    }
-                    
-                    // Clean product name COMPLETELY - remove ALL special chars
-                    $itemName = $item->product_name ?? 'Product';
-                    // Remove ALL quotes, commas, semicolons, and other special XML chars
-                    $itemName = preg_replace('/["\',;&#<>]/', '', $itemName);
-                    // Remove multiple spaces
-                    $itemName = preg_replace('/\s+/', ' ', $itemName);
-                    $itemName = trim($itemName);
-                    
-                    if (empty($itemName)) {
-                        $itemName = 'Product';
-                    }
-                    
-                    if (!empty($item->variation_name) && $item->variation_name != 'DUMMY') {
-                        $varName = preg_replace('/["\',;&#<>]/', '', $item->variation_name);
-                        $varName = preg_replace('/\s+/', ' ', trim($varName));
-                        if (!empty($varName)) {
-                            $itemName .= ' - ' . $varName;
-                        }
-                    }
-                    
-                    // Limit length to prevent issues
-                    if (strlen($itemName) > 100) {
-                        $itemName = substr($itemName, 0, 100);
-                    }
-                    
-                    // Format all values using sprintf
-                    $quantity = (float)sprintf('%.4f', $quantity);
-                    $unitPrice = (float)sprintf('%.4f', $unitPrice);
-                    $taxPercent = (float)sprintf('%.2f', $taxPercent);
-
-                    // Add item with basic info
-                    $invoiceItem = $invoice->items()
-                        ->addItem((string)$itemCounter)
-                        ->setQuantity($quantity)
-                        ->setUnitPrice($unitPrice)
-                        ->setDescription($itemName);
-
-                    // Add tax
-                    if ($taxPercent > 0) {
-                        $invoiceItem->tax($taxPercent);
-                    } else {
-                        // For zero tax, use zeroTax() method
-                        try {
-                            $invoiceItem->zeroTax();
-                        } catch (\Exception $e) {
-                            // If zeroTax doesn't work, try taxExempted
-                            try {
-                                $invoiceItem->taxExempted();
-                            } catch (\Exception $e2) {
-                                // SDK doesn't support zero tax - skip tax completely
-                                // Don't call any tax method
-                            }
-                        }
-                    }
-
-                    // Add discount if exists - CLEAN
-                    $discount = $this->cleanNumericValue($item->line_discount_amount ?? $item->item_discount ?? 0);
-                    $discount = (float)sprintf('%.4f', $discount);
-                    
-                    if ($discount > 0) {
-                        $invoiceItem->setDiscount($discount);
-                    }
-
-                } catch (\Exception $itemException) {
-                    // Log the error but continue with other items
-                    Log::warning('Error adding invoice item: ' . $itemException->getMessage(), [
-                        'item_id' => $item->id ?? null,
-                        'product_id' => $item->product_id ?? null
-                    ]);
-                }
-
-                $itemCounter++;
-            }
-
-            // Calculate totals automatically
-            $invoice->invoiceTotals();
-
-            // Send to JoFotara
-            $response = $invoice->send();
-           
-            // Use the response object's methods to extract data properly
-            // The JoFotaraResponse class has getter methods for all data
-            $isSuccessful = $response->isSuccess();
-            $qrCode = $response->getQrCode();
-            $xmlContent = $response->getSubmittedInvoice(); // Base64 encoded XML
-            $invoiceNumber = $response->getInvoiceNumber();
-            $invoiceUuid = $response->getInvoiceUuid();
-            $rawData = $response->getRawResponse();
-            $responseData = json_encode($rawData);
-            
-            // Get error message if any
-            $errorMessage = null;
-            if ($response->hasErrors()) {
-                $errorMessage = $response->getErrorSummary();
-            }
-
-
-          
-
-
-       // Save to database - إما insert جديد أو update موجود
-$exists = DB::table('fatora_invoices')
-    ->where('transaction_id', $transactionId)
-    ->where('business_id', $this->businessId)
-    ->exists();
-
-$invoiceData = [
-    'transaction_id' => $transactionId,
-    'business_id' => $this->businessId,
-      'location_id' => $this->locationId, 
-    'invoice_uuid' => $uuid,
-    'invoice_type' => $invoiceType,
-    'payment_method' => $paymentMethod,
-    'qr_code' => $qrCode,
-    'xml_content' => $xmlContent,
-    'response_data' => $responseData,
-    'status' => $isSuccessful ? 'sent' : 'rejected',
-    'error_message' => $errorMessage,
-    'sent_at' => now(),
-    'updated_at' => now(),
-];
-
-// Add system numbers
-if (Schema::hasColumn('fatora_invoices', 'system_invoice_number')) {
-    $invoiceData['system_invoice_number'] = $invoiceNumber;
-}
-if (Schema::hasColumn('fatora_invoices', 'system_invoice_uuid')) {
-    $invoiceData['system_invoice_uuid'] = $invoiceUuid;
-}
-
-if ($exists) {
-    // تحديث السجل الموجود
-    DB::table('fatora_invoices')
-        ->where('transaction_id', $transactionId)
-        ->where('business_id', $this->businessId)
-        ->update($invoiceData);
-} else {
-    // إضافة سجل جديد مع created_at
-    $invoiceData['created_at'] = now();
-    DB::table('fatora_invoices')->insert($invoiceData);
-}     // Restore locale before returning
-            setlocale(LC_NUMERIC, $previousLocale);
-
-            return [
-                'success' => $isSuccessful,
-                'message' => $isSuccessful ? 'تم إرسال الفاتورة بنجاح إلى نظام الفوترة الأردني' : 'فشل إرسال الفاتورة',
-                'data' => [
-                    'invoice_number' => $invoiceNumber,
-                    'invoice_uuid' => $invoiceUuid,
-                    'status' => $isSuccessful ? 'SUBMITTED' : 'FAILED',
-                    'raw_response' => $responseData
-                ],
-                'qr_code' => $qrCode,
-                'invoice_number' => $invoiceNumber,
-                'system_uuid' => $invoiceUuid
-            ];
-
-        } catch (Exception $e) {
-            // Restore locale before returning
-            setlocale(LC_NUMERIC, $previousLocale);
-            
-            Log::error('Fatora Invoice Error: ' . $e->getMessage(), [
-                'transaction_id' => $transactionId,
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return [
-                'success' => false,
-                'message' => $e->getMessage(),
-                'error' => $e->getMessage()
-            ];
-        }
-    }
-private function calculateInvoiceTotals($items): array
+ public function sendInvoice($transactionId, array $options = [])
 {
-    $taxExclusive = 0;
-    $discountTotal = 0;
-    $taxTotal = 0;
+    // Set locale to C to ensure dot as decimal separator
+    $previousLocale = setlocale(LC_NUMERIC, 0);
+    setlocale(LC_NUMERIC, 'C');
     
-    foreach ($items as $item) {
-        $unitPrice = $this->cleanNumericValue($item->unit_price_before_discount ?? $item->unit_price ?? 0);
-        $quantity = $this->cleanNumericValue($item->quantity);
-        $discount = $this->cleanNumericValue($item->line_discount_amount ?? $item->item_discount ?? 0);
-        $itemTax = $this->cleanNumericValue($item->item_tax ?? 0);
+    try {
+        // Check if already sent
+        $existingInvoice = DB::table('fatora_invoices')
+            ->where('transaction_id', $transactionId)
+            ->where('business_id', $this->businessId)
+            ->first();
+
+        if ($existingInvoice) {
+            $hasQr = !empty($existingInvoice->qr_code);
+            $status = $existingInvoice->status;
+            
+            // فقط الحالتين المسموح بهما: rejected أو sending بدون QR
+            if (($status === 'rejected' || $status === 'sending') && !$hasQr) {
+                // تحديث الحالة والمتابعة
+                DB::table('fatora_invoices')
+                     ->where('business_id', $this->businessId)
+                    ->where('transaction_id', $transactionId)
+                    ->update(['status' => 'resending']);
+                
+                Log::info('إعادة إرسال فاتورة ' . $status, [
+                    'transaction_id' => $transactionId
+                ]);
+                
+                // أكمل العملية
+            } else {
+                // أي حالة أخرى - مانع
+                setlocale(LC_NUMERIC, $previousLocale);
+                return [
+                    'success' => false,
+                    'message' => 'الفاتورة مرسلة مسبقاً',
+                    'data' => $existingInvoice,
+                    'previous_status' => $status,
+                    'has_qr' => $hasQr
+                ];
+            }
+        }
+
+        // Get transaction data
+        $transaction = $this->getTransaction($transactionId);
+        if (!$transaction) {
+            throw new Exception('Transaction not found');
+        }
         
-        $itemSubtotal = $unitPrice * $quantity;
+        // ========== التحقق من إعدادات الفاتورة للفرع ==========
+        $businessId = $transaction->business_id;
+        $locationId = $transaction->location_id;
+
+        // البحث عن إعدادات الفاتورة لهذا الفرع
+        $checkResult = $this->checkBranchFatoraSettings($businessId, $locationId);
+
+        if (!$checkResult['has_settings']) {
+            return [
+                'success' => false,
+                'message' => 'لا يمكن إرسال الفاتورة: ' . $checkResult['message'],
+                'business_id' => $businessId,
+                'location_id' => $locationId,
+                'settings_type' => $checkResult['settings_type'],
+                'can_send_invoice' => false,
+                'action_required' => 'يجب إضافة إعدادات الفوترة للفرع من قسم إعدادات الفروع'
+            ];
+        }
+
+        // استخدام الإعدادات التي تم العثور عليها
+        $this->businessId = $businessId;
+        $this->settings = $checkResult['settings'];
+        // ========== نهاية التحقق الجديد ==========
         
-        $taxExclusive += $itemSubtotal;
-        $discountTotal += $discount;
-        $taxTotal += $itemTax;
+        // Initialize JoFotara Service
+        $invoice = new JoFotaraService(
+            $this->settings->client_id,
+            $this->settings->secret_key
+        );
+
+        // Set basic information
+        $uuid = Str::uuid()->toString();
+        // استخدم 'income' كنوع افتراضي بدلاً من 'general_sales'
+        $invoiceType = $options['invoice_type'] ?? 'income';
+        $paymentMethod = $options['payment_method'] ?? 'cash';
+
+        $invoice->basicInformation()
+            ->setInvoiceId($transaction->invoice_no)
+            ->setUuid($uuid)
+            ->setIssueDate(date('d-m-Y', strtotime($transaction->transaction_date)))
+            ->setInvoiceType($invoiceType);
+
+        // Set payment method
+        if ($paymentMethod === 'cash') {
+            $invoice->basicInformation()->cash();
+        } else {
+            $invoice->basicInformation()->receivable();
+        }
+
+        // Set seller information
+        $sellerTin = !empty($this->settings->tin) 
+            ? preg_replace('/[^0-9]/', '', $this->settings->tin) 
+            : '';
+        
+        $invoice->sellerInformation()
+            ->setName($this->settings->registration_name ?? 'Default Company')
+            ->setTin($sellerTin);
+
+        // Set customer information
+        $customer = $this->getCustomer($transaction->contact_id);
+        
+        // Get customer ID - must be numeric only (9 digits minimum)
+        $customerId = '999999999'; // Default for walk-in customers
+        $customerName = 'Walk-in Customer';
+        
+        if ($customer) {
+            $customerName = $customer->name ?? 'Walk-in Customer';
+            
+            // Priority 1: tax_number (الرقم الضريبي)
+            if (!empty($customer->tax_number)) {
+                $cleanId = preg_replace('/[^0-9]/', '', $customer->tax_number);
+                if (strlen($cleanId) >= 6) {
+                    $customerId = $cleanId;
+                }
+            }
+            
+            // Priority 2: If tax_number not valid, try ID from contact_id column
+            if ($customerId == '999999999' && !empty($customer->contact_id)) {
+                $cleanId = preg_replace('/[^0-9]/', '', $customer->contact_id);
+                if (strlen($cleanId) >= 6) {
+                    $customerId = $cleanId;
+                }
+            }
+            
+            // Priority 3: Use the primary key id as last resort
+            if ($customerId == '999999999' && !empty($customer->id)) {
+                // Pad with zeros to make it 9 digits
+                $customerId = str_pad($customer->id, 9, '0', STR_PAD_LEFT);
+            }
+        }
+
+        $invoice->customerInformation()
+            ->setId($customerId, 'TIN')
+            ->setName($customerName);
+
+        // Add phone if available (remove non-numeric characters)
+        if ($customer && !empty($customer->mobile)) {
+            $phone = preg_replace('/[^0-9]/', '', $customer->mobile);
+            if (strlen($phone) >= 9) {
+                $invoice->customerInformation()->setPhone($phone);
+            }
+        }
+        
+        // Add city code (default Amman)
+        $invoice->customerInformation()->setCityCode('JO-AM');
+
+        // Set supplier income source (REQUIRED)
+        $invoice->supplierIncomeSource($this->settings->supplier_income_source);
+
+        // Add invoice items
+        $items = $this->getTransactionItems($transactionId);
+        $itemCounter = 1;
+
+        foreach ($items as $item) {
+            try {
+                // Calculate tax percentage if not available - CLEAN all values
+                $taxPercent = 0;
+                if (!empty($item->tax_percent)) {
+                    $taxPercent = $this->cleanNumericValue($item->tax_percent);
+                } elseif (!empty($item->item_tax) && !empty($item->unit_price_before_discount) && $item->unit_price_before_discount > 0) {
+                    $itemTax = $this->cleanNumericValue($item->item_tax);
+                    $priceBeforeDiscount = $this->cleanNumericValue($item->unit_price_before_discount);
+                    if ($priceBeforeDiscount > 0) {
+                        $taxPercent = ($itemTax / $priceBeforeDiscount) * 100;
+                    }
+                }
+
+                // Get unit price (without tax) - CLEAN
+                $unitPrice = $this->cleanNumericValue($item->unit_price_before_discount ?? $item->unit_price ?? 0);
+                if ($unitPrice <= 0) {
+                    $unitPrice = 1.0;
+                }
+                
+                // Clean quantity
+                $quantity = $this->cleanNumericValue($item->quantity);
+                if ($quantity <= 0) {
+                    continue; // Skip zero quantity items
+                }
+                
+                // Clean product name COMPLETELY - remove ALL special chars
+                $itemName = $item->product_name ?? 'Product';
+                // Remove ALL quotes, commas, semicolons, and other special XML chars
+                $itemName = preg_replace('/["\',;&#<>]/', '', $itemName);
+                // Remove multiple spaces
+                $itemName = preg_replace('/\s+/', ' ', $itemName);
+                $itemName = trim($itemName);
+                
+                if (empty($itemName)) {
+                    $itemName = 'Product';
+                }
+                
+                if (!empty($item->variation_name) && $item->variation_name != 'DUMMY') {
+                    $varName = preg_replace('/["\',;&#<>]/', '', $item->variation_name);
+                    $varName = preg_replace('/\s+/', ' ', trim($varName));
+                    if (!empty($varName)) {
+                        $itemName .= ' - ' . $varName;
+                    }
+                }
+                
+                // Limit length to prevent issues
+                if (strlen($itemName) > 100) {
+                    $itemName = substr($itemName, 0, 100);
+                }
+                
+                // Format all values using sprintf
+                $quantity = (float)sprintf('%.4f', $quantity);
+                $unitPrice = (float)sprintf('%.4f', $unitPrice);
+                $taxPercent = (float)sprintf('%.2f', $taxPercent);
+
+                // Add item with basic info
+                $invoiceItem = $invoice->items()
+                    ->addItem((string)$itemCounter)
+                    ->setQuantity($quantity)
+                    ->setUnitPrice($unitPrice)
+                    ->setDescription($itemName);
+
+                // Add tax
+                if ($taxPercent > 0) {
+                    $invoiceItem->tax($taxPercent);
+                } else {
+                    // For zero tax, use zeroTax() method
+                    try {
+                        $invoiceItem->zeroTax();
+                    } catch (\Exception $e) {
+                        // If zeroTax doesn't work, try taxExempted
+                        try {
+                            $invoiceItem->taxExempted();
+                        } catch (\Exception $e2) {
+                            // SDK doesn't support zero tax - skip tax completely
+                            // Don't call any tax method
+                        }
+                    }
+                }
+
+                // Add discount if exists - CLEAN
+                $discount = $this->cleanNumericValue($item->line_discount_amount ?? $item->item_discount ?? 0);
+                $discount = (float)sprintf('%.4f', $discount);
+                
+                if ($discount > 0) {
+                    $invoiceItem->setDiscount($discount);
+                }
+
+            } catch (\Exception $itemException) {
+                // Log the error but continue with other items
+                Log::warning('Error adding invoice item: ' . $itemException->getMessage(), [
+                    'item_id' => $item->id ?? null,
+                    'product_id' => $item->product_id ?? null
+                ]);
+            }
+
+            $itemCounter++;
+        }
+
+        // Calculate totals automatically
+        $invoice->invoiceTotals();
+
+        // Send to JoFotara
+        $response = $invoice->send();
+       
+        // Use the response object's methods to extract data properly
+        // The JoFotaraResponse class has getter methods for all data
+        $isSuccessful = $response->isSuccess();
+        $qrCode = $response->getQrCode();
+        $xmlContent = $response->getSubmittedInvoice(); // Base64 encoded XML
+        $invoiceNumber = $response->getInvoiceNumber();
+        $invoiceUuid = $response->getInvoiceUuid();
+        $rawData = $response->getRawResponse();
+        $responseData = json_encode($rawData);
+        
+        // Get error message if any
+        $errorMessage = null;
+        if ($response->hasErrors()) {
+            $errorMessage = $response->getErrorSummary();
+        }
+
+        // Save to database - إما insert جديد أو update موجود
+        $exists = DB::table('fatora_invoices')
+            ->where('transaction_id', $transactionId)
+            ->where('business_id', $this->businessId)
+            ->exists();
+
+        $invoiceData = [
+            'transaction_id' => $transactionId,
+            'business_id' => $this->businessId,
+             'location_id' => $locationId,
+            'invoice_uuid' => $uuid,
+            'invoice_type' => $invoiceType,
+            'payment_method' => $paymentMethod,
+            'qr_code' => $qrCode,
+            'xml_content' => $xmlContent,
+            'response_data' => $responseData,
+            'status' => $isSuccessful ? 'sent' : 'rejected',
+            'error_message' => $errorMessage,
+            'sent_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        // Add system numbers
+        if (Schema::hasColumn('fatora_invoices', 'system_invoice_number')) {
+            $invoiceData['system_invoice_number'] = $invoiceNumber;
+        }
+        if (Schema::hasColumn('fatora_invoices', 'system_invoice_uuid')) {
+            $invoiceData['system_invoice_uuid'] = $invoiceUuid;
+        }
+
+        if ($exists) {
+            // تحديث السجل الموجود
+            DB::table('fatora_invoices')
+                ->where('transaction_id', $transactionId)
+                ->where('business_id', $this->businessId)
+                ->update($invoiceData);
+        } else {
+            // إضافة سجل جديد مع created_at
+            $invoiceData['created_at'] = now();
+            DB::table('fatora_invoices')->insert($invoiceData);
+        }
+
+        // Restore locale before returning
+        setlocale(LC_NUMERIC, $previousLocale);
+
+        return [
+            'success' => $isSuccessful,
+            'message' => $isSuccessful ? 'تم إرسال الفاتورة بنجاح إلى نظام الفوترة الأردني' : 'فشل إرسال الفاتورة',
+            'data' => [
+                'invoice_number' => $invoiceNumber,
+                'invoice_uuid' => $invoiceUuid,
+                'status' => $isSuccessful ? 'SUBMITTED' : 'FAILED',
+                'raw_response' => $responseData
+            ],
+            'qr_code' => $qrCode,
+            'invoice_number' => $invoiceNumber,
+            'system_uuid' => $invoiceUuid
+        ];
+
+    } catch (Exception $e) {
+        // Restore locale before returning
+        setlocale(LC_NUMERIC, $previousLocale);
+        
+        Log::error('Fatora Invoice Error: ' . $e->getMessage(), [
+            'transaction_id' => $transactionId,
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return [
+            'success' => false,
+            'message' => $e->getMessage(),
+            'error' => $e->getMessage()
+        ];
     }
-    
-    $taxInclusive = $taxExclusive - $discountTotal + $taxTotal;
-    
-    return [
-        'taxExclusive' => $taxExclusive,
-        'discountTotal' => $discountTotal,
-        'taxTotal' => $taxTotal,
-        'taxInclusive' => $taxInclusive,
-        'payable' => $taxInclusive, // أو حسب منطق إضافي
-    ];
 }
+
     /**
      * Get transaction details
      */
@@ -707,326 +768,342 @@ private function calculateInvoiceTotals($items): array
      * @param string $returnReason - سبب الإرجاع
      * @return array
      */
-    public function sendCreditInvoice($returnTransactionId, $returnReason = 'إرجاع بضاعة',$invoiceType)
-    {
-            
-        
-  
-        // Set locale to C to ensure dot as decimal separator
-        $previousLocale = setlocale(LC_NUMERIC, 0);
-        setlocale(LC_NUMERIC, 'C');
-        
-        try {
-            // 1. Check if already sent
-            if ($this->isInvoiceSent($returnTransactionId)) {
-                setlocale(LC_NUMERIC, $previousLocale);
-                return [
-                    'success' => false,
-                    'message' => 'فاتورة المرتجعات مرسلة مسبقاً',
-                ];
-            }
-
-            // 2. Get return transaction (sell_return)
-            $returnTransaction = DB::table('transactions')
-                ->where('id', $returnTransactionId)
-                ->where('type', 'sell_return')
-                ->first();
-
-            if (!$returnTransaction) {
-                throw new Exception('فاتورة المرتجعات غير موجودة');
-            }
-
-            // 3. Get original transaction
-            $originalTransactionId = $returnTransaction->return_parent_id;
-            if (!$originalTransactionId) {
-                throw new Exception('الفاتورة الأصلية غير محددة');
-            }
-
-            // 4. Get original invoice from fatora_invoices
-            $originalFatoraInvoice = DB::table('fatora_invoices')
-                ->where('transaction_id', $originalTransactionId)
-                ->whereIn('status', ['sent', 'accepted'])
-                ->first();
-
-            if (!$originalFatoraInvoice) {
-                throw new Exception('الفاتورة الأصلية غير مرسلة لنظام الفوترة. يجب إرسال الفاتورة الأصلية أولاً.');
-            }
-
-            // 5. Get original transaction details for amount
-            $originalTransaction = DB::table('transactions')
-                ->where('id', $originalTransactionId)
-                ->first();
-
-            // 6. Initialize JoFotara Service
-            $invoice = new JoFotaraService(
-                $this->settings->client_id,
-                $this->settings->secret_key
-            );
-
-            // 7. Set basic information as CREDIT INVOICE
-            $uuid = Str::uuid()->toString();
-            
-            // IMPORTANT: Use system_invoice_uuid from JoFotara, NOT the local invoice_uuid
-            $originalUuidForJoFotara = $originalFatoraInvoice->system_invoice_uuid ?? $originalFatoraInvoice->invoice_uuid;
-
-            $invoice->basicInformation()
-                ->setInvoiceId($returnTransaction->invoice_no)
-                ->setUuid($uuid)
-                ->setIssueDate(date('d-m-Y', strtotime($returnTransaction->transaction_date)))
-                ->setInvoiceType($invoiceType)
-                ->cash()
-                ->asCreditInvoice(
-                    originalInvoiceId: $originalTransaction->invoice_no,
-                    originalInvoiceUuid: $originalUuidForJoFotara,
-                    originalFullAmount: $this->cleanNumericValue($originalTransaction->final_total)
-                );
-
-            // Set return reason
-            $invoice->setReasonForReturn($returnReason);
-
-            // 8. Set seller information
-            $sellerTin = !empty($this->settings->tin) 
-                ? preg_replace('/[^0-9]/', '', $this->settings->tin) 
-                : '';
-            
-            $invoice->sellerInformation()
-                ->setName($this->settings->registration_name ?? 'Default Company')
-                ->setTin($sellerTin);
-
-            // 9. Set customer information (same as original)
-            $customer = $this->getCustomer($returnTransaction->contact_id);
-            
-            $customerId = '999999999';
-            $customerName = 'Walk-in Customer';
-            
-            if ($customer) {
-                $customerName = $customer->name ?? 'Walk-in Customer';
-                
-                if (!empty($customer->tax_number)) {
-                    $cleanId = preg_replace('/[^0-9]/', '', $customer->tax_number);
-                    if (strlen($cleanId) >= 6) {
-                        $customerId = $cleanId;
-                    }
-                }
-                
-                if ($customerId == '999999999' && !empty($customer->contact_id)) {
-                    $cleanId = preg_replace('/[^0-9]/', '', $customer->contact_id);
-                    if (strlen($cleanId) >= 6) {
-                        $customerId = $cleanId;
-                    }
-                }
-                
-                if ($customerId == '999999999' && !empty($customer->id)) {
-                    $customerId = str_pad($customer->id, 9, '0', STR_PAD_LEFT);
-                }
-            }
-
-            $invoice->customerInformation()
-                ->setId($customerId, 'TIN')
-                ->setName($customerName);
-
-            if ($customer && !empty($customer->mobile)) {
-                $phone = preg_replace('/[^0-9]/', '', $customer->mobile);
-                if (strlen($phone) >= 9) {
-                    $invoice->customerInformation()->setPhone($phone);
-                }
-            }
-            
-            $invoice->customerInformation()->setCityCode('JO-AM');
-
-            // 10. Set supplier income source
-            $invoice->supplierIncomeSource($this->settings->supplier_income_source);
-
-            // 11. Add return items
-            $items = $this->getReturnItems($returnTransactionId);
-            
-            if ($items->isEmpty()) {
-                throw new Exception('لا توجد أصناف في فاتورة المرتجعات');
-            }
-            
-            $itemCounter = 1;
-
-            foreach ($items as $item) {
-                try {
-                    // Clean all numeric values to ensure NO commas
-                    $taxPercent = 0;
-                    if (!empty($item->tax_percent)) {
-                        $taxPercent = $this->cleanNumericValue($item->tax_percent);
-                    } elseif (!empty($item->item_tax) && !empty($item->unit_price_before_discount) && $item->unit_price_before_discount > 0) {
-                        $itemTax = $this->cleanNumericValue($item->item_tax);
-                        $priceBeforeDiscount = $this->cleanNumericValue($item->unit_price_before_discount);
-                        if ($priceBeforeDiscount > 0) {
-                            $taxPercent = ($itemTax / $priceBeforeDiscount) * 100;
-                        }
-                    }
-
-                    $unitPrice = $this->cleanNumericValue($item->unit_price_before_discount ?? $item->unit_price ?? 0);
-                    if ($unitPrice <= 0) {
-                        $unitPrice = 1.0;
-                    }
-                    
-                    // For returns, use quantity_returned if available
-                    $quantity = $this->cleanNumericValue($item->quantity_returned ?? $item->quantity ?? 0);
-                    if ($quantity <= 0) {
-                        continue; // Skip items with zero quantity
-                    }
-                    
-                    // Clean product name COMPLETELY - remove ALL special chars
-                    $itemName = $item->product_name ?? 'Product';
-                    // Remove ALL quotes, commas, semicolons, and other special XML chars
-                    $itemName = preg_replace('/["\',;&#<>]/', '', $itemName);
-                    // Remove multiple spaces
-                    $itemName = preg_replace('/\s+/', ' ', $itemName);
-                    $itemName = trim($itemName);
-                    
-                    if (empty($itemName)) {
-                        $itemName = 'Product';
-                    }
-                    
-                    if (!empty($item->variation_name) && $item->variation_name != 'DUMMY') {
-                        $varName = preg_replace('/["\',;&#<>]/', '', $item->variation_name);
-                        $varName = preg_replace('/\s+/', ' ', trim($varName));
-                        if (!empty($varName)) {
-                            $itemName .= ' - ' . $varName;
-                        }
-                    }
-                    
-                    // Limit length to prevent issues
-                    if (strlen($itemName) > 100) {
-                        $itemName = substr($itemName, 0, 100);
-                    }
-                    
-                    // Ensure all values are proper floats WITHOUT formatting using sprintf
-                    $quantity = (float)sprintf('%.4f', $quantity);
-                    $unitPrice = (float)sprintf('%.4f', $unitPrice);
-                    $taxPercent = (float)sprintf('%.2f', $taxPercent);
-
-                    $invoiceItem = $invoice->items()
-                        ->addItem((string)$itemCounter)
-                        ->setQuantity($quantity)
-                        ->setUnitPrice($unitPrice)
-                        ->setDescription($itemName . ' (مُرتجع)');
-
-                    if ($taxPercent > 0) {
-                        $invoiceItem->tax($taxPercent);
-                    } else {
-                        // For zero tax, use zeroTax() method
-                        try {
-                            $invoiceItem->zeroTax();
-                        } catch (\Exception $e) {
-                            // If zeroTax doesn't work, try taxExempted
-                            try {
-                                $invoiceItem->taxExempted();
-                            } catch (\Exception $e2) {
-                                // SDK doesn't support zero tax - skip tax completely
-                                // Don't call any tax method
-                            }
-                        }
-                    }
-
-                    $discount = $this->cleanNumericValue($item->line_discount_amount ?? $item->item_discount ?? 0);
-                    $discount = (float)sprintf('%.4f', $discount);
-                    
-                    if ($discount > 0) {
-                        $invoiceItem->setDiscount($discount);
-                    }
-
-                } catch (\Exception $itemException) {
-                    Log::warning('Error adding credit invoice item: ' . $itemException->getMessage());
-                    continue;
-                }
-
-                $itemCounter++;
-            }
-
-            // 12. Calculate totals automatically
-            $invoice->invoiceTotals();
-
-            // Send to JoFotara
-            $response = $invoice->send();
-            
-            // Restore locale
+ public function sendCreditInvoice($returnTransactionId, $returnReason = 'إرجاع بضاعة', $invoiceType)
+{
+    // Set locale to C to ensure dot as decimal separator
+    $previousLocale = setlocale(LC_NUMERIC, 0);
+    setlocale(LC_NUMERIC, 'C');
+    
+    try {
+        // 1. Check if already sent
+        if ($this->isInvoiceSent($returnTransactionId)) {
             setlocale(LC_NUMERIC, $previousLocale);
-            
-            // Use the response object's methods to extract data properly
-            $isSuccessful = $response->isSuccess();
-            $qrCode = $response->getQrCode();
-            $xmlContent = $response->getSubmittedInvoice(); // Base64 encoded XML
-            $invoiceNumber = $response->getInvoiceNumber();
-            $invoiceUuid = $response->getInvoiceUuid();
-            $rawData = $response->getRawResponse();
-            $responseData = json_encode($rawData);
-            
-            // Get error message if any
-            $errorMessage = null;
-            if ($response->hasErrors()) {
-                $errorMessage = $response->getErrorSummary();
-            }
-
-            // 14. Save to database
-            $invoiceData = [
-                'transaction_id' => $returnTransactionId,
-                'business_id' => $this->businessId,
-                   'location_id' => $this->locationId, 
-                'invoice_uuid' => $uuid,
-                'invoice_type' => $invoiceType,
-                'payment_method' => 'cash',
-                'is_credit_invoice' => true,
-                'original_transaction_id' => $originalTransactionId,
-                'original_invoice_uuid' => $originalFatoraInvoice->invoice_uuid,
-                'original_invoice_amount' => $originalTransaction->final_total,
-                'return_reason' => $returnReason,
-                'qr_code' => $qrCode,
-                'xml_content' => $xmlContent,
-                'response_data' => $responseData,
-                'status' => $isSuccessful ? 'sent' : 'rejected',
-                'error_message' => $errorMessage,
-                'sent_at' => now(),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
-            
-            if (Schema::hasColumn('fatora_invoices', 'system_invoice_number')) {
-                $invoiceData['system_invoice_number'] = $invoiceNumber;
-            }
-            if (Schema::hasColumn('fatora_invoices', 'system_invoice_uuid')) {
-                $invoiceData['system_invoice_uuid'] = $invoiceUuid;
-            }
-
-            DB::table('fatora_invoices')->insert($invoiceData);
-
-            return [
-                'success' => $isSuccessful,
-                'message' => $isSuccessful ? 'تم إرسال فاتورة المرتجعات بنجاح إلى نظام الفوترة الأردني' : 'فشل إرسال فاتورة المرتجعات',
-                'data' => [
-                    'invoice_number' => $invoiceNumber,
-                    'invoice_uuid' => $invoiceUuid,
-                    'status' => $isSuccessful ? 'SUBMITTED' : 'FAILED',
-                    'original_invoice' => $originalTransaction->invoice_no,
-                    'raw_response' => $responseData
-                ],
-                'qr_code' => $qrCode,
-                'invoice_number' => $invoiceNumber,
-                'system_uuid' => $invoiceUuid
-            ];
-
-        } catch (Exception $e) {
-            // Restore locale before returning
-            setlocale(LC_NUMERIC, $previousLocale);
-            
-            Log::error('Fatora Credit Invoice Error: ' . $e->getMessage(), [
-                'return_transaction_id' => $returnTransactionId,
-                'trace' => $e->getTraceAsString()
-            ]);
-
             return [
                 'success' => false,
-                'message' => $e->getMessage(),
-                'error' => $e->getMessage()
+                'message' => 'فاتورة المرتجعات مرسلة مسبقاً',
             ];
         }
-    }
 
+        // 2. Get return transaction (sell_return)
+        $returnTransaction = DB::table('transactions')
+            ->where('id', $returnTransactionId)
+            ->where('type', 'sell_return')
+            ->first();
+
+        if (!$returnTransaction) {
+            throw new Exception('فاتورة المرتجعات غير موجودة');
+        }
+
+        // ========== التحقق من إعدادات الفاتورة للفرع ==========
+        $businessId = $returnTransaction->business_id;
+        $locationId = $returnTransaction->location_id;
+
+        $checkResult = $this->checkBranchFatoraSettings($businessId, $locationId);
+
+        if (!$checkResult['has_settings']) {
+            return [
+                'success' => false,
+                'message' => 'لا يمكن إرسال فاتورة المرتجعات: ' . $checkResult['message'],
+                'business_id' => $businessId,
+                'location_id' => $locationId,
+                'can_send_credit_invoice' => false
+            ];
+        }
+
+        $this->businessId = $businessId;
+        $this->settings = $checkResult['settings'];
+        // ========== نهاية التحقق الجديد ==========
+
+        // 3. Get original transaction
+        $originalTransactionId = $returnTransaction->return_parent_id;
+        if (!$originalTransactionId) {
+            throw new Exception('الفاتورة الأصلية غير محددة');
+        }
+
+        // 4. Get original invoice from fatora_invoices
+        $originalFatoraInvoice = DB::table('fatora_invoices')
+            ->where('transaction_id', $originalTransactionId)
+            ->whereIn('status', ['sent', 'accepted'])
+            ->first();
+
+        if (!$originalFatoraInvoice) {
+            throw new Exception('الفاتورة الأصلية غير مرسلة لنظام الفوترة. يجب إرسال الفاتورة الأصلية أولاً.');
+        }
+
+        // 5. Get original transaction details for amount
+        $originalTransaction = DB::table('transactions')
+            ->where('id', $originalTransactionId)
+            ->first();
+
+        // 6. Initialize JoFotara Service
+        $invoice = new JoFotaraService(
+            $this->settings->client_id,
+            $this->settings->secret_key
+        );
+
+        // 7. Set basic information as CREDIT INVOICE
+        $uuid = Str::uuid()->toString();
+        
+        // IMPORTANT: Use system_invoice_uuid from JoFotara, NOT the local invoice_uuid
+        $originalUuidForJoFotara = $originalFatoraInvoice->system_invoice_uuid ?? $originalFatoraInvoice->invoice_uuid;
+
+        $invoice->basicInformation()
+            ->setInvoiceId($returnTransaction->invoice_no)
+            ->setUuid($uuid)
+            ->setIssueDate(date('d-m-Y', strtotime($returnTransaction->transaction_date)))
+            ->setInvoiceType($invoiceType)
+            ->cash()
+            ->asCreditInvoice(
+                originalInvoiceId: $originalTransaction->invoice_no,
+                originalInvoiceUuid: $originalUuidForJoFotara,
+                originalFullAmount: $this->cleanNumericValue($originalTransaction->final_total)
+            );
+
+        // Set return reason
+        $invoice->setReasonForReturn($returnReason);
+
+        // 8. Set seller information
+        $sellerTin = !empty($this->settings->tin) 
+            ? preg_replace('/[^0-9]/', '', $this->settings->tin) 
+            : '';
+        
+        $invoice->sellerInformation()
+            ->setName($this->settings->registration_name ?? 'Default Company')
+            ->setTin($sellerTin);
+
+        // 9. Set customer information (same as original)
+        $customer = $this->getCustomer($returnTransaction->contact_id);
+        
+        $customerId = '999999999';
+        $customerName = 'Walk-in Customer';
+        
+        if ($customer) {
+            $customerName = $customer->name ?? 'Walk-in Customer';
+            
+            if (!empty($customer->tax_number)) {
+                $cleanId = preg_replace('/[^0-9]/', '', $customer->tax_number);
+                if (strlen($cleanId) >= 6) {
+                    $customerId = $cleanId;
+                }
+            }
+            
+            if ($customerId == '999999999' && !empty($customer->contact_id)) {
+                $cleanId = preg_replace('/[^0-9]/', '', $customer->contact_id);
+                if (strlen($cleanId) >= 6) {
+                    $customerId = $cleanId;
+                }
+            }
+            
+            if ($customerId == '999999999' && !empty($customer->id)) {
+                $customerId = str_pad($customer->id, 9, '0', STR_PAD_LEFT);
+            }
+        }
+
+        $invoice->customerInformation()
+            ->setId($customerId, 'TIN')
+            ->setName($customerName);
+
+        if ($customer && !empty($customer->mobile)) {
+            $phone = preg_replace('/[^0-9]/', '', $customer->mobile);
+            if (strlen($phone) >= 9) {
+                $invoice->customerInformation()->setPhone($phone);
+            }
+        }
+        
+        $invoice->customerInformation()->setCityCode('JO-AM');
+
+        // 10. Set supplier income source
+        $invoice->supplierIncomeSource($this->settings->supplier_income_source);
+
+        // 11. Add return items
+        $items = $this->getReturnItems($returnTransactionId);
+        
+        if ($items->isEmpty()) {
+            throw new Exception('لا توجد أصناف في فاتورة المرتجعات');
+        }
+        
+        $itemCounter = 1;
+
+        foreach ($items as $item) {
+            try {
+                // Clean all numeric values to ensure NO commas
+                $taxPercent = 0;
+                if (!empty($item->tax_percent)) {
+                    $taxPercent = $this->cleanNumericValue($item->tax_percent);
+                } elseif (!empty($item->item_tax) && !empty($item->unit_price_before_discount) && $item->unit_price_before_discount > 0) {
+                    $itemTax = $this->cleanNumericValue($item->item_tax);
+                    $priceBeforeDiscount = $this->cleanNumericValue($item->unit_price_before_discount);
+                    if ($priceBeforeDiscount > 0) {
+                        $taxPercent = ($itemTax / $priceBeforeDiscount) * 100;
+                    }
+                }
+
+                $unitPrice = $this->cleanNumericValue($item->unit_price_before_discount ?? $item->unit_price ?? 0);
+                if ($unitPrice <= 0) {
+                    $unitPrice = 1.0;
+                }
+                
+                // For returns, use quantity_returned if available
+                $quantity = $this->cleanNumericValue($item->quantity_returned ?? $item->quantity ?? 0);
+                if ($quantity <= 0) {
+                    continue; // Skip items with zero quantity
+                }
+                
+                // Clean product name COMPLETELY - remove ALL special chars
+                $itemName = $item->product_name ?? 'Product';
+                // Remove ALL quotes, commas, semicolons, and other special XML chars
+                $itemName = preg_replace('/["\',;&#<>]/', '', $itemName);
+                // Remove multiple spaces
+                $itemName = preg_replace('/\s+/', ' ', $itemName);
+                $itemName = trim($itemName);
+                
+                if (empty($itemName)) {
+                    $itemName = 'Product';
+                }
+                
+                if (!empty($item->variation_name) && $item->variation_name != 'DUMMY') {
+                    $varName = preg_replace('/["\',;&#<>]/', '', $item->variation_name);
+                    $varName = preg_replace('/\s+/', ' ', trim($varName));
+                    if (!empty($varName)) {
+                        $itemName .= ' - ' . $varName;
+                    }
+                }
+                
+                // Limit length to prevent issues
+                if (strlen($itemName) > 100) {
+                    $itemName = substr($itemName, 0, 100);
+                }
+                
+                // Ensure all values are proper floats WITHOUT formatting using sprintf
+                $quantity = (float)sprintf('%.4f', $quantity);
+                $unitPrice = (float)sprintf('%.4f', $unitPrice);
+                $taxPercent = (float)sprintf('%.2f', $taxPercent);
+
+                $invoiceItem = $invoice->items()
+                    ->addItem((string)$itemCounter)
+                    ->setQuantity($quantity)
+                    ->setUnitPrice($unitPrice)
+                    ->setDescription($itemName . ' (مُرتجع)');
+
+                if ($taxPercent > 0) {
+                    $invoiceItem->tax($taxPercent);
+                } else {
+                    // For zero tax, use zeroTax() method
+                    try {
+                        $invoiceItem->zeroTax();
+                    } catch (\Exception $e) {
+                        // If zeroTax doesn't work, try taxExempted
+                        try {
+                            $invoiceItem->taxExempted();
+                        } catch (\Exception $e2) {
+                            // SDK doesn't support zero tax - skip tax completely
+                            // Don't call any tax method
+                        }
+                    }
+                }
+
+                $discount = $this->cleanNumericValue($item->line_discount_amount ?? $item->item_discount ?? 0);
+                $discount = (float)sprintf('%.4f', $discount);
+                
+                if ($discount > 0) {
+                    $invoiceItem->setDiscount($discount);
+                }
+
+            } catch (\Exception $itemException) {
+                Log::warning('Error adding credit invoice item: ' . $itemException->getMessage());
+                continue;
+            }
+
+            $itemCounter++;
+        }
+
+        // 12. Calculate totals automatically
+        $invoice->invoiceTotals();
+
+        // Send to JoFotara
+        $response = $invoice->send();
+        
+        // Restore locale
+        setlocale(LC_NUMERIC, $previousLocale);
+        
+        // Use the response object's methods to extract data properly
+        $isSuccessful = $response->isSuccess();
+        $qrCode = $response->getQrCode();
+        $xmlContent = $response->getSubmittedInvoice(); // Base64 encoded XML
+        $invoiceNumber = $response->getInvoiceNumber();
+        $invoiceUuid = $response->getInvoiceUuid();
+        $rawData = $response->getRawResponse();
+        $responseData = json_encode($rawData);
+        
+        // Get error message if any
+        $errorMessage = null;
+        if ($response->hasErrors()) {
+            $errorMessage = $response->getErrorSummary();
+        }
+
+        // 14. Save to database
+        $invoiceData = [
+            'transaction_id' => $returnTransactionId,
+            'business_id' => $this->businessId,
+             'location_id' => $locationId,
+            'invoice_uuid' => $uuid,
+            'invoice_type' => $invoiceType,
+            'payment_method' => 'cash',
+            'is_credit_invoice' => true,
+            'original_transaction_id' => $originalTransactionId,
+            'original_invoice_uuid' => $originalFatoraInvoice->invoice_uuid,
+            'original_invoice_amount' => $originalTransaction->final_total,
+            'return_reason' => $returnReason,
+            'qr_code' => $qrCode,
+            'xml_content' => $xmlContent,
+            'response_data' => $responseData,
+            'status' => $isSuccessful ? 'sent' : 'rejected',
+            'error_message' => $errorMessage,
+            'sent_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+        
+        if (Schema::hasColumn('fatora_invoices', 'system_invoice_number')) {
+            $invoiceData['system_invoice_number'] = $invoiceNumber;
+        }
+        if (Schema::hasColumn('fatora_invoices', 'system_invoice_uuid')) {
+            $invoiceData['system_invoice_uuid'] = $invoiceUuid;
+        }
+
+        DB::table('fatora_invoices')->insert($invoiceData);
+
+        return [
+            'success' => $isSuccessful,
+            'message' => $isSuccessful ? 'تم إرسال فاتورة المرتجعات بنجاح إلى نظام الفوترة الأردني' : 'فشل إرسال فاتورة المرتجعات',
+            'data' => [
+                'invoice_number' => $invoiceNumber,
+                'invoice_uuid' => $invoiceUuid,
+                'status' => $isSuccessful ? 'SUBMITTED' : 'FAILED',
+                'original_invoice' => $originalTransaction->invoice_no,
+                'raw_response' => $responseData
+            ],
+            'qr_code' => $qrCode,
+            'invoice_number' => $invoiceNumber,
+            'system_uuid' => $invoiceUuid
+        ];
+
+    } catch (Exception $e) {
+        // Restore locale before returning
+        setlocale(LC_NUMERIC, $previousLocale);
+        
+        Log::error('Fatora Credit Invoice Error: ' . $e->getMessage(), [
+            'return_transaction_id' => $returnTransactionId,
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return [
+            'success' => false,
+            'message' => $e->getMessage(),
+            'error' => $e->getMessage()
+        ];
+    }
+}
     /**
      * TEST FUNCTION - Send Credit Invoice using REAL data from transaction 2109
      * للاختبار - استخدام البيانات الفعلية
@@ -1525,9 +1602,9 @@ private function calculateInvoiceTotals($items): array
             $invoiceData = [
                 'transaction_id' => $transactionId,
                 'business_id' => $this->businessId,
-                   'location_id' => $this->locationId, 
+                 'location_id' => $locationId,
                 'invoice_uuid' => $matchedInvoice['EINV_INV_UUID'] ?? null,
-                'invoice_type' => 'income',
+                'invoice_type' =>   $invoiceType = $options['invoice_type'] ?? 'income',
                 'payment_method' => 'cash',
                 'qr_code' => $matchedInvoice['EINV_QR'] ?? null,
                 'xml_content' => $matchedInvoice['EINV_SINGED_INVOICE'] ?? null,
@@ -1721,66 +1798,86 @@ private function calculateInvoiceTotals($items): array
      * Enhanced sendCreditInvoice with auto-import if original invoice is missing
      * This is a wrapper that tries to import missing invoice before sending credit invoice
      */
-    public function sendCreditInvoiceWithAutoImport($returnTransactionId, $returnReason = 'إرجاع بضاعة')
-    {
-        try {
-            // Get return transaction
-            $returnTransaction = DB::table('transactions')
-                ->where('id', $returnTransactionId)
-                ->where('type', 'sell_return')
-                ->first();
-            
-            if (!$returnTransaction) {
-                return [
-                    'success' => false,
-                    'message' => 'فاتورة المرتجعات غير موجودة'
-                ];
-            }
-            
-            $originalTransactionId = $returnTransaction->return_parent_id;
-            
-            if (!$originalTransactionId) {
-                return [
-                    'success' => false,
-                    'message' => 'الفاتورة الأصلية غير محددة'
-                ];
-            }
-            
-            // Check if original invoice exists locally
-            $originalExists = DB::table('fatora_invoices')
-                ->where('transaction_id', $originalTransactionId)
-                ->whereIn('status', ['sent', 'accepted'])
-                ->exists();
-            
-            // If not exists, try to import it
-            if (!$originalExists) {
-                Log::info('Original invoice not found locally, attempting to import from JoFotara', [
-                    'original_transaction_id' => $originalTransactionId
-                ]);
-                
-                $importResult = $this->importInvoiceFromJoFotara($originalTransactionId);
-                
-                if (!$importResult['success']) {
-                    return [
-                        'success' => false,
-                        'message' => 'الفاتورة الأصلية غير موجودة محلياً ولم نتمكن من استيرادها من JoFotara: ' . $importResult['message'],
-                        'suggestion' => 'يرجى التأكد من أن الفاتورة الأصلية مرسلة لنظام JoFotara أولاً'
-                    ];
-                }
-                
-                Log::info('Original invoice imported successfully, proceeding with credit invoice');
-            }
-            
-            // Now send credit invoice normally
-            return $this->sendCreditInvoice($returnTransactionId, $returnReason);
-            
-        } catch (\Exception $e) {
-            Log::error('Error in sendCreditInvoiceWithAutoImport: ' . $e->getMessage());
+ public function sendCreditInvoiceWithAutoImport($returnTransactionId, $returnReason = 'إرجاع بضاعة')
+{
+    try {
+        // Get return transaction
+        $returnTransaction = DB::table('transactions')
+            ->where('id', $returnTransactionId)
+            ->where('type', 'sell_return')
+            ->first();
+        
+        if (!$returnTransaction) {
             return [
                 'success' => false,
-                'message' => 'خطأ: ' . $e->getMessage()
+                'message' => 'فاتورة المرتجعات غير موجودة'
             ];
         }
+
+        // ========== التحقق من إعدادات الفاتورة للفرع ==========
+        $businessId = $returnTransaction->business_id;
+        $locationId = $returnTransaction->location_id;
+
+        $checkResult = $this->checkBranchFatoraSettings($businessId, $locationId);
+
+        if (!$checkResult['has_settings']) {
+            return [
+                'success' => false,
+                'message' => 'لا يمكن إرسال فاتورة المرتجعات: ' . $checkResult['message'],
+                'business_id' => $businessId,
+                'location_id' => $locationId,
+                'can_send_credit_invoice' => false
+            ];
+        }
+
+        $this->businessId = $businessId;
+        $this->settings = $checkResult['settings'];
+        // ========== نهاية التحقق الجديد ==========
+
+        $originalTransactionId = $returnTransaction->return_parent_id;
+        
+        if (!$originalTransactionId) {
+            return [
+                'success' => false,
+                'message' => 'الفاتورة الأصلية غير محددة'
+            ];
+        }
+        
+        // Check if original invoice exists locally
+        $originalExists = DB::table('fatora_invoices')
+            ->where('transaction_id', $originalTransactionId)
+            ->whereIn('status', ['sent', 'accepted'])
+            ->exists();
+        
+        // If not exists, try to import it
+        if (!$originalExists) {
+            Log::info('Original invoice not found locally, attempting to import from JoFotara', [
+                'original_transaction_id' => $originalTransactionId
+            ]);
+            
+            $importResult = $this->importInvoiceFromJoFotara($originalTransactionId);
+            
+            if (!$importResult['success']) {
+                return [
+                    'success' => false,
+                    'message' => 'الفاتورة الأصلية غير موجودة محلياً ولم نتمكن من استيرادها من JoFotara: ' . $importResult['message'],
+                    'suggestion' => 'يرجى التأكد من أن الفاتورة الأصلية مرسلة لنظام JoFotara أولاً'
+                ];
+            }
+            
+            Log::info('Original invoice imported successfully, proceeding with credit invoice');
+        }
+        
+        // Now send credit invoice normally
+        return $this->sendCreditInvoice($returnTransactionId, $returnReason);
+        
+    } catch (\Exception $e) {
+        Log::error('Error in sendCreditInvoiceWithAutoImport: ' . $e->getMessage());
+        return [
+            'success' => false,
+            'message' => 'خطأ: ' . $e->getMessage()
+        ];
     }
+}
 }
 

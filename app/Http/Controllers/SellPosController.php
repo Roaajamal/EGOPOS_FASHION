@@ -341,6 +341,8 @@ class SellPosController extends Controller
         // --- إضافة: استقبال خيار فاتورة الهدية ---
         $is_gift_receipt_selected = !empty($request->input('is_gift_receipt')) && 
                                     ($request->input('is_gift_receipt') == 1 || $request->input('is_gift_receipt') == 'true');
+        $is_slip_receipt_selected = !empty($request->input('is_slip_receipt')) && 
+                            ($request->input('is_slip_receipt') == 1 || $request->input('is_slip_receipt') == 'true');                            
 
         $input['is_quotation'] = 0;
         // معالجة حالة الفاتورة
@@ -560,34 +562,100 @@ class SellPosController extends Controller
             $this->transactionUtil->activityLog($transaction, 'added');
 
             DB::commit();
-
-            // --- جزء نظام الفوترة JoFotara ---
-          try {  
-    // اضافة شرط الفرع 001
+try {
+    // تأكد من وجود transaction و business_id
+    if (!$transaction || !$business_id) {
+        \Log::warning('بيانات غير كافية لإرسال الفاتورة', [
+            'transaction_exists' => !empty($transaction),
+            'business_id' => $business_id,
+            'transaction_id' => $transaction->id ?? null
+        ]);
+        return;
+    }
+    
+    // الحصول على location_id من الـ transaction
+    $locationId = $transaction->location_id ?? null;
+    
+    if (!$locationId) {
+        \Log::warning('الفرع غير محدد في المعاملة', [
+            'transaction_id' => $transaction->id,
+            'business_id' => $business_id
+        ]);
+        return;
+    }
+    
+    // التحقق من توفر إعدادات الفوترة للبزنس والفرع المحدد
     $fatoraSettings = DB::table('settings_fatora')
-        ->where('business_id', $business_id)
-        ->where('is_active', true)
-        ->where(function($query) use ($transaction) {
-            $query->where('location_id', $transaction->location_id) // البحث عن الفرع
-                  ->orWhereNull('location_id'); // أو الإعدادات العامة للشركة
+        ->where('business_id', $business_id)  // تأكد من البزنس الصحيح
+        ->where(function($query) use ($locationId) {
+            // أولاً: إعدادات خاصة بالفرع
+            $query->where('location_id', $locationId)
+                  // أو إعدادات عامة لنفس البزنس
+                  ->orWhereNull('location_id');
         })
-        ->orderByRaw('location_id DESC') // لضمان أن السجل الذي يحتوي على رقم فرع يظهر قبل الـ NULL
+        ->where('is_active', true)
+        ->orderBy('location_id', 'DESC') // أولوية لإعدادات الفرع
         ->first();
-        
+    
+    \Log::debug('نتيجة البحث عن إعدادات الفوترة', [
+        'business_id' => $business_id,
+        'location_id' => $locationId,
+        'found_settings' => !empty($fatoraSettings),
+        'settings_id' => $fatoraSettings->id ?? null,
+        'settings_location' => $fatoraSettings->location_id ?? null
+    ]);
+    
     if ($fatoraSettings && $transaction->type == 'sell' && $input['status'] == 'final') {
-        // تصحيح: إضافة location_id هنا
-        $fatoraService = new \App\Services\FatoraService($business_id, $transaction->location_id);
-        
-        // إرسال الفاتورة
-        $fatoraService->sendInvoice($transaction->id, [
-            'invoice_type' => $fatoraSettings->invoice_type ?? 'tax_invoice', 
-            'payment_method' => 'cash'
+        // التحقق الإضافي: هل الإعدادات مكتملة؟
+        if (empty($fatoraSettings->client_id) || 
+            empty($fatoraSettings->secret_key) || 
+            empty($fatoraSettings->supplier_income_source)) {
+            
+            \Log::warning('إعدادات الفوترة غير مكتملة', [
+                'business_id' => $business_id,
+                'location_id' => $locationId,
+                'transaction_id' => $transaction->id,
+                'missing_fields' => [
+                    'client_id' => empty($fatoraSettings->client_id),
+                    'secret_key' => empty($fatoraSettings->secret_key),
+                    'supplier_income_source' => empty($fatoraSettings->supplier_income_source)
+                ]
+            ]);
+            
+        } else {
+            // إرسال الفاتورة
+            $fatoraService = new \App\Services\FatoraService($business_id);
+            $sendResult = $fatoraService->sendInvoice($transaction->id, [
+                'invoice_type' => 'general_sales',
+                'payment_method' => 'cash'
+            ]);
+            
+            \Log::info('فاتورة JoFotara إرسال نتيجة', [
+                'transaction_id' => $transaction->id,
+                'business_id' => $business_id,
+                'location_id' => $locationId,
+                'success' => $sendResult['success'] ?? false,
+                'message' => $sendResult['message'] ?? 'N/A',
+                'settings_type' => $fatoraSettings->location_id ? 'branch' : 'global'
+            ]);
+        }
+    } else {
+        \Log::debug('شروط إرسال الفاتورة غير متوفرة', [
+            'has_settings' => !empty($fatoraSettings),
+            'transaction_type' => $transaction->type ?? null,
+            'status' => $input['status'] ?? null,
+            'business_id' => $business_id,
+            'location_id' => $locationId
         ]);
     }
 } catch (\Exception $e) {
-    \Log::error('فشل إرسال الفاتورة لنظام الفوترة: ' . $e->getMessage());
+    \Log::error('فشل إرسال الفاتورة لنظام الفوترة: ' . $e->getMessage(), [
+        'transaction_id' => $transaction->id ?? null,
+        'business_id' => $business_id ?? null,
+        'location_id' => $locationId ?? null,
+        'trace' => $e->getTraceAsString()
+    ]);
 }
-
             SellCreatedOrModified::dispatch($transaction);
 
             if ($request->input('is_save_and_print') == 1) {
@@ -622,7 +690,7 @@ class SellPosController extends Controller
 
             // --- التعديل النهائي للطباعة (العادية والهدية المنفصلة) ---
            if ($print_invoice) {
-                $receipt = $this->receiptContent($business_id, $input['location_id'], $transaction->id, null, false, true, $invoice_layout_id);
+                $receipt = $this->receiptContent($business_id, $input['location_id'], $transaction->id, null, false, true, $invoice_layout_id,false,false,$is_slip_receipt_selected);
                 $receipt['business_id'] = $business_id; // لضمان عدم ظهور خطأ الـ Blade
                 
                 $receipt['gift_html'] = ''; 
@@ -674,7 +742,8 @@ private function receiptContent(
     $from_pos_screen = true,
     $invoice_layout_id = null,
     $is_delivery_note = false,
-    $is_gift_receipt = false
+    $is_gift_receipt = false,
+    $is_slip_receipt = false
 ) {
     try {
         $output = [
@@ -698,9 +767,8 @@ private function receiptContent(
 
         // --- 1. تحديد التصميم (Layout) بناءً على نوع الطلب ---
        if ($is_gift_receipt) {
-    // التعديل هنا: نبحث عن تصميم 'gift' بغض النظر عن الـ business_id إذا كنتِ تريدين ذلك
-    // أو نجعله يبحث عنه كأولوية أولى
-    // التعديل: إضافة شرط business_id لضمان جلب تصميم النشاط الحالي فقط
+    
+       // التعديل: إضافة شرط business_id لضمان جلب تصميم النشاط الحالي فقط
          $invoice_layout = \App\InvoiceLayout::where('business_id', $business_id)
                                     ->where('design', 'gift')
                                     ->first();
@@ -738,7 +806,11 @@ private function receiptContent(
             $view_path = 'sale_pos.receipts.packing_slip';
         } elseif ($is_delivery_note) {
             $view_path = 'sale_pos.receipts.delivery_note';
-        } else {
+        }
+        elseif ($is_slip_receipt) {
+        // إذا كان الخيار المختار هو slip، يقرأ من المسار الذي حددته
+         $view_path = 'sale_pos.receipts.slip'; }
+          else {
             $view_path = $layout_design;
         }
 

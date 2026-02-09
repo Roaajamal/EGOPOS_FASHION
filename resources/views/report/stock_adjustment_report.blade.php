@@ -1,11 +1,11 @@
 @extends('layouts.app')
-@section('title', __( 'report.stock_adjustment_report' ))
+@section('title',  __('stock_adjustment.stock_out_quantity_report'),)
 
 @section('content')
 
 <!-- Content Header (Page header) -->
 <section class="content-header">
-    <h1 class="tw-text-xl md:tw-text-3xl tw-font-bold tw-text-black">@lang( 'report.stock_adjustment_report' )
+    <h1 class="tw-text-xl md:tw-text-3xl tw-font-bold tw-text-black">@lang( 'stock_adjustment.stock_out_quantity_report' )
     </h1>
 </section>
 
@@ -57,7 +57,7 @@
                         </td>
                     </tr>
                     <tr>
-                        <th>{{ __('report.total_stock_adjustment') }}:</th>
+                        <th>{{ __('stock_adjustment.total_stock_adjustment') }}:</th>
                         <td>
                             <span class="total_amount">
                                 <i class="fas fa-sync fa-spin fa-fw"></i>
@@ -72,7 +72,7 @@
             @component('components.widget')
                 <table class="table no-border">
                     <tr>
-                        <th>{{ __('report.total_recovered') }}:</th>
+                         <th>{{ __('report.total_recovered') }}:</th>
                         <td>
                              <span class="total_recovered">
                                 <i class="fas fa-sync fa-spin fa-fw"></i>
@@ -97,10 +97,10 @@
                                 <th>@lang('messages.date')</th>
                                 <th>@lang('purchase.ref_no')</th>
                                 <th>@lang('business.location')</th>
-                                <th>@lang('stock_adjustment.adjustment_type')</th>
+                                <th>@lang('stock_adjustment.out_type')</th>
                                 <th>@lang('stock_adjustment.total_amount')</th>
                                 <th>@lang('stock_adjustment.total_amount_recovered')</th>
-                                <th>@lang('stock_adjustment.reason_for_stock_adjustment')</th>
+                                <th>@lang('stock_adjustment.recipient')</th>
                                 <th>@lang('lang_v1.added_by')</th>
                             </tr>
                         </thead>

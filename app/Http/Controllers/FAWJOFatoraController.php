@@ -74,35 +74,7 @@ class FAWJOFatoraController extends Controller
                 })
                 ->exists();
 
-            if (!$existing_settings) {
-                try {
-                    DB::table('settings_fatora')->insert([
-                        'business_id' => $current_business_id,
-                        'location_id' => $location_id,
-                        'client_id' => null,
-                        'secret_key' => null,
-                        'supplier_income_source' => null,
-                        'tin' => null,
-                        'registration_name' => null,
-                        'crn' => null,
-                        'invoice_type' => null,
-                        'street_name' => null,
-                        'building_number' => null,
-                        'city_name' => null,
-                        'city_code' => null,
-                        'county' => null,
-                        'postal_code' => null,
-                        'plot_al_zone' => null,
-                        'vat' => null,
-                        'csr' => null,
-                        'is_active' => true,
-                        'created_at' => now(),
-                        'updated_at' => now()
-                    ]);
-                } catch (\Exception $e) {
-                    \Log::error('Error creating fatora settings: ' . $e->getMessage());
-                }
-            }
+          
             
             // إعادة جلب السجل
             $query = DB::table('settings_fatora')->where('business_id', $current_business_id);
