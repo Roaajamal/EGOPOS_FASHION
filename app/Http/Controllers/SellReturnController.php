@@ -389,7 +389,8 @@ class SellReturnController extends Controller
             ->where('t.status', 'final')
             ->where(function($q) use ($sku) {
                 $q->where('p.sku', $sku)
-                  ->orWhere('v.sub_sku', $sku); // البحث بالـ SKU أو الباركود
+                  ->orWhere('v.sub_sku', $sku)
+                  ->orWhere('p.name', 'like', '%' . $sku . '%'); // البحث بالـ SKU أو الباركود
             });
 
         // شرط الفرع الحالي لضمان دقة البيانات
@@ -427,6 +428,8 @@ class SellReturnController extends Controller
        } catch (\Exception $e) {
         return response()->json(['success' => false, 'msg' => 'خطأ: ' . $e->getMessage()]);
      }
+
+
 }
  ////////////////////// 001
  

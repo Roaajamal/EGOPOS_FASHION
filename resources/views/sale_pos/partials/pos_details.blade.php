@@ -10,6 +10,7 @@
 					<b>@lang('sale.total'):</b> &nbsp;
 					<span class="price_total">0</span>
 				</div>
+
 				<table class="table table-condensed" 
 					style="margin-bottom: 0px !important">
 					<tbody>

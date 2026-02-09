@@ -71,8 +71,7 @@
 
             </div>
         </div>
-
-    
+        
 
         <div class="tw-w-full md:tw-w-2/3 !tw-p-0 tw-flex tw-items-center tw-justify-between tw-gap-4 tw-flex-col md:tw-flex-row tw-hidden md:tw-flex"
             id="pos_header_more_options">
@@ -269,7 +268,7 @@
                             <label style="font-weight: 600;">امسح باركود المنتج أو ادخل الـ SKU:</label>
                             <input type="text" id="sku_input_return" class="form-control" 
                                    style="height: 45px; font-size: 16px; border: 2px solid #3498db;" 
-                                   placeholder="مثال: 1686..." autocomplete="off">
+                                   autocomplete="off">
                         </div>
                     </div>
                     <div class="col-md-2">
