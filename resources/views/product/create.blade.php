@@ -508,7 +508,7 @@
     $(document).ready(function() {
         __page_leave_confirmation('#product_add_form');
 
-        // بعد العودة من «أضف الكميات» (فردي): طباعة تلقائية للمنتج دون فتح صفحة — الرابط يُبنى من السيرفر
+        // بعد العودة من «أضف الكميات» (فردي): طباعة مخفية مثل المتباين — iframe مخفي يحمّل صفحة الطباعة
         if (window.__printProductUrl && window.__printProductUrl.length > 0) {
             setTimeout(function() {
                 var iframe = document.createElement('iframe');
@@ -517,8 +517,8 @@
                 iframe.src = window.__printProductUrl;
                 setTimeout(function() {
                     try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch (e) {}
-                }, 12000);
-            }, 1500);
+                }, 10000);
+            }, 500);
         }
 
         // Barcode scanner
@@ -944,7 +944,7 @@
                             setTimeout(function() {
                                 try { if (iframe.parentNode) iframe.parentNode.removeChild(iframe); } catch (err) {}
                                 if (data.redirect_url) window.location.href = data.redirect_url;
-                            }, 12000);
+                            }, 8000);
                         } else if (data.redirect_url) {
                             window.location.href = data.redirect_url;
                         }

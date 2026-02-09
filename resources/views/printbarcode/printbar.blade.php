@@ -1081,8 +1081,8 @@ qz.security.setSignaturePromise(function(toSign) {
             // بعد «حفظ وطباعة»: انتظار تحميل الطابعات ثم اختيار الطابعة الافتراضية وطباعة كل المقاسات
             if (printAfterSaveProductId && printAfterSaveAll) {
                 function waitForPrinters(maxMs, intervalMs) {
-                    maxMs = maxMs || 8000;
-                    intervalMs = intervalMs || 300;
+                    maxMs = maxMs || 6000;
+                    intervalMs = intervalMs || 150;
                     return new Promise(function(resolve) {
                         var elapsed = 0;
                         var t = setInterval(function() {
@@ -1101,7 +1101,7 @@ qz.security.setSignaturePromise(function(toSign) {
                     });
                 }
                 function runAutoPrint() {
-                    waitForPrinters(8000).then(function(ready) {
+                    waitForPrinters(5000).then(function(ready) {
                         var $sel = $('#printers');
                         if ($sel.find('option').length > 1) {
                             var hasDefault = false;
@@ -1175,7 +1175,7 @@ qz.security.setSignaturePromise(function(toSign) {
                         });
                     });
                 }
-                setTimeout(runAutoPrint, 1200);
+                setTimeout(runAutoPrint, 500);
             }
         });
 
@@ -1440,7 +1440,7 @@ qz.security.setSignaturePromise(function(toSign) {
                 for (let i = 0; i < qty; i++) {
                     await printProduct(product, 1, printer);
                     totalPrinted++;
-                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await new Promise(resolve => setTimeout(resolve, 40));
                 }
             }
 
