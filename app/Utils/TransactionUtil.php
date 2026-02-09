@@ -5128,6 +5128,8 @@ if ($fatora_invoice && !empty($fatora_invoice->qr_code)) {
                     '=',
                     'bl.id'
                 )
+                // --- 002 البداية: ربط جدول العملات لجلب عملة الموقع ---
+                ->leftJoin('currencies as curr', 'bl.currency_id', '=', 'curr.id')
                 ->leftJoin(
                     'transactions AS SR',
                     'transactions.id',
@@ -5171,6 +5173,8 @@ if ($fatora_invoice && !empty($fatora_invoice->qr_code)) {
                     'transactions.staff_note',
                     'transactions.shipping_details',
                     'transactions.document',
+                    // --- 002 إضافة رمز العملة هنا ---
+                    'curr.symbol as currency_symbol', 
                     'transactions.shipping_custom_field_1',
                     'transactions.shipping_custom_field_2',
                     'transactions.shipping_custom_field_3',

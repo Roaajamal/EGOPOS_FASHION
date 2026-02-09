@@ -26,6 +26,20 @@ $(document).ready(function() {
     $('select#select_location_id').change(function() {
         reset_pos_form();
 
+        
+        var selected_location = $(this).find(':selected');
+        
+        // --- تحديث بيانات العملة (002) ---
+        var currency_symbol = selected_location.data('currency_symbol');
+        if (currency_symbol !== undefined) {
+            __currency_symbol = currency_symbol;
+            __currency_thousand_separator = selected_location.data('currency_thousand_separator');
+            __currency_decimal_separator = selected_location.data('currency_decimal_separator');
+            __currency_precision = selected_location.data('currency_precision');
+            __currency_symbol_placement = selected_location.data('currency_symbol_placement');
+            
+            $('.display_currency').data('currency_symbol', currency_symbol);
+        }
         var default_price_group = $(this).find(':selected').data('default_price_group')
         if (default_price_group) {
             if($("#price_group option[value='" + default_price_group + "']").length > 0) {
@@ -839,8 +853,8 @@ $(document).on('submit', 'form#add_pos_sell_form', function(e) {
 
         var data = $(form).serialize();
         var is_gift = $('#is_gift_receipt').is(':checked') ? 1 : 0;
-       var is_slip = $('#is_slip_receipt').is(':checked') ? 1 : 0;
-        data = data + '&status=final&is_gift_receipt=' + is_gift + '&is_slip_receipt=' + is_slip;
+       
+        data = data + '&status=final&is_gift_receipt=' + is_gift ;
 
         var url = $(form).attr('action');
         $.ajax({

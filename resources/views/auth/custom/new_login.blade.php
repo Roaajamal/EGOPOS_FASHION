@@ -61,21 +61,6 @@
         }
         .field-input:focus { border-color: #2d5a27; background: white; }
 
-        .switch {
-            position: relative; display: inline-block; width: 40px; height: 22px;
-        }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider {
-            position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #ccc; transition: .4s; border-radius: 34px;
-        }
-        .slider:before {
-            position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px;
-            background-color: white; transition: .4s; border-radius: 50%;
-        }
-        input:checked + .slider { background-color: #2d5a27; }
-        input:checked + .slider:before { transform: translateX(18px); }
-
         .btn-creative {
             background: rgba(255, 255, 255, 0.12);
             backdrop-filter: blur(15px); border: 2px solid rgba(255, 255, 255, 0.4);
@@ -103,6 +88,7 @@
             font-weight: 800; text-decoration: none; font-size: 0.9rem;
             margin-top: 20px; transition: 0.3s;
         }
+        .customer-service:hover { color: #2d5a27; transform: scale(1.05); }
         .cs-icon {
             width: 35px; height: 35px; background: #dcfce7; border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
@@ -142,14 +128,6 @@
                 <div class="tw-text-left">
                     <label class="tw-text-sm tw-font-black tw-text-green-800 tw-ml-4 tw-block tw-mb-2 capitalize tracking-wide">Password</label>
                     <input id="passInp" type="password" name="password" placeholder="••••••••" class="field-input {{ $errors->any() ? 'shake-error' : '' }}" required >
-                    
-                    <div class="tw-mt-4 tw-ml-4 tw-flex tw-items-center tw-gap-3">
-                        <label class="switch">
-                            <input type="checkbox" id="showPassCheck" onclick="togglePassword()">
-                            <span class="slider"></span>
-                        </label>
-                        <span class="tw-text-xs tw-font-black tw-text-green-900">Show Password</span>
-                    </div>
                 </div>
 
                 @if($errors->any())
@@ -179,12 +157,6 @@
             } else {
                 document.getElementById('authForm').submit();
             }
-        }
-
-        function togglePassword() {
-            const pass = document.getElementById('passInp');
-            const check = document.getElementById('showPassCheck');
-            pass.type = check.checked ? 'text' : 'password';
         }
     </script>
 </body>
