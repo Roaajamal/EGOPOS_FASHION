@@ -2,7 +2,7 @@
 
 return[
 
-'missing_product_report' => 'كشف المنتجات الناقصة', 
+'missing_product_report' => 'كشف  النواقص', 
 'missing_product_report_view' => 'عرض كشف المنتجات الناقصة' ,
 'source_branch' => 'الفرع المصدر (المتوفر فيه المنتج)' ,
 'target_branch' => 'الفرع المستهدف (الناقص منه المنتج)' ,
