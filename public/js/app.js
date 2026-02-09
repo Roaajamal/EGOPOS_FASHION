@@ -1296,6 +1296,7 @@ $(document).ready(function() {
         }
     });
 
+   ////////////////// add currency 002 
     //Business locations CRUD
     business_locations = $('#business_location_table').DataTable({
         processing: true,
@@ -1304,9 +1305,24 @@ $(document).ready(function() {
         fixedHeader:false,
         buttons: [],
         ajax: '/business-location',
+        columns: [
+        { data: 'name', name: 'name' },
+        { data: 'location_id', name: 'location_id' },
+        { data: 'landmark', name: 'landmark' },
+        { data: 'city', name: 'city' },
+        { data: 'zip_code', name: 'zip_code' },
+        { data: 'state', name: 'state' },
+        { data: 'country', name: 'country' },
+        { data: 'price_group', name: 'spg.name' },
+        { data: 'currency', name: 'curr.currency' }, // العمود الجديد الذي أضفناه في الكنترولر
+        { data: 'invoice_scheme', name: 'ic.name' },
+        { data: 'invoice_layout', name: 'il.name' },
+        { data: 'sale_invoice_layout', name: 'sil.name' },
+        { data: 'action', name: 'action' }
+    ],
         columnDefs: [
             {
-                targets: 11,
+                targets: 12,
                 orderable: false,
                 searchable: false,
             },

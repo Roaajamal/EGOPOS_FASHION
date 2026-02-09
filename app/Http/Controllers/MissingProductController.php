@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 class MissingProductController extends Controller
 {
+
     public function getMissingProducts(Request $request)
 {
     $business_id = request()->session()->get('user.business_id');
@@ -26,9 +27,10 @@ class MissingProductController extends Controller
 
     if (!empty($loc1) && !empty($loc2)) {
         // الاستعلام: جلب المنتجات الموجودة في فرع 1 ورصيدها 0 في فرع 2
-        $missingProducts = DB::table('variation_location_details as vld1')
+       $missingProducts = DB::table('variation_location_details as vld1')
             ->join('products as p', 'vld1.product_id', '=', 'p.id')
-            // ربط مع نفس الجدول للفرع الثاني (Left Join) للتأكد من الكمية هناك
+            ->join('variations as v', 'vld1.variation_id', '=', 'v.id')
+            // ربط مع الفرع الثاني للتأكد من الكمية (صفر أو سالب أو غير موجودة)
             ->leftJoin('variation_location_details as vld2', function($join) use ($loc2) {
                 $join->on('vld1.variation_id', '=', 'vld2.variation_id')
                      ->where('vld2.location_id', '=', $loc2);
@@ -36,15 +38,15 @@ class MissingProductController extends Controller
             ->select(
                 'p.name', 
                 'p.sku', 
-                'vld1.qty_available as qty_in_loc1',
-                DB::raw('COALESCE(vld2.qty_available, 0) as qty_in_loc2')
+                'vld1.qty_available as qty_in_loc1', 
+                'vld2.qty_available as qty_in_loc2'
             )
+            ->where('p.business_id', $business_id)
             ->where('vld1.location_id', $loc1)
-            ->where('vld1.qty_available', '>', 0)
-            // موجود في فرع 1
+            ->where('vld1.qty_available', '>', 0) // الشرط الأول: متوفرة في الفرع الأول
             ->where(function($query) {
-                $query->where('vld2.qty_available', '<=', 0) // كميته 0 في فرع 2
-                      ->orWhereNull('vld2.qty_available');   // أو ليس له سجل أصلاً في فرع 2
+                $query->where('vld2.qty_available', '<=', 0) // الشرط الثاني: صفر أو سالب في الفرع الثاني
+                      ->orWhereNull('vld2.qty_available');   // أو ليس له سجل رصيد أصلاً هناك
             })
             ->get();
     }

@@ -79,11 +79,27 @@
                         <tbody>
                             @foreach($missingProducts as $product)
                                 <tr>
-                                    <td>{{ $product->name }}</td>
-                                    <td>{{ $product->sku }}</td>
-                                    <td><span class="display_currency" data-currency_symbol="false">{{ $product->qty_in_loc1 }}</span></td>
-                                    <td class="text-danger">0.00</td>
-                                </tr>
+        <td>{{ $product->name }}</td>
+        <td>{{ $product->sku }}</td>
+        <td class="text-success text-bold">
+            {{ number_format($product->qty_in_loc1, 2) }}
+        </td>
+        <td>
+            @if(is_null($product->qty_in_loc2))
+                {{-- الحالة 1: المنتج ليس له سجل نهائياً في الفرع الثاني --}}
+                <span class="label label-default">غير متوفر</span>
+            @elseif($product->qty_in_loc2 == 0)
+                {{-- الحالة 2: المنتج موجود وسجله صفر --}}
+                <span class="text-bold">0.00</span>
+            @elseif($product->qty_in_loc2 < 0)
+                {{-- الحالة 3: المنتج موجود وقيمته سالبة (عجز) --}}
+                <span class="text-danger text-bold">
+                    {{ number_format($product->qty_in_loc2, 2) }} 
+                    <small>(عجز)</small>
+                </span>
+            @endif
+        </td>
+    </tr>
                             @endforeach
                         </tbody>
                     </table>

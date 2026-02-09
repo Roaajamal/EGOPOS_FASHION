@@ -534,6 +534,8 @@ if (!empty($full_start) && !empty($full_end)) {
             $filters = request()->only(['location_id', 'category_id', 'sub_category_id', 'brand_id', 'unit_id', 'tax_id', 'type',
                 'only_mfg_products', 'active_state',  'not_for_selling', 'repair_model_id', 'product_id', 'active_state', ]);
 
+          
+
             $filters['not_for_selling'] = isset($filters['not_for_selling']) && $filters['not_for_selling'] == 'true' ? 1 : 0;
 
             $filters['show_manufacturing_data'] = $show_manufacturing_data;
@@ -4108,12 +4110,17 @@ if (!empty($full_start) && !empty($full_end)) {
                                     DB::raw("CONCAT(COALESCE(u.surname, ''), ' ', COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) as created_by")
                                 );
 
-            if (! empty(request()->start_date) && ! empty(request()->end_date)) {
-                $start = request()->start_date;
-                $end = request()->end_date;
-                $activities->whereDate('activity_log.created_at', '>=', $start)
-                            ->whereDate('activity_log.created_at', '<=', $end);
-            }
+           // تعديل الفلترة حسب التاريخ
+    if (!empty(request()->start_date) && !empty(request()->end_date)) {
+        $start = request()->start_date;
+        $end = request()->end_date;
+        // هنا نستخدم whereBetween لضمان جلب اليوم كاملاً من بدايته لنهايته
+        $activities->whereDate('activity_log.created_at', '>=', $start)
+                   ->whereDate('activity_log.created_at', '<=', $end);
+    } else {
+        // إذا كان الطلب Ajax ولكن بدون تاريخ (عند التحميل الأول)، نعرض اليوم فقط
+        $activities->whereDate('activity_log.created_at', \Carbon\Carbon::today()->format('Y-m-d'));
+    }
 
             if (! empty(request()->user_id)) {
                 $activities->where('causer_id', request()->user_id);
@@ -4125,7 +4132,7 @@ if (!empty($full_start) && !empty($full_end)) {
                     $activities->where('subject_type', \App\Contact::class);
                 } elseif ($subject_type == 'user') {
                     $activities->where('subject_type', \App\User::class);
-                } elseif (in_array($subject_type, ['sell', 'purchase','quantity_entry',
+                } elseif (in_array($subject_type, ['sell', 'purchase','add_quantity',
                     'sales_order', 'purchase_order', 'sell_return', 'purchase_return', 'sell_transfer', 'expense', 'purchase_order', ])) {
                     $activities->where('subject_type', \App\Transaction::class);
                     $activities->whereHasMorph('subject', Transaction::class, function ($q) use ($subject_type) {

@@ -15,7 +15,7 @@
      'total_amount' =>  'الإجمالي',
      'total_amount_recovered' => 'الإجمالي المسترد',
      'reason_for_stock_adjustment' => 'السبب',
-     'stock_out_added_successfully' => 'تمت اضافة  سند اخراج بنجاح',
+     'stock_adjustment_added_successfully' => 'تمت اضافة  سند اخراج بنجاح',
      'search_products' => 'البحث عن المنتجات',
      'delete_success' => 'تم حذف  سند الاخراج بنجاح',
      'view_details' => 'عرض تفاصيل سند الاخراج',

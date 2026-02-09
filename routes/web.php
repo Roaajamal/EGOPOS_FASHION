@@ -382,8 +382,9 @@ include_once 'install_r.php';
 Route::post('/update-price-offer', [SellPosController::class, 'updatePriceWithOffer'])->name('update.price.offer');
 Route::middleware(['setData'])->group(function () {
     Route::get('/', function () {
-        return view('welcome');
+        return auth()->check() ? redirect('/home') : redirect('/login');
     });
+
 
     Auth::routes();
 

@@ -351,18 +351,7 @@
     </div>
 </div>     
 <!-- add fawtara setting -->
- <!-- add slip fatora setting -->     
-     <div class="col-sm-4">
-    <div class="form-group">
-        <div class="checkbox">
-            <br>
-          <label>
-        </label>
-        {!! Form::checkbox('pos_settings[enable_slip]', 1, !empty($pos_settings['enable_slip']), ['class' => 'input-icheck']); !!}    طباعة slip
-        </div>
-    </div>
-</div>     
-<!-- add slip setting -->
+ 
     </div>    
     <hr>
     @include('business.partials.settings_weighing_scale')
