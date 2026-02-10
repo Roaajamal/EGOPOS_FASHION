@@ -46,13 +46,29 @@ class StockTransferController extends Controller
     }
 
     /**
+     * Check if current user can access stock transfer (permission or Admin role).
+     */
+    private function userCanAccessStockTransfer(): bool
+    {
+        $user = auth()->user();
+        if ($user->can('stock_transfer.view') || $user->can('stock_transfer.create') || $user->can('stock_transfer.view_own')) {
+            return true;
+        }
+        $business_id = request()->session()->get('user.business_id');
+        if ($business_id && $user->hasRole('Admin#' . $business_id)) {
+            return true;
+        }
+        return false;
+    }
+
+    /**
      * Display a listing of the resource.
      *
      * @return \Illuminate\Http\Response
      */
     public function index()
     {
-        if (! auth()->user()->can('stock_transfer.view') && ! auth()->user()->can('stock_transfer.create') && ! auth()->user()->can('stock_transfer.view_own')) {
+        if (! $this->userCanAccessStockTransfer()) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -160,7 +176,7 @@ class StockTransferController extends Controller
      */
     public function create()
     {
-        if (! auth()->user()->can('stock_transfer.create')) {
+        if (! auth()->user()->can('stock_transfer.create') && ! $this->userCanAccessStockTransfer()) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -196,7 +212,7 @@ class StockTransferController extends Controller
      */
     public function store(Request $request)
     {
-        if (! auth()->user()->can('stock_transfer.create')) {
+        if (! auth()->user()->can('stock_transfer.create') && ! $this->userCanAccessStockTransfer()) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -491,7 +507,7 @@ class StockTransferController extends Controller
      */
     public function show($id)
     {
-        if (! auth()->user()->can('stock_transfer.view')) {
+        if (! auth()->user()->can('stock_transfer.view') && ! $this->userCanAccessStockTransfer()) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -554,7 +570,7 @@ class StockTransferController extends Controller
      */
     public function destroy($id)
     {
-        if (! auth()->user()->can('stock_transfer.delete')) {
+        if (! auth()->user()->can('stock_transfer.delete') && ! $this->userCanAccessStockTransfer()) {
             abort(403, 'Unauthorized action.');
         }
         try {
@@ -723,6 +739,9 @@ class StockTransferController extends Controller
      */
     public function edit($id)
     {
+        if (! auth()->user()->can('stock_transfer.update') && ! $this->userCanAccessStockTransfer()) {
+            abort(403, 'Unauthorized action.');
+        }
         $business_id = request()->session()->get('user.business_id');
 
         $business_locations = BusinessLocation::forDropdown($business_id);
@@ -780,7 +799,7 @@ class StockTransferController extends Controller
      */
     public function update(Request $request, $id)
     {
-        if (! auth()->user()->can('purchase.create')) {
+        if (! auth()->user()->can('stock_transfer.update') && ! $this->userCanAccessStockTransfer()) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -994,7 +1013,7 @@ class StockTransferController extends Controller
      */
     public function updateStatus(Request $request, $id)
     {
-        if (! auth()->user()->can('stock_transfer.update')) {
+        if (! auth()->user()->can('stock_transfer.update') && ! $this->userCanAccessStockTransfer()) {
             abort(403, 'Unauthorized action.');
         }
 

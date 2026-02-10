@@ -215,7 +215,12 @@ class ProductController extends Controller
                 ->addColumn(
                     'product_locations',
                     function ($row) {
-                        $locations = $row->product_locations ?? \App\Product::find($row->id)?->product_locations;
+                        $id = $row->id ?? 0;
+                        if ($id <= 0) {
+                            return '—';
+                        }
+                        $product = \App\Product::with('product_locations')->find($id);
+                        $locations = $product && $product->product_locations ? $product->product_locations : null;
                         return $locations && $locations->isNotEmpty() ? $locations->implode('name', ', ') : '—';
                     }
                 )
@@ -289,14 +294,15 @@ class ProductController extends Controller
                         $product .= '<br><small class="text-muted" style="font-weight: normal;">‹ ' . e($row->variation_name) . '</small>';
                     }
 
-                    if ($is_woocommerce && ! $row->woocommerce_disable_sync) {
+                    if ($is_woocommerce && empty($row->woocommerce_disable_sync)) {
                         $product = $product.'<br><i class="fab fa-wordpress"></i>';
                     }
 
                     return $product;
                 })
                 ->editColumn('image', function ($row) {
-                    return '<div style="display: flex;"><img src="'.$row->image_url.'" alt="Product image" class="product-thumbnail-small"></div>';
+                    $url = isset($row->image_url) ? $row->image_url : (isset($row->image) && $row->image ? asset('/uploads/img/'.rawurlencode($row->image)) : asset('/img/default.png'));
+                    return '<div style="display: flex;"><img src="'.e($url).'" alt="Product image" class="product-thumbnail-small"></div>';
                 })
                 ->editColumn('type', '@lang("lang_v1." . $type)')
                 ->addColumn('mass_delete', function ($row) {
@@ -352,10 +358,15 @@ class ProductController extends Controller
                     return e($row->product_custom_field2 ?? '');
                 })
                 ->filterColumn('products.sku', function ($query, $keyword) {
-                    $query->whereHas('variations', function ($q) use ($keyword) {
-                        $q->where('sub_sku', 'like', "%{$keyword}%");
-                    })
-                    ->orWhere('products.sku', 'like', "%{$keyword}%");
+                    if (trim((string) $keyword) === '') {
+                        return;
+                    }
+                    $query->where(function ($q) use ($keyword) {
+                        $q->whereHas('variations', function ($vq) use ($keyword) {
+                            $vq->where('sub_sku', 'like', "%{$keyword}%");
+                        })
+                        ->orWhere('products.sku', 'like', "%{$keyword}%");
+                    });
                 })
                 ->setRowAttr([
                     'data-href' => function ($row) {
@@ -656,6 +667,8 @@ class ProductController extends Controller
                     'single_dpp_inc_tax' => $request->input('single_dpp_inc_tax', 0),
                     'profit_percent' => $request->input('profit_percent', 0),
                     'location_ids' => $location_ids,
+                    'transaction_date' => \Carbon::now()->format('Y-m-d H:i:s'),
+                    'user_id' => $request->session()->get('user.id'),
                 ]);
                 $product = $matrixResult['first'];
                 $all_product_ids = $matrixResult['product_ids'] ?? [];

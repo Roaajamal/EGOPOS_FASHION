@@ -303,6 +303,9 @@ class ProductUtil extends Util
             $location_ids = [$location_ids];
         }
         $location_ids = array_values(array_filter($location_ids));
+        $business_id = $product_details['business_id'] ?? null;
+        $transaction_date = $options['transaction_date'] ?? \Carbon::now()->format('Y-m-d H:i:s');
+        $user_id = $options['user_id'] ?? null;
 
         $base_name = $product_details['name'] ?? '';
 
@@ -349,7 +352,23 @@ class ProductUtil extends Util
                     $dsp_inc_tax
                 );
 
-                if ($product->enable_stock == 1 && $qty > 0 && ! empty($location_ids)) {
+                if ($product->enable_stock == 1 && $qty > 0 && ! empty($location_ids) && $business_id && $user_id) {
+                    $variation = $product->variations()->first();
+                    if ($variation) {
+                        foreach ($location_ids as $loc_id) {
+                            $this->addOpeningStockForVariation(
+                                $business_id,
+                                $product,
+                                $variation->id,
+                                $loc_id,
+                                $qty,
+                                $dpp,
+                                $transaction_date,
+                                $user_id
+                            );
+                        }
+                    }
+                } elseif ($product->enable_stock == 1 && $qty > 0 && ! empty($location_ids)) {
                     $variation = $product->variations()->first();
                     if ($variation) {
                         foreach ($location_ids as $loc_id) {
@@ -1287,6 +1306,59 @@ class ProductUtil extends Util
         }
 
         return $variation;
+    }
+
+    /**
+     * Adds opening stock for one product variation at one location (used by size/color matrix).
+     * Creates opening_stock transaction + purchase line so FIFO mapping works (e.g. stock transfer).
+     *
+     * @param  int  $business_id
+     * @param  \App\Product  $product
+     * @param  int  $variation_id
+     * @param  int  $location_id
+     * @param  float  $qty
+     * @param  float  $purchase_price
+     * @param  string  $transaction_date
+     * @param  int  $user_id
+     * @return void
+     */
+    public function addOpeningStockForVariation($business_id, $product, $variation_id, $location_id, $qty, $purchase_price, $transaction_date, $user_id)
+    {
+        $qty = $this->num_uf($qty);
+        if ($qty <= 0) {
+            return;
+        }
+        $tax_percent = ! empty($product->product_tax->amount) ? $product->product_tax->amount : 0;
+        $tax_id = ! empty($product->product_tax->id) ? $product->product_tax->id : null;
+        $purchase_price = $this->num_uf($purchase_price);
+        $item_tax = $this->calc_percentage($purchase_price, $tax_percent);
+        $purchase_price_inc_tax = $purchase_price + $item_tax;
+        $purchase_total = $purchase_price_inc_tax * $qty;
+
+        $purchase_line = new PurchaseLine();
+        $purchase_line->product_id = $product->id;
+        $purchase_line->variation_id = $variation_id;
+        $purchase_line->item_tax = $item_tax;
+        $purchase_line->tax_id = $tax_id;
+        $purchase_line->quantity = $qty;
+        $purchase_line->pp_without_discount = $purchase_price;
+        $purchase_line->purchase_price = $purchase_price;
+        $purchase_line->purchase_price_inc_tax = $purchase_price_inc_tax;
+
+        $transaction = Transaction::create([
+            'type' => 'opening_stock',
+            'opening_stock_product_id' => $product->id,
+            'status' => 'received',
+            'business_id' => $business_id,
+            'transaction_date' => $transaction_date,
+            'total_before_tax' => $purchase_total,
+            'location_id' => $location_id,
+            'final_total' => $purchase_total,
+            'payment_status' => 'paid',
+            'created_by' => $user_id,
+        ]);
+        $transaction->purchase_lines()->save($purchase_line);
+        $this->updateProductQuantity($location_id, $product->id, $variation_id, $this->num_f($qty), 0, null, false);
     }
 
     /**
