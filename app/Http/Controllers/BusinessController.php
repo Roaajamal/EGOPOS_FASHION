@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Brands;
 use App\Business;
+use App\BusinessLocation;
 use App\Category;
 use App\Currency;
 use App\Notifications\TestEmailNotification;
@@ -353,11 +354,12 @@ class BusinessController extends Controller
         // لإعدادات المنتج: قوائم للقيم الافتراضية
         $categories = Category::forDropdown($business_id, 'product');
         $brands = Brands::forDropdown($business_id);
+        $business_locations = BusinessLocation::forDropdown($business_id);
         $productUtil = app(ProductUtil::class);
         $barcode_types = $productUtil->barcode_types();
         $barcode_default = $productUtil->barcode_default();
 
-        return view('business.settings', compact('business', 'currencies', 'tax_rates', 'timezone_list', 'months', 'accounting_methods', 'commission_agent_dropdown', 'units_dropdown', 'date_formats', 'shortcuts', 'pos_settings', 'modules', 'theme_colors', 'email_settings', 'sms_settings', 'mail_drivers', 'allow_superadmin_email_settings', 'custom_labels', 'common_settings', 'weighing_scale_setting', 'payment_types', 'categories', 'brands', 'barcode_types', 'barcode_default'));
+        return view('business.settings', compact('business', 'currencies', 'tax_rates', 'timezone_list', 'months', 'accounting_methods', 'commission_agent_dropdown', 'units_dropdown', 'date_formats', 'shortcuts', 'pos_settings', 'modules', 'theme_colors', 'email_settings', 'sms_settings', 'mail_drivers', 'allow_superadmin_email_settings', 'custom_labels', 'common_settings', 'weighing_scale_setting', 'payment_types', 'categories', 'brands', 'barcode_types', 'barcode_default', 'business_locations'));
     }
 
     /**

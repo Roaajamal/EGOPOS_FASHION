@@ -88,6 +88,10 @@ class PrintService
             'auto_print'       => $auto_print ? 1 : 0,
             'default_printer'  => $default_printer,
         ];
+        $product_ids = $options['product_ids'] ?? [];
+        if (! empty($product_ids) && is_array($product_ids)) {
+            $params['product_ids'] = implode(',', array_map('intval', $product_ids));
+        }
 
         $query = http_build_query($params);
 
@@ -111,14 +115,20 @@ class PrintService
             $print_copies = 999;
         }
 
-        return http_build_query([
+        $params = [
             'print_product_id' => $productId,
             'print_all'        => 1,
             'print_copies'     => $print_copies,
             'print_send_mode'  => $print_send_mode,
             'auto_print'       => 1,
             'default_printer'  => $default_printer,
-        ]);
+        ];
+        $product_ids = $options['product_ids'] ?? [];
+        if (! empty($product_ids) && is_array($product_ids)) {
+            $params['product_ids'] = implode(',', array_map('intval', $product_ids));
+        }
+
+        return http_build_query($params);
     }
 
     /**

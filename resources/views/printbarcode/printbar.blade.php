@@ -233,6 +233,14 @@
             margin-bottom: 5px;
         }
 
+        .product-variation-label {
+            display: block;
+            font-size: 12px;
+            color: var(--primary);
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
         .product-meta {
             display: flex;
             gap: 15px;
@@ -515,7 +523,7 @@
                                     <option value="">جاري تحميل الطابعات...</option>
                                 </select>
                             </div>
-                            <div class="control-group">
+                            <div class="control-group" style="display: none;">
                                 <label>📏 أبعاد الملصق على الطابعة (مم)</label>
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                                     <div>
@@ -532,10 +540,10 @@
                                     🖨️ XPrinter (50×25 مم)
                                 </button>
                             </div>
-                            <div class="control-group">
+                            <div class="control-group" style="display: none;">
                                 <label>📤 طريقة الإرسال للطابعة</label>
                                 <select id="printSendMode" class="form-control" style="padding: 10px 12px;">
-                                    <option value="all_at_once">طباعة مباشرة للكل — إرسال واحد لكل الملصقات</option>
+                                    <option value="all_at_once" selected>طباعة مباشرة للكل — إرسال واحد لكل الملصقات</option>
                                     <option value="one_by_one">وحدة وحدة — إرسال كل ملصق على حدة</option>
                                 </select>
                                
@@ -595,6 +603,18 @@
                                     @php
                                         $barcode = $variation->sub_sku ?: $p->sku;
                                         $price = $variation->sell_price_inc_tax ?? $variation->default_sell_price ?? 0;
+                                        $cf1 = trim($p->product_custom_field1 ?? '');
+                                        $cf2 = trim($p->product_custom_field2 ?? '');
+                                        $variationName = trim($variation->name ?? '');
+                                        $colorSizeLabel = '';
+                                        if ($cf1 !== '' || $cf2 !== '') {
+                                            $parts = [];
+                                            if ($cf1 !== '') $parts[] = 'اللون: ' . $cf1;
+                                            if ($cf2 !== '') $parts[] = 'المقاس: ' . $cf2;
+                                            $colorSizeLabel = implode(' — ', $parts);
+                                        } elseif ($variationName !== '' && $variationName !== 'DUMMY') {
+                                            $colorSizeLabel = 'اللون والمقاس: ' . $variationName;
+                                        }
                                     @endphp
                                     <div class="product-item" 
                                          data-id="{{ $p->id }}" 
@@ -602,9 +622,14 @@
                                          data-barcode="{{ $barcode }}"
                                          data-name="{{ $p->name }}" 
                                          data-price="{{ $price }}" 
-                                         data-brand="{{ optional($p->brand)->name ?? '' }}">
+                                         data-brand="{{ optional($p->brand)->name ?? '' }}"
+                                         data-custom-field-1="{{ $p->product_custom_field1 ?? '' }}"
+                                         data-custom-field-2="{{ $p->product_custom_field2 ?? '' }}">
                                         <div class="product-info">
                                             <h4>{{ $p->name }}</h4>
+                                            @if($colorSizeLabel !== '')
+                                            <span class="product-variation-label">{{ $colorSizeLabel }}</span>
+                                            @endif
                                             <div class="product-meta">
                                                 <span>SKU: {{ $p->sku }}</span>
                                                 <span>السعر: {{ number_format($price, 2) }}</span>
@@ -695,6 +720,7 @@
         const _token = "{{ csrf_token() }}";
         const printAfterSaveProductId = {{ $print_after_save_product_id ?? 'null' }};
         const printAfterSaveAll = {{ $print_after_save_all ?? 0 }};
+        const printAfterSaveProductIds = @json(isset($print_after_save_product_ids) ? $print_after_save_product_ids : []);
         const printCopiesFromCreate = {{ (int)($print_copies ?? 1) }};
         const printSendModeFromCreate = "{{ $print_send_mode ?? 'one_by_one' }}";
         const autoPrintMode = {{ isset($auto_print) && $auto_print ? 'true' : 'false' }};
@@ -849,7 +875,9 @@ qz.security.setSignaturePromise(function(toSign) {
                 $.get(productVariationsUrl + '/' + productId)
                     .done(function(res){
                         if (!res.success) {
-                            addProductDirect($item, productId, defaultBarcode, productName, defaultPrice, productBrand);
+                            var cf1 = ($item.data('custom-field-1') != null && $item.data('custom-field-1') !== '') ? String($item.data('custom-field-1')) : '';
+                            var cf2 = ($item.data('custom-field-2') != null && $item.data('custom-field-2') !== '') ? String($item.data('custom-field-2')) : '';
+                            addProductDirect($item, productId, defaultBarcode, productName, defaultPrice, productBrand, undefined, undefined, cf1, cf2);
                             return;
                         }
                         const byColor = res.by_color || [];
@@ -872,34 +900,49 @@ qz.security.setSignaturePromise(function(toSign) {
                         } else if (combinations && combinations.length > 0) {
                             combinations.forEach(function(c){
                                 var raw = c.label || c.value || '';
-                                var parts = (raw + '').split(/\s*[-–]\s*/).map(function(p){ return p.trim(); });
+                                var parts = (raw + '').split(/\s*[-–]\s*/).map(function(p){ return p.trim(); }).filter(Boolean);
+                                var cf1 = (c.custom_field_1 != null && c.custom_field_1 !== '') ? String(c.custom_field_1) : '';
+                                var cf2 = (c.custom_field_2 != null && c.custom_field_2 !== '') ? String(c.custom_field_2) : '';
+                                if (!cf1 || !cf2) {
+                                    if (parts.length >= 3) {
+                                        cf1 = cf1 || (parts[parts.length - 2] || '');
+                                        cf2 = cf2 || (parts[parts.length - 1] || '');
+                                    } else if (parts.length === 2) {
+                                        cf1 = cf1 || (parts[0] || '');
+                                        cf2 = cf2 || (parts[1] || '');
+                                    } else if (parts.length === 1) {
+                                        cf2 = cf2 || (parts[0] || '');
+                                    }
+                                }
                                 flatList.push({
                                     sub_sku: c.sub_sku,
                                     label: cleanVariationLabel(raw) || raw,
                                     sell_price_inc_tax: c.sell_price_inc_tax,
                                     variation_id: c.variation_id,
-                                    custom_field_1: parts[0] || '',
-                                    custom_field_2: parts[1] || ''
+                                    custom_field_1: cf1,
+                                    custom_field_2: cf2
                                 });
                             });
                         }
 
                         if (flatList.length <= 1) {
+                            var cf1 = flatList[0] ? (flatList[0].custom_field_1 || '').toString() : '';
+                            var cf2 = flatList[0] ? (flatList[0].custom_field_2 || '').toString() : '';
+                            if (!cf1 && ($item.data('custom-field-1') != null && $item.data('custom-field-1') !== '')) cf1 = String($item.data('custom-field-1'));
+                            if (!cf2 && ($item.data('custom-field-2') != null && $item.data('custom-field-2') !== '')) cf2 = String($item.data('custom-field-2'));
                             if (flatList.length === 1) {
                                 var lbl = (flatList[0].label || '').trim();
                                 currentProduct.id = productId;
                                 currentProduct.barcode = flatList[0].sub_sku;
                                 currentProduct.name = lbl ? (productName + ' - ' + lbl) : productName;
                                 currentProduct.name_main = productName;
-                                currentProduct.custom_field_1 = (flatList[0].custom_field_1 || '').toString();
-                                currentProduct.custom_field_2 = (flatList[0].custom_field_2 || '').toString();
+                                currentProduct.custom_field_1 = cf1;
+                                currentProduct.custom_field_2 = cf2;
                                 currentProduct.price = (flatList[0].sell_price_inc_tax != null ? parseFloat(flatList[0].sell_price_inc_tax).toFixed(2) : '0.00');
                                 currentProduct.brand = productBrand;
                                 renderLabelPreview();
                             }
                             var addName = productName + (flatList[0] && flatList[0].label ? ' - ' + flatList[0].label : '');
-                            var cf1 = flatList[0] ? (flatList[0].custom_field_1 || '') : '';
-                            var cf2 = flatList[0] ? (flatList[0].custom_field_2 || '') : '';
                             addProductDirect($item, productId, flatList[0] ? flatList[0].sub_sku : defaultBarcode, addName, flatList[0] ? (flatList[0].sell_price_inc_tax != null ? parseFloat(flatList[0].sell_price_inc_tax).toFixed(2) : '0') : defaultPrice, productBrand, flatList[0] ? productId + '_' + (flatList[0].variation_id || flatList[0].sub_sku) : productId, productName, cf1, cf2);
                             return;
                         }
@@ -939,7 +982,9 @@ qz.security.setSignaturePromise(function(toSign) {
                         }
                     })
                     .fail(function(){
-                        addProductDirect($item, productId, defaultBarcode, productName, defaultPrice, productBrand);
+                        var cf1 = ($item.data('custom-field-1') != null && $item.data('custom-field-1') !== '') ? String($item.data('custom-field-1')) : '';
+                        var cf2 = ($item.data('custom-field-2') != null && $item.data('custom-field-2') !== '') ? String($item.data('custom-field-2')) : '';
+                        addProductDirect($item, productId, defaultBarcode, productName, defaultPrice, productBrand, undefined, undefined, cf1, cf2);
                     });
             });
 
@@ -1048,6 +1093,8 @@ qz.security.setSignaturePromise(function(toSign) {
                     currentProduct.brand = firstAdded.brand || '';
                     currentProduct.price = firstAdded.price;
                     currentProduct.barcode = firstAdded.barcode;
+                    currentProduct.custom_field_1 = (firstAdded.custom_field_1 != null ? firstAdded.custom_field_1 : '').toString();
+                    currentProduct.custom_field_2 = (firstAdded.custom_field_2 != null ? firstAdded.custom_field_2 : '').toString();
                     renderLabelPreview();
                 }
                 $('#combosPanel').hide();
@@ -1069,17 +1116,20 @@ qz.security.setSignaturePromise(function(toSign) {
 
             $('#productsContainer').on('change', '.quantity-input', function(){
                 const $item = $(this).closest('.product-item');
-                const productId = $item.data('id');
-                const quantity = parseInt($(this).val()) || 1;
-                
-                if (selectedProducts.has(productId)) {
-                    selectedProducts.get(productId).quantity = quantity;
-                    updateSelectedProductsList();
-                }
+                const productId = parseInt($item.data('id'), 10);
+                const quantity = Math.max(1, Math.min(999, parseInt($(this).val(), 10) || 1));
+                $(this).val(quantity);
+                // تحديث الكمية لجميع العناصر المحددة التابعة لهذا المنتج (المفتاح قد يكون productId أو productId_variationId)
+                selectedProducts.forEach(function(item, key) {
+                    if (item.id == productId) {
+                        item.quantity = quantity;
+                    }
+                });
+                updateSelectedProductsList();
             });
 
             // بعد «حفظ وطباعة»: انتظار تحميل الطابعات ثم اختيار الطابعة الافتراضية وطباعة كل المقاسات
-            if (printAfterSaveProductId && printAfterSaveAll) {
+            if ((printAfterSaveProductId && printAfterSaveAll) || (printAfterSaveProductIds && printAfterSaveProductIds.length > 0)) {
                 function waitForPrinters(maxMs, intervalMs) {
                     maxMs = maxMs || 6000;
                     intervalMs = intervalMs || 150;
@@ -1100,82 +1150,168 @@ qz.security.setSignaturePromise(function(toSign) {
                         }, intervalMs);
                     });
                 }
-                function runAutoPrint() {
-                    waitForPrinters(5000).then(function(ready) {
-                        var $sel = $('#printers');
-                        if ($sel.find('option').length > 1) {
-                            var hasDefault = false;
-                            if (typeof defaultPrinterName === 'string' && defaultPrinterName) {
-                                var defLower = defaultPrinterName.toLowerCase();
-                                $sel.find('option').each(function() {
-                                    var v = $(this).val();
-                                    if (v && v.toLowerCase() === defLower) {
-                                        $sel.val(v);
-                                        hasDefault = true;
-                                        return false;
-                                    }
-                                });
-                            }
-                            if (!hasDefault) {
-                                var firstVal = $sel.find('option').eq(1).val();
-                                if (firstVal) $sel.val(firstVal);
-                            }
+                function setDefaultPrinter() {
+                    var $sel = $('#printers');
+                    if ($sel.find('option').length > 1) {
+                        var hasDefault = false;
+                        if (typeof defaultPrinterName === 'string' && defaultPrinterName) {
+                            var defLower = defaultPrinterName.toLowerCase();
+                            $sel.find('option').each(function() {
+                                var v = $(this).val();
+                                if (v && v.toLowerCase() === defLower) {
+                                    $sel.val(v);
+                                    hasDefault = true;
+                                    return false;
+                                }
+                            });
                         }
-                        $.get(productVariationsUrl + '/' + printAfterSaveProductId).done(function(res){
-                            if (!res.success) return;
-                            var byColor = res.by_color || [];
-                            var combinations = res.combinations || [];
-                            var flatList = [];
-                            if (byColor && byColor.length > 0) {
-                                byColor.forEach(function(g){
-                                    (g.sizes || []).forEach(function(s){
-                                        var raw = s.label || (g.color + ' - ' + s.size);
-                                        flatList.push({
-                                            sub_sku: s.sub_sku,
-                                            label: cleanVariationLabel(raw) || raw,
-                                            sell_price_inc_tax: s.sell_price_inc_tax,
-                                            variation_id: s.variation_id,
-                                            custom_field_1: (g.color || '').toString().trim(),
-                                            custom_field_2: (s.size || '').toString().trim()
-                                        });
-                                    });
-                                });
-                            } else if (combinations && combinations.length > 0) {
-                                combinations.forEach(function(c){
-                                    var raw = c.label || c.value || '';
-                                    var parts = (raw + '').split(/\s*[-–]\s*/).map(function(p){ return p.trim(); });
-                                    flatList.push({
-                                        sub_sku: c.sub_sku,
-                                        label: cleanVariationLabel(raw) || raw,
-                                        sell_price_inc_tax: c.sell_price_inc_tax,
-                                        variation_id: c.variation_id,
-                                        custom_field_1: parts[0] || '',
-                                        custom_field_2: parts[1] || ''
-                                    });
-                                });
-                            }
-                            // منتج فردي بدون توليفات من السيرفر — نستخدم المنتج كملصق واحد للطباعة التلقائية
-                            if (flatList.length === 0 && res.product) {
+                        if (!hasDefault) {
+                            var firstVal = $sel.find('option').eq(1).val();
+                            if (firstVal) $sel.val(firstVal);
+                        }
+                    }
+                }
+                function addProductToSelection(res, productId) {
+                    if (!res.success) return;
+                    var byColor = res.by_color || [];
+                    var combinations = res.combinations || [];
+                    var flatList = [];
+                    if (byColor && byColor.length > 0) {
+                        byColor.forEach(function(g){
+                            (g.sizes || []).forEach(function(s){
+                                var raw = s.label || (g.color + ' - ' + s.size);
                                 flatList.push({
-                                    sub_sku: res.product.sku || '',
-                                    label: res.product.name || '',
-                                    sell_price_inc_tax: 0,
-                                    variation_id: null,
-                                    custom_field_1: '',
-                                    custom_field_2: ''
+                                    sub_sku: s.sub_sku,
+                                    label: cleanVariationLabel(raw) || raw,
+                                    sell_price_inc_tax: s.sell_price_inc_tax,
+                                    variation_id: s.variation_id,
+                                    custom_field_1: (g.color || '').toString().trim(),
+                                    custom_field_2: (s.size || '').toString().trim()
                                 });
-                            }
-                            if (flatList.length === 0) return;
-                            var productName = (res.product && res.product.name) ? res.product.name : '';
-                            var productBrand = '';
-                            var productId = res.product && res.product.id ? res.product.id : printAfterSaveProductId;
-                            currentCombosProduct = { id: productId, name: productName, brand: productBrand };
-                            currentCombosList = flatList;
-                            addSelectedCombosToPrint(true);
+                            });
+                        });
+                    } else if (combinations && combinations.length > 0) {
+                        combinations.forEach(function(c){
+                            var raw = c.label || c.value || '';
+                            var parts = (raw + '').split(/\s*[-–]\s*/).map(function(p){ return p.trim(); });
+                            flatList.push({
+                                sub_sku: c.sub_sku,
+                                label: cleanVariationLabel(raw) || raw,
+                                sell_price_inc_tax: c.sell_price_inc_tax,
+                                variation_id: c.variation_id,
+                                custom_field_1: parts[0] || '',
+                                custom_field_2: parts[1] || ''
+                            });
+                        });
+                    }
+                    if (flatList.length === 0 && res.product) {
+                        flatList.push({
+                            sub_sku: res.product.sku || '',
+                            label: res.product.name || '',
+                            sell_price_inc_tax: 0,
+                            variation_id: null,
+                            custom_field_1: (res.product.custom_field_1 != null ? res.product.custom_field_1 : '').toString(),
+                            custom_field_2: (res.product.custom_field_2 != null ? res.product.custom_field_2 : '').toString()
+                        });
+                    }
+                    if (flatList.length === 0) return;
+                    var productName = (res.product && res.product.name) ? res.product.name : '';
+                    var productBrand = (res.product && res.product.brand) ? res.product.brand : '';
+                    var pid = res.product && res.product.id ? res.product.id : productId;
+                    var copies = (typeof printCopiesFromCreate !== 'undefined' && printCopiesFromCreate > 0) ? printCopiesFromCreate : 1;
+                    flatList.forEach(function(s){
+                        var key = pid + '_' + (s.variation_id || s.sub_sku);
+                        var name = productName + (s.label ? ' - ' + s.label : '');
+                        selectedProducts.set(key, {
+                            id: pid,
+                            sku: s.sub_sku,
+                            barcode: s.sub_sku,
+                            name: name,
+                            name_main: productName,
+                            price: (s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(2) : '0.00'),
+                            brand: productBrand,
+                            quantity: copies,
+                            custom_field_1: (s.custom_field_1 != null ? s.custom_field_1 : '').toString(),
+                            custom_field_2: (s.custom_field_2 != null ? s.custom_field_2 : '').toString()
                         });
                     });
                 }
-                setTimeout(runAutoPrint, 500);
+                function runAutoPrint() {
+                    // تشغيل انتظار الطابعات وجلب بيانات المنتجات بالتوازي لأقصى سرعة
+                    var printersReady = waitForPrinters(5000);
+                    var dataReady;
+                    if (printAfterSaveProductIds && printAfterSaveProductIds.length > 0) {
+                        // جلب كل المنتجات بالتوازي (طلب واحد لكل منتج في نفس الوقت)
+                        dataReady = Promise.all(printAfterSaveProductIds.map(function(pid) {
+                            return $.get(productVariationsUrl + '/' + pid);
+                        })).then(function(results) {
+                            results.forEach(function(res, i) {
+                                addProductToSelection(res, printAfterSaveProductIds[i]);
+                            });
+                        });
+                    } else {
+                        dataReady = $.get(productVariationsUrl + '/' + printAfterSaveProductId);
+                    }
+                    Promise.all([printersReady, dataReady]).then(function(arr) {
+                        setDefaultPrinter();
+                        if (printAfterSaveProductIds && printAfterSaveProductIds.length > 0) {
+                            if (selectedProducts.size > 0) onPrintSelected();
+                            return;
+                        }
+                        // منتج واحد (تباينات متعددة)
+                        var res = arr[1];
+                        if (!res || !res.success) return;
+                        var byColor = res.by_color || [];
+                        var combinations = res.combinations || [];
+                        var flatList = [];
+                        if (byColor && byColor.length > 0) {
+                            byColor.forEach(function(g){
+                                (g.sizes || []).forEach(function(s){
+                                    var raw = s.label || (g.color + ' - ' + s.size);
+                                    flatList.push({
+                                        sub_sku: s.sub_sku,
+                                        label: cleanVariationLabel(raw) || raw,
+                                        sell_price_inc_tax: s.sell_price_inc_tax,
+                                        variation_id: s.variation_id,
+                                        custom_field_1: (g.color || '').toString().trim(),
+                                        custom_field_2: (s.size || '').toString().trim()
+                                    });
+                                });
+                            });
+                        } else if (combinations && combinations.length > 0) {
+                            combinations.forEach(function(c){
+                                var raw = c.label || c.value || '';
+                                var parts = (raw + '').split(/\s*[-–]\s*/).map(function(p){ return p.trim(); });
+                                flatList.push({
+                                    sub_sku: c.sub_sku,
+                                    label: cleanVariationLabel(raw) || raw,
+                                    sell_price_inc_tax: c.sell_price_inc_tax,
+                                    variation_id: c.variation_id,
+                                    custom_field_1: parts[0] || '',
+                                    custom_field_2: parts[1] || ''
+                                });
+                            });
+                        }
+                        if (flatList.length === 0 && res.product) {
+                            flatList.push({
+                                sub_sku: res.product.sku || '',
+                                label: res.product.name || '',
+                                sell_price_inc_tax: 0,
+                                variation_id: null,
+                                custom_field_1: (res.product.custom_field_1 != null ? res.product.custom_field_1 : '').toString(),
+                                custom_field_2: (res.product.custom_field_2 != null ? res.product.custom_field_2 : '').toString()
+                            });
+                        }
+                        if (flatList.length === 0) return;
+                        var productName = (res.product && res.product.name) ? res.product.name : '';
+                        var productBrand = '';
+                        var productId = res.product && res.product.id ? res.product.id : printAfterSaveProductId;
+                        currentCombosProduct = { id: productId, name: productName, brand: productBrand };
+                        currentCombosList = flatList;
+                        addSelectedCombosToPrint(true);
+                    });
+                }
+                setTimeout(runAutoPrint, 80);
             }
         });
 
@@ -1279,33 +1415,31 @@ qz.security.setSignaturePromise(function(toSign) {
                 preview.append(dom);
             }
 
-            // إذا التصميم ما فيه cf1/cf2 لكن عندنا لون ومقاس — نعرضهم في المعاينة بموضع افتراضي
+            // إذا التصميم ما فيه عنصر cf1/cf2 أصلاً (غير معرّف) وعندنا لون ومقاس — نعرضهم بموضع افتراضي. لو العنصر معرّف ومخفي (visible: false) لا نعرضه أبداً.
             const cf1 = (currentProduct.custom_field_1 != null ? currentProduct.custom_field_1 : '').toString().trim();
             const cf2 = (currentProduct.custom_field_2 != null ? currentProduct.custom_field_2 : '').toString().trim();
-            const hasCf1InDesign = elements.cf1 && elements.cf1.visible !== false;
-            const hasCf2InDesign = elements.cf2 && elements.cf2.visible !== false;
-            if ((cf1 || cf2) && (!hasCf1InDesign || !hasCf2InDesign)) {
-                const defLeft = '19px';
-                const defFont = '13px';
-                const defFamily = 'Arial';
-                if (cf1 && !hasCf1InDesign) {
-                    preview.append($('<div/>').addClass('element').css({
-                        left: defLeft,
-                        top: '34px',
-                        'font-size': defFont,
-                        'font-family': defFamily,
-                        color: '#000'
-                    }).text(cf1));
-                }
-                if (cf2 && !hasCf2InDesign) {
-                    preview.append($('<div/>').addClass('element').css({
-                        left: defLeft,
-                        top: '45px',
-                        'font-size': defFont,
-                        'font-family': defFamily,
-                        color: '#000'
-                    }).text(cf2));
-                }
+            const hasCf1Element = !!elements.cf1;
+            const hasCf2Element = !!elements.cf2;
+            const defLeft = '19px';
+            const defFont = '13px';
+            const defFamily = 'Arial';
+            if (cf1 && !hasCf1Element) {
+                preview.append($('<div/>').addClass('element').css({
+                    left: defLeft,
+                    top: '34px',
+                    'font-size': defFont,
+                    'font-family': defFamily,
+                    color: '#000'
+                }).text(cf1));
+            }
+            if (cf2 && !hasCf2Element) {
+                preview.append($('<div/>').addClass('element').css({
+                    left: defLeft,
+                    top: '45px',
+                    'font-size': defFont,
+                    'font-family': defFamily,
+                    color: '#000'
+                }).text(cf2));
             }
 
             // العناصر الإضافية — بنفس الاسم والباركود المختار
@@ -1364,10 +1498,13 @@ qz.security.setSignaturePromise(function(toSign) {
                 .replace(/123456789012/gi, barcode);
 
             if (key === 'barcode-container' || /barcode/i.test(key)) return barcode || result || '';
+            // عناصر اللون والمقاس: بالـ key (cf1/cf2) أو بنص العنصر (اللون، مقاس، color، size) — نعرض القيمة فقط ولا نعرض اسم المنتج أبداً
+            var isColorLabel = /^cf1$/.test(key) || /لون|color/.test(txt) || /لون|color/.test(key);
+            var isSizeLabel = /^cf2$/.test(key) || /مقاس|size/.test(txt) || /مقاس|size/.test(key);
+            if (isColorLabel) return (cf1 && cf1.trim() !== '') ? cf1 : (txt.replace(/اسم المنتج/gi, '').replace(/\{\{\s*product_name\s*\}\}/gi, '').trim() || '');
+            if (isSizeLabel) return (cf2 && cf2.trim() !== '') ? cf2 : (txt.replace(/اسم المنتج/gi, '').replace(/\{\{\s*product_name\s*\}\}/gi, '').trim() || '');
+            if (/^cf(\d+)$/.test(key)) { var n = parseInt(RegExp.$1, 10); var v = (currentProduct['custom_field_' + n] != null ? currentProduct['custom_field_' + n] : '').toString().trim(); return v !== '' ? v : txt; }
             if (key === 'lblName' || (/lblName|product_name|name/i.test(key) && key !== 'lblPrice' && !/^cf\d+$/.test(key))) return name_main || result || name;
-            if (/^cf1$/.test(key)) return cf1 || result || txt;
-            if (/^cf2$/.test(key)) return cf2 || result || txt;
-            if (/^cf(\d+)$/.test(key)) { var n = parseInt(RegExp.$1, 10); var v = currentProduct['custom_field_' + n]; return (v != null ? v : '').toString() || result || txt; }
             return result || txt;
         }
 
@@ -1588,14 +1725,14 @@ qz.security.setSignaturePromise(function(toSign) {
             }
             var printCf1 = (currentProduct.custom_field_1 != null ? currentProduct.custom_field_1 : '').toString().trim();
             var printCf2 = (currentProduct.custom_field_2 != null ? currentProduct.custom_field_2 : '').toString().trim();
-            var hasCf1InDesign = elements.cf1 && elements.cf1.visible !== false;
-            var hasCf2InDesign = elements.cf2 && elements.cf2.visible !== false;
-            if (printCf1 && !hasCf1InDesign) {
+            var hasCf1Element = !!elements.cf1;
+            var hasCf2Element = !!elements.cf2;
+            if (printCf1 && !hasCf1Element) {
                 tempDiv.append($('<div/>').addClass('element label-text').attr('data-print', '1').css({
                     left: '19px', top: '34px', 'font-size': '10pt', 'font-family': 'Arial', color: '#000000'
                 }).text(printCf1));
             }
-            if (printCf2 && !hasCf2InDesign) {
+            if (printCf2 && !hasCf2Element) {
                 tempDiv.append($('<div/>').addClass('element label-text').attr('data-print', '1').css({
                     left: '19px', top: '45px', 'font-size': '10pt', 'font-family': 'Arial', color: '#000000'
                 }).text(printCf2));
@@ -1736,9 +1873,12 @@ qz.security.setSignaturePromise(function(toSign) {
                 currentProduct.id = product.id;
                 currentProduct.sku = product.barcode;
                 currentProduct.name = product.name;
+                currentProduct.name_main = product.name_main != null ? product.name_main : product.name;
                 currentProduct.brand = product.brand || '';
                 currentProduct.price = product.price;
                 currentProduct.barcode = product.barcode;
+                currentProduct.custom_field_1 = (product.custom_field_1 != null ? product.custom_field_1 : '').toString();
+                currentProduct.custom_field_2 = (product.custom_field_2 != null ? product.custom_field_2 : '').toString();
                 renderLabelPreview();
             }
         });

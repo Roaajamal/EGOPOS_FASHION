@@ -3,12 +3,57 @@ var global_p_category_id = null;
 var global_is_clear_local_storage = false;
 $(document).ready(function() {
     customer_set = false;
-    //Prevent enter key function except texarea
+    //Prevent enter key function except textarea (في حقل البحث نعالج Enter في keydown أدناه لتفعيل السكان)
     $('form').on('keyup keypress', function(e) {
         var keyCode = e.keyCode || e.which;
         if (keyCode === 13 && e.target.tagName != 'TEXTAREA') {
             e.preventDefault();
             return false;
+        }
+    });
+
+    // مستمع عام لسكان الباركود حتى لو المؤشر ليس على حقل البحث
+    // يجمع الأحرف السريعة ثم عند Enter يطلق بحث المنتج في #search_product
+    var barcodeBuffer = '';
+    var barcodeTimer = null;
+    $(document).on('keydown', function(e) {
+        var tag = (e.target.tagName || '').toUpperCase();
+        // لو المستخدم يكتب داخل input/textarea/select أو contenteditable لا نتدخل
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || $(e.target).is('[contenteditable=true]')) {
+            return;
+        }
+
+        var key = e.key;
+
+        if (key === 'Enter') {
+            if (barcodeBuffer.length >= 2) {
+                e.preventDefault();
+                var code = barcodeBuffer;
+                barcodeBuffer = '';
+
+                var $input = $('#search_product');
+                if ($input.length) {
+                    $input.val(code);
+                    if ($input.data('ui-autocomplete')) {
+                        $input.autocomplete('search', code);
+                    }
+                }
+            } else {
+                barcodeBuffer = '';
+            }
+            return;
+        }
+
+        // الأحرف القابلة للطباعة فقط (حرف واحد)
+        if (typeof key === 'string' && key.length === 1) {
+            barcodeBuffer += key;
+            if (barcodeTimer) {
+                clearTimeout(barcodeTimer);
+            }
+            // إذا توقف الإدخال أكثر من 500ms نعتبر أنه ليس سكان واحد
+            barcodeTimer = setTimeout(function() {
+                barcodeBuffer = '';
+            }, 500);
         }
     });
 
@@ -302,6 +347,17 @@ $(document).ready(function() {
                     .appendTo(ul);
             }
         };
+
+        // عند Enter (أو بعد سكان الباركود) — إطلاق البحث فوراً وإضافة المنتج إن وُجد واحد فقط
+        $('#search_product').on('keydown', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                var val = $(this).val().trim();
+                if (val.length >= 2) {
+                    $(this).autocomplete('search', val);
+                }
+            }
+        });
     }
 
     //Update line total and check for quantity not greater than max quantity
@@ -1728,11 +1784,11 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
 
                     round_row_to_iraqi_dinnar($(this));
 
-                 //   if (!$('#__is_mobile').length) {
-                  //      $('input#search_product')
-                    //        .focus()
-                      //      .select();
-                    //}
+                    if (!$('#__is_mobile').length) {
+                        $('input#search_product')
+                            .focus()
+                            .select();
+                    }
                 }
         });
     }
@@ -1840,11 +1896,11 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
                     round_row_to_iraqi_dinnar(this_row);
                     __currency_convert_recursively(this_row);
 
-                //    if (!$('#__is_mobile').length) {
-                  //      $('input#search_product')
-                    //        .focus()
-                      //      .select();
-                //    }
+                    if (!$('#__is_mobile').length) {
+                        $('input#search_product')
+                            .focus()
+                            .select();
+                    }
 
                     //Used in restaurant module
                     if (result.html_modifier) {
@@ -1859,11 +1915,11 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
                     $(".pos_product_div").animate({ scrollTop: $('.pos_product_div').prop("scrollHeight")}, 1000);
                 } else {
                     toastr.error(result.msg);
-                  //  if (!$('#__is_mobile').length) {
-                    //    $('input#search_product')
-                      //      .focus()
-                        //    .select();
-                    //}
+                    if (!$('#__is_mobile').length) {
+                        $('input#search_product')
+                            .focus()
+                            .select();
+                    }
                 }
             },
         });

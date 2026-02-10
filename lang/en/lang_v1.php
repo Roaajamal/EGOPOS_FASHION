@@ -1031,6 +1031,7 @@ return [
     'allow_login' => 'Allow login',
     'login_not_allowed' => 'Login not allowed',
     'labels_for_contact_custom_fields' => 'Labels for contact custom fields',
+    'labels_for_product_sizes_colors' => 'Labels for product sizes & colors (position on barcode)',
     'labels_for_product_custom_fields' => 'Labels for product custom fields',
     'labels_for_purchase_custom_fields' => 'Label for purchase custom fields',
     'labels_for_sell_custom_fields' => 'Labels for sell custom fields',

@@ -681,14 +681,14 @@ label {
             </select>
         </div>
 
-        <!-- الحقول المخصصة (من إعدادات المنتج) -->
+        <!-- اللون والمقاس (من إعدادات المنتج — التحكم بمكان ظهورهما على الباركود) -->
         @php
             $product_custom_fields = $product_custom_fields ?? [];
         @endphp
         @if(count($product_custom_fields) > 0)
         <div class="control-group">
-            <h5>📋 الحقول المخصصة</h5>
-            <p class="text-muted" style="font-size: 11px; margin-bottom: 10px;">يمكنك إظهار أو إخفاء كل حقل في التصميم.</p>
+            <h5>@lang('lang_v1.labels_for_product_sizes_colors')</h5>
+            <p class="text-muted" style="font-size: 11px; margin-bottom: 10px;">يمكنك التحكم بمكان اللون والمقاس على الملصق (X, Y) وإظهارهما أو إخفاءهما.</p>
             @foreach($product_custom_fields as $cfId => $cfLabel)
             <div class="control-group" data-element="{{ $cfId }}">
                 <div class="control-header">
