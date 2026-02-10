@@ -101,8 +101,19 @@
 
         @php
         $default_location = null;
-        if(count($business_locations) == 1){
-        $default_location = array_key_first($business_locations->toArray());
+        if (!empty($duplicate_product) && isset($duplicate_product->product_locations)) {
+            $pl = $duplicate_product->product_locations;
+            if (is_object($pl) && method_exists($pl, 'pluck')) {
+                $default_location = $pl->pluck('id')->toArray();
+            } else {
+                $default_location = is_array($pl) ? $pl : (array) $pl;
+            }
+        }
+        if ($default_location === null && !empty($common_settings['default_product_locations']) && is_array($common_settings['default_product_locations'])) {
+            $default_location = $common_settings['default_product_locations'];
+        }
+        if ($default_location === null && count($business_locations) == 1) {
+            $default_location = [array_key_first($business_locations->toArray())];
         }
         @endphp
         <div class="col-sm-4 @if(isset($common_settings['show_product_locations']) && !$common_settings['show_product_locations']) hide @endif">
@@ -352,69 +363,140 @@
         </div>
 
         <div class="form-group col-sm-12" id="product_form_part">
-            @include('product.partials.single_product_form_part', ['profit_percent' => $default_profit_percent])
+            @include('product.partials.single_product_form_part', [
+                'profit_percent' => $default_profit_percent,
+                'default_dpp' => $default_dpp ?? null,
+                'default_dpp_inc_tax' => $default_dpp_inc_tax ?? null,
+                'duplicate_product' => $duplicate_product ?? null
+            ])
         </div>
         
 {{-- ==================================================== --}}
-{{-- Size-Color Combo Section: يظهر فقط عندما يكون نوع المنتج «تباين» (variable) — بدون جدول التباين التقليدي، مع سعر واحد لجميع المقاسات --}}
+{{-- قسم الأحجام والألوان – تصميم حديث وسهل الاستخدام --}}
 {{-- ==================================================== --}}
 <div class="col-sm-12" id="size_color_combo_section" style="display: none;">
-    <div class="row">
-        <div class="col-sm-12">
-            {{-- سعر واحد لجميع المقاسات — يطبّق تلقائياً على كل اللون/المقاس --}}
-            <div class="col-sm-12" style="margin-bottom: 16px;">
-                <div class="form-group" style="max-width: 280px;">
-                    <label for="variable_single_price">سعر واحد لجميع المقاسات:</label>
-                    <input type="text" id="variable_single_price" name="variable_single_price" class="form-control input_number" placeholder="مثال: 10.00" step="0.01" value="{{ isset($duplicate_product->variable_single_price) ? $duplicate_product->variable_single_price : '' }}" />
+    <div class="panel panel-default" style="border-radius: 14px; box-shadow: 0 10px 25px rgba(0,0,0,0.06); border: 0;">
+        <div class="panel-heading" style="border-radius: 14px 14px 0 0; background: linear-gradient(135deg,#4f46e5,#7c3aed); color: #fff; padding: 14px 18px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                <div>
+                    <h3 class="panel-title" style="margin:0; font-size:17px; font-weight:700;">
+                        <i class="fa fa-tags"></i>
+                        <span style="margin-right:6px;">@lang('product.size_color_combinations')</span>
+                    </h3>
+                    <p style="margin:4px 0 0; font-size:12px; opacity:0.9;">
+                        أضف الألوان مرة واحدة، ثم الأحجام، ودع النظام ينشئ لك كل التركيبات مع كمياتها.
+                    </p>
+                </div>
+                <div id="size_color_require_locations_msg" style="display:none; margin:0;">
+                    <span class="label label-warning" style="font-size:12px; padding:6px 10px;">
+                        <i class="fa fa-exclamation-triangle"></i>
+                        اختر فروع النشاط أولاً لتفعيل الألوان والمقاسات
+                    </span>
                 </div>
             </div>
-            <div class="clearfix"></div>
-            <h4>@lang('product.size_color_combinations'):</h4>    
-            {{-- Color Input --}}
-            <div class="col-sm-6">
-                <div class="form-group">
-                    <label for="new_color">أدخل اللون:</label>
-                    <div class="input-group">
-                        <input type="text" id="new_color" class="form-control" placeholder="مثال: أسود">
-                        <span class="input-group-btn">
-                            <button type="button" id="add_color_btn" class="btn btn-primary">
-                                <i class="fa fa-plus"></i> إضافة لون
-                            </button>
-                        </span>
+        </div>
+
+        <div class="panel-body" style="background:#f9fafb; border-radius: 0 0 14px 14px;">
+            <div class="row size_color_content_block">
+
+                {{-- سعر واحد لجميع المقاسات (للمتباين فقط) --}}
+                <div class="col-sm-12 variable-only-block" style="margin-bottom: 16px; display: none;">
+                    <div class="well" style="background:#eef2ff; border:1px solid #e0e7ff; border-radius:10px; padding:10px 14px; max-width:360px;">
+                        <label for="variable_single_price" style="font-weight:600; margin-bottom:4px;">
+                            <i class="fa fa-dollar text-primary"></i>
+                            سعر واحد لجميع المقاسات
+                        </label>
+                        <input type="text" id="variable_single_price" name="variable_single_price"
+                               class="form-control input_number"
+                               placeholder="مثال: 10.00"
+                               step="0.01"
+                               value="{{ isset($duplicate_product->variable_single_price) ? $duplicate_product->variable_single_price : '' }}" />
+                        <small class="help-block" style="margin-top:4px;">يمكن تعديل السعر لكل منتج لاحقاً من شاشة الكميات إن لزم.</small>
                     </div>
-                    <small class="help-block">يمكن إضافة أكثر من لون</small>
                 </div>
-            </div>
-            
-            {{-- Sizes Management --}}
-            <div class="col-sm-6">
-                <div class="form-group">
-                    <label>إدارة الأحجام:</label>
-                    <div class="input-group">
-                        <input type="text" id="new_size" class="form-control" placeholder="مثال: 38, 40, 42">
-                        <span class="input-group-btn">
-                            <button type="button" id="add_size_btn" class="btn btn-info">
-                                <i class="fa fa-plus"></i> إضافة أحجام
-                            </button>
-                        </span>
+
+                {{-- بطاقة الألوان --}}
+                <div class="col-sm-6">
+                    <div class="well" style="background:#ffffff; border-radius:10px; border:1px solid #e5e7eb;">
+                        <h4 style="margin-top:0; font-size:15px; font-weight:700;">
+                            <i class="fa fa-palette text-primary"></i>
+                            <span style="margin-right:6px;">الألوان</span>
+                        </h4>
+                        <p style="font-size:12px; color:#6b7280; margin-bottom:8px;">أدخل لوناً واحداً في كل مرة، ثم اضغط «إضافة لون».</p>
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label for="new_color" class="sr-only">أدخل اللون</label>
+                            <div class="input-group">
+                                <input type="text" id="new_color" class="form-control" placeholder="مثال: أسود، أبيض، أزرق">
+                                <span class="input-group-btn">
+                                    <button type="button" id="add_color_btn" class="btn btn-primary">
+                                        <i class="fa fa-plus"></i> إضافة لون
+                                    </button>
+                                </span>
+                            </div>
+                        </div>
+                        <p style="font-size:12px; color:#6b7280; margin-bottom:6px;">أو اختر من الخيارات:</p>
+                        <div class="preset-colors" style="display:flex; flex-wrap:wrap; gap:6px;">
+                            @php
+                                $preset_colors = ['أسود', 'أبيض', 'أزرق', 'أحمر', 'أخضر', 'رمادي', 'بني', 'وردي', 'أصفر', 'بيج', 'كحلي', 'أخضر زيتي', 'برتقالي', 'بنفسجي'];
+                            @endphp
+                            @foreach($preset_colors as $c)
+                                <button type="button" class="btn btn-default btn-sm preset-color-option" data-color="{{ $c }}" style="border-radius:20px; padding:4px 12px;">{{ $c }}</button>
+                            @endforeach
+                        </div>
+                        <small class="help-block" style="margin-top:8px;">يمكنك إضافة عدد غير محدود من الألوان، وسيتم تطبيق الأحجام عليها تلقائياً.</small>
                     </div>
-                    <small class="help-block">أدخل الأحجام مفصولة بفاصلة (,) لتطبيقها على جميع الألوان</small>
                 </div>
-            </div>
-            
-            {{-- Color Tables Container --}}
-            <div class="col-sm-12 mt-3" id="color_tables_container">
-                <!-- Color tables will be added here -->
-            </div>
-            
-            {{-- Summary --}}
-            <div class="col-sm-12 mt-3">
-                <div class="alert alert-info" id="summary_box" style="display: none;">
-                    <i class="fa fa-info-circle"></i>
-                    <strong>الملخص:</strong>
-                    <span id="summary_text"></span>
+
+                {{-- بطاقة الأحجام --}}
+                <div class="col-sm-6">
+                    <div class="well" style="background:#ffffff; border-radius:10px; border:1px solid #e5e7eb;">
+                        <h4 style="margin-top:0; font-size:15px; font-weight:700;">
+                            <i class="fa fa-ruler-combined text-info"></i>
+                            <span style="margin-right:6px;">الأحجام</span>
+                        </h4>
+                        <p style="font-size:12px; color:#6b7280; margin-bottom:8px;">اكتب كل الأحجام مفصولة بفاصلة ثم اضغط «إضافة أحجام».</p>
+                        <div class="form-group" style="margin-bottom:8px;">
+                            <label for="new_size" class="sr-only">إدارة الأحجام</label>
+                            <div class="input-group">
+                                <input type="text" id="new_size" class="form-control" placeholder="مثال: S, M, L أو 38, 40, 42">
+                                <span class="input-group-btn">
+                                    <button type="button" id="add_size_btn" class="btn btn-info">
+                                        <i class="fa fa-plus"></i> إضافة أحجام
+                                    </button>
+                                </span>
+                            </div>
+                        </div>
+                        <p style="font-size:12px; color:#6b7280; margin-bottom:6px;">أو اختر من الخيارات:</p>
+                        <div class="preset-sizes" style="display:flex; flex-wrap:wrap; gap:6px;">
+                            {{-- أحجام حروف --}}
+                            @foreach(['XS', 'S', 'M', 'L', 'XL', 'XXL'] as $s)
+                                <button type="button" class="btn btn-default btn-sm preset-size-option" data-size="{{ $s }}" style="border-radius:20px; padding:4px 12px;">{{ $s }}</button>
+                            @endforeach
+                            <span style="width:1px; background:#e5e7eb; margin:0 4px;"></span>
+                            {{-- أحجام أرقام --}}
+                            @foreach(['34', '36', '38', '40', '42', '44', '46', '48', '50'] as $s)
+                                <button type="button" class="btn btn-default btn-sm preset-size-option" data-size="{{ $s }}" style="border-radius:20px; padding:4px 12px;">{{ $s }}</button>
+                            @endforeach
+                        </div>
+                        <small class="help-block" style="margin-top:8px;">الأحجام التي تضيفها هنا ستظهر كصفوف لكل لون، ويمكنك إدخال كمية لكل تركيبة.</small>
+                    </div>
                 </div>
-            </div>
+
+                {{-- جداول الألوان والمقاسات --}}
+                <div class="col-sm-12" id="color_tables_container" style="margin-top: 10px;">
+                    <!-- Color tables will be added here -->
+                </div>
+
+                {{-- ملخص سريع --}}
+                <div class="col-sm-12" style="margin-top: 10px;">
+                    <div class="alert alert-info" id="summary_box" style="display: none; border-radius:10px;">
+                        <i class="fa fa-info-circle"></i>
+                        <strong style="margin-left:4px;">الملخص:</strong>
+                        <span id="summary_text"></span>
+                    </div>
+                </div>
+
+            </div>{{-- /.size_color_content_block --}}
         </div>
     </div>
 </div>
@@ -503,10 +585,19 @@
     window.__restoreSizeColorQty = @json($restore_size_color_qty);
     window.__printProductId = {{ !empty($print_product_id) ? (int)$print_product_id : 0 }};
     window.__printProductUrl = @json(isset($print_product_url) ? $print_product_url : '');
+    window.__enableProductSizeColor = @json(!isset($common_settings['enable_product_size_color']) || !empty($common_settings['enable_product_size_color']));
 </script>
 <script type="text/javascript">
     $(document).ready(function() {
         __page_leave_confirmation('#product_add_form');
+
+        // إذا وُجد سعر شراء افتراضي: تحديث سعر البيع ونسبة الربح تلقائياً
+        if ($('#type').val() === 'single') {
+            var dppInc = $('input#single_dpp_inc_tax').val();
+            if (dppInc && parseFloat(String(dppInc).replace(/,/g, '')) > 0) {
+                $('input#single_dpp_inc_tax').trigger('change');
+            }
+        }
 
         // بعد العودة من «أضف الكميات» (فردي): طباعة مخفية مثل المتباين — iframe مخفي يحمّل صفحة الطباعة
         if (window.__printProductUrl && window.__printProductUrl.length > 0) {
@@ -544,66 +635,86 @@
         var allSizes = [];      // جميع الأحجام المضافة
         var colorTables = {};   // تخزين جداول الألوان
         
-        // إظهار أزرار الحفظ حسب نوع المنتج: فردي = حفظ + أضف كمية فقط | متباين = حفظ وطباعة
+        // إظهار أزرار الحفظ: فردي = كل الأزرار (حفظ، أضف كمية، حفظ وطباعة عند تفعيل الأحجام/الألوان) | كومبو = بدون حفظ وطباعة
         function toggleSubmitButtonsByType() {
-            var isVariable = ($('#type').val() === 'variable');
-            if (isVariable) {
-                $('.btn-for-single').hide();
-                $('.btn-for-variable').show();
+            var isSingle = ($('#type').val() === 'single');
+            $('.btn-for-single').show();
+            $('.btn-for-variable').hide();
+            if (isSingle && window.__enableProductSizeColor) {
                 $('.btn-print-both').show();
                 $('#print_settings_row').show();
             } else {
-                $('.btn-for-single').show();
-                $('.btn-for-variable').hide();
                 $('.btn-print-both').hide();
                 $('#print_settings_row').hide();
             }
         }
-        
-        // عند «تباين»: إخفاء جدول السعر/التباين التقليدي، إظهار قسم اللون والمقاسات فقط مع مربع السعر الواحد
-        function toggleSizeColorSection() {
-            if ($('#type').val() === 'variable') {
-                $('#product_form_part').hide();
-                $('#size_color_combo_section').show();
-                if (!$('#variable_single_price').val() && $('#single_dsp_inc_tax').length) {
-                    var v = $('#single_dsp_inc_tax').val();
-                    if (v) $('#variable_single_price').val(v);
-                }
-                var priceVal = $('#variable_single_price').val();
-                if (priceVal && typeof __write_number === 'function') {
-                    __write_number($('#single_dsp'), priceVal);
-                    __write_number($('#single_dsp_inc_tax'), priceVal);
-                }
-                if ($('#single_dpp').length && (!$('#single_dpp').val() || $('#single_dpp').val() === '')) {
-                    if (typeof __write_number === 'function') {
-                        __write_number($('#single_dpp'), 0);
-                        __write_number($('#single_dpp_inc_tax'), 0);
-                    }
-                }
+
+        // إذا لم يُختر أي فرع نشاط: لا يمكن تعبئة الأحجام/المقاسات؛ عند اختيار فروع النشاط تفتح
+        function toggleSizeColorByLocations() {
+            var locVal = $('#product_locations').val();
+            var hasLocations = (Array.isArray(locVal) && locVal.length > 0) || (locVal && String(locVal).length > 0);
+            var sectionVisible = $('#size_color_combo_section').is(':visible');
+            if (!sectionVisible) return;
+            if (!hasLocations) {
+                $('#size_color_require_locations_msg').show();
+                $('.size_color_content_block').css({'pointer-events': 'none', 'opacity': '0.6'});
+                $('#add_color_btn').prop('disabled', true);
+                $('#add_size_btn').prop('disabled', true);
+                $('#new_color').prop('disabled', true);
+                $('#new_size').prop('disabled', true);
+                $('#variable_single_price').prop('disabled', true);
+                $('#color_tables_container .size-qty-input').prop('disabled', true);
             } else {
+                $('#size_color_require_locations_msg').hide();
+                $('.size_color_content_block').css({'pointer-events': '', 'opacity': ''});
+                $('#add_color_btn').prop('disabled', false);
+                $('#add_size_btn').prop('disabled', false);
+                $('#new_color').prop('disabled', false);
+                $('#new_size').prop('disabled', false);
+                $('#variable_single_price').prop('disabled', false);
+                $('#color_tables_container .size-qty-input').prop('disabled', false);
+            }
+        }
+        $(document).on('change', '#product_locations', function() {
+            toggleSizeColorByLocations();
+        });
+
+        // فردي: جدول السعر + قسم الأحجام/الألوان (إن مُفعّل في الإعدادات). كومبو: إخفاء قسم الأحجام
+        function toggleSizeColorSection() {
+            if (!window.__enableProductSizeColor) {
+                $('#size_color_combo_section').hide();
                 $('#product_form_part').show();
+                toggleSubmitButtonsByType();
+                return;
+            }
+            var typeVal = $('#type').val();
+            $('#product_form_part').show();
+            $('.variable-only-block').hide();
+            if (typeVal === 'single') {
+                $('#size_color_combo_section').show();
+            } else {
                 $('#size_color_combo_section').hide();
                 if (typeof clearSizeColorForm === 'function') clearSizeColorForm();
             }
+            toggleSizeColorByLocations();
             toggleSubmitButtonsByType();
         }
         $('#type').change(function() {
-            if ($(this).val() === 'variable') {
-                $('#product_form_part').hide();
+            $('#product_form_part').show();
+            if (window.__enableProductSizeColor && $(this).val() === 'single') {
                 $('#size_color_combo_section').show();
-                if (typeof clearSizeColorForm === 'function') clearSizeColorForm();
             } else {
-                $('#product_form_part').show();
                 $('#size_color_combo_section').hide();
                 if (typeof clearSizeColorForm === 'function') clearSizeColorForm();
             }
+            toggleSizeColorByLocations();
             toggleSubmitButtonsByType();
         });
         toggleSizeColorSection();
         toggleSubmitButtonsByType();
 
         // استعادة بيانات الألوان والمقاسات بعد تحديث الصفحة (حفظ وطباعة)
-        if ($('#type').val() === 'variable' && window.__restoreSizeColorQty && Object.keys(window.__restoreSizeColorQty).length > 0) {
+        if ($('#type').val() === 'single' && window.__restoreSizeColorQty && Object.keys(window.__restoreSizeColorQty).length > 0) {
             var data = window.__restoreSizeColorQty;
             for (var colorName in data) {
                 if (data.hasOwnProperty(colorName) && allColors.indexOf(colorName) === -1) {
@@ -646,11 +757,11 @@
             syncVariablePriceToForm();
         });
 
-        // عندما يختار المستخدم «نوع المنتج» (التصنيف) نجعله متغيراً تلقائياً ونظهر المقاسات والألوان
+        // عند اختيار التصنيف (نوع المنتج): إبقاء النوع فردي وإظهار قسم الأحجام/الألوان
         $('#category_id').change(function() {
             var catVal = $(this).val();
             if (catVal && catVal !== '') {
-                $('#type').val('variable').trigger('change');
+                $('#type').val('single').trigger('change');
                 $('#size_color_combo_section').show();
             }
         });
@@ -731,6 +842,24 @@
             }
         });
         
+        // خيارات الألوان الجاهزة: النقر يملأ الحقل ويضيف اللون
+        $(document).on('click', '.preset-color-option', function() {
+            var color = $(this).data('color');
+            if (color) {
+                $('#new_color').val(color);
+                $('#add_color_btn').click();
+            }
+        });
+        
+        // خيارات المقاسات الجاهزة: النقر يملأ الحقل ويضيف المقاس
+        $(document).on('click', '.preset-size-option', function() {
+            var size = $(this).data('size');
+            if (size) {
+                $('#new_size').val(size);
+                $('#add_size_btn').click();
+            }
+        });
+        
         // دالة إنشاء جدول اللون
         function createColorTable(colorName) {
             var tableId = 'color_table_' + colorName.replace(/\s+/g, '_');
@@ -802,7 +931,7 @@
                                data-color="${colorName}"
                                data-size="${size}"
                                placeholder="0"
-                               value="0"
+                               value=""
                                min="0"
                                style="min-width: 100px;">
                     </td>
@@ -872,6 +1001,25 @@
             
             // تحديث الملخص
             updateSummary();
+        });
+        
+        // Tab: الانتقال لحقل الكمية التالي / السابق في قسم الألوان والمقاسات
+        $(document).on('keydown', '#color_tables_container .size-qty-input', function(e) {
+            if (e.which !== 9) return;
+            var inputs = $('#color_tables_container .size-qty-input').toArray();
+            var idx = inputs.indexOf(this);
+            if (idx === -1) return;
+            if (e.shiftKey) {
+                if (idx > 0) {
+                    e.preventDefault();
+                    inputs[idx - 1].focus();
+                }
+            } else {
+                if (idx < inputs.length - 1) {
+                    e.preventDefault();
+                    inputs[idx + 1].focus();
+                }
+            }
         });
         
         // دالة تحديث الملخص
@@ -965,8 +1113,16 @@
             var submit_type = $(this).attr('value');
             $('#submit_type').val(submit_type);
             
-            // إذا كان المنتج متغيراً
-            if ($('#type').val() === 'variable') {
+            // فردي مع أحجام/ألوان أو متباين: التحقق من الفروع والكميات
+            var isSingleWithSizes = ($('#type').val() === 'single' && allColors.length > 0);
+            if ($('#type').val() === 'variable' || isSingleWithSizes) {
+                var locVal = $('#product_locations').val();
+                var hasLocations = (Array.isArray(locVal) && locVal.length > 0) || (locVal && String(locVal).length > 0);
+                if (!hasLocations) {
+                    toastr.error('الرجاء اختيار فرع نشاط واحد على الأقل (فروع النشاط)');
+                    e.preventDefault();
+                    return false;
+                }
                 // التحقق من وجود بيانات
                 var hasData = false;
                 var totalQty = 0;
@@ -1003,19 +1159,13 @@
                     e.preventDefault();
                     return false;
                 }
-                
-                var priceVal = $('#variable_single_price').val();
+                // سعر الفردي مع أحجام من جدول السعر (single_dsp)
+                var priceVal = $('#single_dsp').val() || $('#single_dsp_inc_tax').val();
                 if (!priceVal || priceVal.toString().trim() === '') {
-                    toastr.error('الرجاء إدخال السعر لجميع المقاسات');
+                    toastr.error('الرجاء إدخال السعر (جدول السعر أعلاه)');
                     e.preventDefault();
                     return false;
                 }
-                syncVariablePriceToForm();
-            }
-            
-            // قبل التحقق من صحة النموذج: عند تباين، نسخ السعر من المربع إلى الحقول المرسلة
-            if ($('#type').val() === 'variable') {
-                syncVariablePriceToForm();
             }
             
             // إذا كان النموذج صالحاً، الاستمرار

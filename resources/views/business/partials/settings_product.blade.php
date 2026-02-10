@@ -183,6 +183,18 @@
             </div>
         </div>
 
+        <div class="col-sm-4">
+            <div class="form-group">
+                <div class="checkbox">
+                  <label>
+                    <input type="hidden" name="common_settings[enable_product_size_color]" value="0">
+                    {!! Form::checkbox('common_settings[enable_product_size_color]', 1, !isset($common_settings['enable_product_size_color']) || !empty($common_settings['enable_product_size_color']), [ 'class' => 'input-icheck']); !!} تفعيل الأحجام والألوان
+                  </label>
+                  <small class="help-block text-muted">عند التفعيل تظهر في إضافة منتج (فردي) إمكانية إضافة ألوان وأحجام وكميات ورصيد افتتاحي</small>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     {{-- إظهار/إخفاء حقول صفحة إضافة المنتج --}}
@@ -263,8 +275,30 @@
         </div>
         <div class="col-sm-4">
             <div class="form-group">
+                {!! Form::label('common_settings[default_purchase_price]', 'سعر الشراء الافتراضي:') !!}
+                @show_tooltip('يُستخدم كقيمة أولية لحقل سعر الشراء عند إضافة منتج جديد. حدد أدناه هل القيمة شاملة أم قبل الضريبة.')
+                {!! Form::text('common_settings[default_purchase_price]', $common_settings['default_purchase_price'] ?? '', ['class' => 'form-control input_number', 'placeholder' => '0.00', 'step' => '0.01']); !!}
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="form-group">
+                {!! Form::label('common_settings[default_purchase_price_tax_type]', 'نوع سعر الشراء الافتراضي:') !!}
+                {!! Form::select('common_settings[default_purchase_price_tax_type]', ['exclusive' => __('product.exc_of_tax') . ' (قبل الضريبة)', 'inclusive' => __('product.inc_of_tax') . ' (شامل الضريبة)'], $common_settings['default_purchase_price_tax_type'] ?? 'exclusive', ['class' => 'form-control']); !!}
+                <small class="help-block">إن اخترت «شامل الضريبة» يُحسب سعر ما قبل الضريبة تلقائياً حسب ضريبة المنتج الافتراضية.</small>
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="form-group">
                 {!! Form::label('common_settings[default_enable_stock]', 'إدارة المخزون (افتراضي):') !!}
                 {!! Form::select('common_settings[default_enable_stock]', ['1' => __('lang_v1.yes'), '0' => __('lang_v1.no')], $common_settings['default_enable_stock'] ?? '1', ['class' => 'form-control']); !!}
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <div class="form-group">
+                {!! Form::label('common_settings[default_product_locations]', __('business.business_locations') . ' (افتراضي):') !!}
+                @show_tooltip('يُختار تلقائياً عند إضافة منتج جديد إن لم يُحدد غيره.')
+                {!! Form::select('common_settings[default_product_locations][]', $business_locations ?? [], $common_settings['default_product_locations'] ?? [], ['class' => 'form-control select2', 'multiple', 'placeholder' => __('messages.please_select')]); !!}
+                <small class="help-block">فروع النشاط الافتراضية للمنتج</small>
             </div>
         </div>
     </div>

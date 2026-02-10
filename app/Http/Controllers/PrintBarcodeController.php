@@ -38,6 +38,13 @@ class PrintBarcodeController extends Controller
             $print_send_mode = request()->get('print_send_mode', 'one_by_one');
             if ($print_copies < 1) $print_copies = 1;
             if ($print_copies > 999) $print_copies = 999;
+            $product_ids_param = request()->get('product_ids', '');
+            $print_after_save_product_ids = [];
+            if (is_string($product_ids_param) && $product_ids_param !== '') {
+                $print_after_save_product_ids = array_values(array_filter(array_map('intval', explode(',', $product_ids_param))));
+            } elseif (is_array($product_ids_param)) {
+                $print_after_save_product_ids = array_values(array_filter(array_map('intval', $product_ids_param)));
+            }
             $auto_print = (bool) request()->get('auto_print', 0);
             $default_printer = request()->get('default_printer', '');
             if ($default_printer === '' && Auth::check()) {
@@ -48,7 +55,7 @@ class PrintBarcodeController extends Controller
             if ($default_printer === '') {
                 $default_printer = \App\Services\PrintService::DEFAULT_PRINTER_NAME;
             }
-            return view('printbarcode.printbar', compact('products', 'designData', 'print_after_save_product_id', 'print_after_save_all', 'print_copies', 'print_send_mode', 'auto_print', 'default_printer'));
+            return view('printbarcode.printbar', compact('products', 'designData', 'print_after_save_product_id', 'print_after_save_all', 'print_copies', 'print_send_mode', 'print_after_save_product_ids', 'auto_print', 'default_printer'));
             
         } catch (\Exception $e) {
             Log::error('❌ خطأ في صفحة الباركود: ' . $e->getMessage());
@@ -546,7 +553,7 @@ class PrintBarcodeController extends Controller
                 ]);
             }
 
-            // منتج فردي: إرجاع توليفة واحدة من التباين الأول حتى تعمل الطباعة التلقائية
+            // منتج فردي: إرجاع توليفة واحدة من التباين الأول مع اللون والمقاس (من product_custom_field1/2) لمعاينة الملصق
             if (empty($by_color) && $product->type == 'single') {
                 $first = $product->variations->first();
                 $flat = [];
@@ -557,12 +564,20 @@ class PrintBarcodeController extends Controller
                         'value' => $product->name,
                         'sell_price_inc_tax' => $first->sell_price_inc_tax ?? $first->default_sell_price ?? 0,
                         'label' => $product->name,
-                        'size' => '',
+                        'size' => (string) ($product->product_custom_field2 ?? ''),
+                        'custom_field_1' => (string) ($product->product_custom_field1 ?? ''),
+                        'custom_field_2' => (string) ($product->product_custom_field2 ?? ''),
                     ];
                 }
                 return response()->json([
                     'success' => true,
-                    'product' => ['id' => $product->id, 'name' => $product->name, 'sku' => $product->sku],
+                    'product' => [
+                        'id' => $product->id,
+                        'name' => $product->name,
+                        'sku' => $product->sku,
+                        'custom_field_1' => (string) ($product->product_custom_field1 ?? ''),
+                        'custom_field_2' => (string) ($product->product_custom_field2 ?? ''),
+                    ],
                     'by_color' => null,
                     'combinations' => $flat,
                 ]);

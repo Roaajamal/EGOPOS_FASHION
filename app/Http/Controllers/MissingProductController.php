@@ -25,28 +25,49 @@ class MissingProductController extends Controller
     $missingProducts = collect();
 
     if (!empty($loc1) && !empty($loc2)) {
-        // الاستعلام: جلب المنتجات الموجودة في فرع 1 ورصيدها 0 في فرع 2
+        // الاستعلام: جلب المنتجات الموجودة في فرع 1 ورصيدها 0 في فرع 2 (مع التباين للون/المقاس)
         $missingProducts = DB::table('variation_location_details as vld1')
             ->join('products as p', 'vld1.product_id', '=', 'p.id')
-            // ربط مع نفس الجدول للفرع الثاني (Left Join) للتأكد من الكمية هناك
+            ->join('variations as v', 'vld1.variation_id', '=', 'v.id')
             ->leftJoin('variation_location_details as vld2', function($join) use ($loc2) {
                 $join->on('vld1.variation_id', '=', 'vld2.variation_id')
                      ->where('vld2.location_id', '=', $loc2);
             })
             ->select(
-                'p.name', 
-                'p.sku', 
+                'p.name',
+                'p.sku',
+                'p.product_custom_field1',
+                'p.product_custom_field2',
+                'v.name as variation_name',
                 'vld1.qty_available as qty_in_loc1',
                 DB::raw('COALESCE(vld2.qty_available, 0) as qty_in_loc2')
             )
+            ->where('p.business_id', $business_id)
             ->where('vld1.location_id', $loc1)
             ->where('vld1.qty_available', '>', 0)
-            // موجود في فرع 1
+            ->whereNull('v.deleted_at')
             ->where(function($query) {
-                $query->where('vld2.qty_available', '<=', 0) // كميته 0 في فرع 2
-                      ->orWhereNull('vld2.qty_available');   // أو ليس له سجل أصلاً في فرع 2
+                $query->where('vld2.qty_available', '<=', 0)
+                      ->orWhereNull('vld2.qty_available');
             })
             ->get();
+
+        // اسم العرض: اسم المنتج - اللون - المقاس (إن وُجد)
+        $missingProducts = $missingProducts->map(function ($row) {
+            $name = $row->name ?? '';
+            if (isset($row->variation_name) && (string) $row->variation_name === 'DUMMY') {
+                if (!empty(trim((string) ($row->product_custom_field1 ?? '')))) {
+                    $name .= ' - ' . trim($row->product_custom_field1);
+                }
+                if (!empty(trim((string) ($row->product_custom_field2 ?? '')))) {
+                    $name .= ' - ' . trim($row->product_custom_field2);
+                }
+            } elseif (!empty(trim((string) ($row->variation_name ?? '')))) {
+                $name .= ' - ' . trim($row->variation_name);
+            }
+            $row->display_name = $name;
+            return $row;
+        });
     }
 
     return view('missing_products.index', compact('missingProducts', 'business_locations', 'loc1_name' , 'loc2_name'));

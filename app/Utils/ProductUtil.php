@@ -191,7 +191,7 @@ class ProductUtil extends Util
      *
      * @param  \App\Product  $product
      * @param  array  $size_color_qty  [ 'لون' => [ 'مقاس' => كمية, ... ], ... ]
-     * @param  array  $options  single_dsp, single_dsp_inc_tax, single_dpp, single_dpp_inc_tax, profit_percent, location_id
+     * @param  array  $options  single_dsp, single_dsp_inc_tax, single_dpp, single_dpp_inc_tax, profit_percent, location_id (واحد) أو location_ids (عدة فروع = رصيد افتتاحي على كلهم)
      * @return void
      */
     public function createSizeColorMatrixAndSaveCombinations($product, array $size_color_qty, array $options = [])
@@ -205,7 +205,15 @@ class ProductUtil extends Util
         $dpp = $this->num_uf($options['single_dpp'] ?? 0);
         $dpp_inc_tax = $this->num_uf($options['single_dpp_inc_tax'] ?? 0);
         $profit_percent = $this->num_uf($options['profit_percent'] ?? 0);
-        $location_id = $options['location_id'] ?? null;
+        $location_ids = $options['location_ids'] ?? null;
+        if ($location_ids === null) {
+            $location_id = $options['location_id'] ?? null;
+            $location_ids = $location_id ? [$location_id] : [];
+        }
+        if (! is_array($location_ids)) {
+            $location_ids = [$location_ids];
+        }
+        $location_ids = array_values(array_filter($location_ids));
 
         $product_variation = $product->product_variations()->create([
             'name' => 'اللون-المقاس',
@@ -246,8 +254,11 @@ class ProductUtil extends Util
                     'sell_price_inc_tax' => $dsp_inc_tax,
                 ]);
 
-                if ($product->enable_stock == 1 && $location_id && $qty > 0) {
-                    $this->updateProductQuantity($location_id, $product->id, $variation->id, $qty, 0, null, false);
+                // رصيد افتتاحي: تسجيل الكمية في كل فرع نشاط مختار
+                if ($product->enable_stock == 1 && $qty > 0 && ! empty($location_ids)) {
+                    foreach ($location_ids as $loc_id) {
+                        $this->updateProductQuantity($loc_id, $product->id, $variation->id, $qty, 0, null, false);
+                    }
                 }
 
                 $sizes_list[] = [
@@ -269,6 +280,92 @@ class ProductUtil extends Util
 
         $product->size_color_combinations = ['by_color' => $by_color];
         $product->save();
+    }
+
+    /**
+     * إنشاء منتج منفصل في جدول products لكل توليفة (لون + مقاس) مع صنف واحد وباركود ورصيد افتتاحي.
+     * يُستدعى عند إضافة منتج فردي بأحجام/ألوان ليكون كل مقاس صفاً في products.
+     *
+     * @param  array  $product_details  نفس حقول المنتج (name, sku, category_id, ...) بدون إنشاء المنتج مسبقاً
+     * @param  array  $size_color_qty  [ 'لون' => [ 'مقاس' => كمية, ... ], ... ]
+     * @param  array  $options  single_dsp, single_dsp_inc_tax, single_dpp, single_dpp_inc_tax, profit_percent, location_ids
+     * @return array  ['first' => \App\Product أول منتج, 'product_ids' => [int ...] كل معرفات المنتجات]
+     */
+    public function createProductsFromSizeColorMatrix(array $product_details, array $size_color_qty, array $options = [])
+    {
+        $dsp = $this->num_uf($options['single_dsp'] ?? 0);
+        $dsp_inc_tax = $this->num_uf($options['single_dsp_inc_tax'] ?? 0);
+        $dpp = $this->num_uf($options['single_dpp'] ?? 0);
+        $dpp_inc_tax = $this->num_uf($options['single_dpp_inc_tax'] ?? 0);
+        $profit_percent = $this->num_uf($options['profit_percent'] ?? 0);
+        $location_ids = $options['location_ids'] ?? [];
+        if (! is_array($location_ids)) {
+            $location_ids = [$location_ids];
+        }
+        $location_ids = array_values(array_filter($location_ids));
+
+        $base_name = $product_details['name'] ?? '';
+
+        $first_product = null;
+        $all_product_ids = [];
+        $c = 0;
+
+        foreach ($size_color_qty as $color => $sizes) {
+            if (! is_array($sizes)) {
+                continue;
+            }
+            foreach ($sizes as $size => $qty) {
+                $qty = (int) $qty;
+                if ($qty < 0) {
+                    continue;
+                }
+                $c++;
+                $details = $product_details;
+                $details['name'] = $base_name;
+                $details['product_custom_field1'] = $color;
+                $details['product_custom_field2'] = $size;
+                $details['sku'] = ' ';
+
+                $product = Product::create($details);
+                event(new \App\Events\ProductsCreatedOrModified($details, 'added'));
+
+                $sku = $this->generateProductSku($product->id);
+                $product->sku = $sku;
+                $product->save();
+
+                if (! empty($options['location_ids']) && is_array($options['location_ids'])) {
+                    $product->product_locations()->sync($options['location_ids']);
+                } else {
+                    $product->product_locations()->sync([]);
+                }
+
+                $this->createSingleProductVariation(
+                    $product,
+                    $sku,
+                    $dpp,
+                    $dpp_inc_tax,
+                    $profit_percent,
+                    $dsp,
+                    $dsp_inc_tax
+                );
+
+                if ($product->enable_stock == 1 && $qty > 0 && ! empty($location_ids)) {
+                    $variation = $product->variations()->first();
+                    if ($variation) {
+                        foreach ($location_ids as $loc_id) {
+                            $this->updateProductQuantity($loc_id, $product->id, $variation->id, $qty, 0, null, false);
+                        }
+                    }
+                }
+
+                $all_product_ids[] = $product->id;
+                if ($first_product === null) {
+                    $first_product = $product;
+                }
+            }
+        }
+
+        return ['first' => $first_product, 'product_ids' => $all_product_ids];
     }
 
     /**
@@ -1804,6 +1901,8 @@ class ProductUtil extends Util
                 'products.name',
                 'products.type',
                 'products.enable_stock',
+                'products.product_custom_field1',
+                'products.product_custom_field2',
                 'variations.id as variation_id',
                 'variations.name as variation',
                 'VLD.qty_available',
@@ -1824,9 +1923,18 @@ class ProductUtil extends Util
              ->orderBy('VLD.qty_available', 'desc')
              ->get();
 
-        // 🔐 Escape `name`, `variation`, `sub_sku`
+        // 🔐 Escape وبناء اسم العرض: اسم المنتج - اللون - المقاس
         $data->transform(function ($item) {
-            $item->name = e($item->name);
+            $name = $item->name;
+            $cf1 = trim((string) ($item->product_custom_field1 ?? ''));
+            $cf2 = trim((string) ($item->product_custom_field2 ?? ''));
+            $varName = trim((string) ($item->variation ?? ''));
+            $isDummy = strtoupper($varName) === 'DUMMY' || $varName === '';
+            if ($isDummy && ($cf1 !== '' || $cf2 !== '')) {
+                $suffix = array_filter([$cf1, $cf2]);
+                $name = $name . (count($suffix) > 0 ? ' - ' . implode(' - ', $suffix) : '');
+            }
+            $item->name = e($name);
             $item->variation = e($item->variation);
             $item->sub_sku = e($item->sub_sku);
             return $item;

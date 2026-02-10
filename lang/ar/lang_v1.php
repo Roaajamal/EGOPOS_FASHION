@@ -1058,6 +1058,7 @@ return [
     'allow_login' => 'السماح بتسجيل الدخول',
     'login_not_allowed' => 'تسجيل الدخول غير مسموح به',
     'labels_for_contact_custom_fields' => 'تسميات الحقول المخصصة لجهة الاتصال',
+    'labels_for_product_sizes_colors' => 'اللون والمقاس (مكان ظهورهما على الباركود)',
     'labels_for_product_custom_fields' => 'تسميات الحقول المخصصة للمنتج',
     'labels_for_purchase_custom_fields' => 'تسمية حقول الحقول الشرائية',
     'labels_for_sell_custom_fields' => 'تسميات لبيع الحقول المخصصة',

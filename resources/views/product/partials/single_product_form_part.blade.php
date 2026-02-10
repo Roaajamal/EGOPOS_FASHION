@@ -9,6 +9,20 @@
     $class = '';
   @endphp
 @endif
+@php
+  $dpp_val = $default;
+  if (!empty($duplicate_product) && isset($duplicate_product->single_dpp) && (string)$duplicate_product->single_dpp !== '') {
+    $dpp_val = $duplicate_product->single_dpp;
+  } elseif (isset($default_dpp) && $default_dpp !== null && $default_dpp !== '') {
+    $dpp_val = is_numeric($default_dpp) ? number_format((float)$default_dpp, session('business.currency_precision', 2), session('currency')['decimal_separator'] ?? '.', session('currency')['thousand_separator'] ?? ',') : $default_dpp;
+  }
+  $dpp_inc_val = $default;
+  if (!empty($duplicate_product) && isset($duplicate_product->single_dpp_inc_tax) && (string)$duplicate_product->single_dpp_inc_tax !== '') {
+    $dpp_inc_val = $duplicate_product->single_dpp_inc_tax;
+  } elseif (isset($default_dpp_inc_tax) && $default_dpp_inc_tax !== null && $default_dpp_inc_tax !== '') {
+    $dpp_inc_val = is_numeric($default_dpp_inc_tax) ? number_format((float)$default_dpp_inc_tax, session('business.currency_precision', 2), session('currency')['decimal_separator'] ?? '.', session('currency')['thousand_separator'] ?? ',') : $default_dpp_inc_tax;
+  }
+@endphp
 
 <div class="table-responsive">
     <table class="table table-bordered add-product-price-table table-condensed {{$class}}">
@@ -25,13 +39,13 @@
             <div class="col-sm-6">
               {!! Form::label('single_dpp', trans('product.exc_of_tax') . ':*') !!}
 
-              {!! Form::text('single_dpp', $default, ['class' => 'form-control input-sm dpp input_number', 'placeholder' => __('product.exc_of_tax'), 'required']); !!}
+              {!! Form::text('single_dpp', $dpp_val, ['class' => 'form-control input-sm dpp input_number', 'placeholder' => __('product.exc_of_tax'), 'required']); !!}
             </div>
 
             <div class="col-sm-6">
               {!! Form::label('single_dpp_inc_tax', trans('product.inc_of_tax') . ':*') !!}
             
-              {!! Form::text('single_dpp_inc_tax', $default, ['class' => 'form-control input-sm dpp_inc_tax input_number', 'placeholder' => __('product.inc_of_tax'), 'required']); !!}
+              {!! Form::text('single_dpp_inc_tax', $dpp_inc_val, ['class' => 'form-control input-sm dpp_inc_tax input_number', 'placeholder' => __('product.inc_of_tax'), 'required']); !!}
             </div>
           </td>
 

@@ -79,7 +79,7 @@
                         <tbody>
                             @foreach($missingProducts as $product)
                                 <tr>
-                                    <td>{{ $product->name }}</td>
+                                    <td>{{ $product->display_name ?? $product->name }}</td>
                                     <td>{{ $product->sku }}</td>
                                     <td><span class="display_currency" data-currency_symbol="false">{{ $product->qty_in_loc1 }}</span></td>
                                     <td class="text-danger">0.00</td>
