@@ -83,7 +83,7 @@ class SellReturnController extends Controller
                     '=',
                     'TP.transaction_id'
                 )
-                ->leftJoin('currencies as curr', 'bl.currency_id', '=', 'curr.id') ///// ربط جدول العملات 002
+              //  ->leftJoin('currencies as curr', 'bl.currency_id', '=', 'curr.id') ///// ربط جدول العملات 002
                 ->where('transactions.business_id', $business_id)
                 ->where('transactions.type', 'sell_return')
                 ->where('transactions.status', 'final')
@@ -98,7 +98,7 @@ class SellReturnController extends Controller
                     'bl.name as business_location',
                     'T1.invoice_no as parent_sale',
                     'T1.id as parent_sale_id',
-                    'curr.symbol as currency_symbol', /////002 جلب رمز العملة
+                //    'curr.symbol as currency_symbol', /////002 جلب رمز العملة
                     DB::raw('SUM(TP.amount) as amount_paid')
                 );
 
@@ -349,7 +349,7 @@ class SellReturnController extends Controller
         }
         ///////////////// add 'location.currency' 002
         $sell = Transaction::where('business_id', $business_id)
-            ->with(['sell_lines', 'location','location.currency', 'return_parent', 'contact', 'tax', 'sell_lines.sub_unit', 'sell_lines.product', 'sell_lines.product.unit'])
+            ->with(['sell_lines', 'location', 'return_parent', 'contact', 'tax', 'sell_lines.sub_unit', 'sell_lines.product', 'sell_lines.product.unit'])
             ->find($id);
 
         foreach ($sell->sell_lines as $key => $value) {
@@ -874,52 +874,52 @@ private function updateTransactionWithFatoraData($transaction, $fatoraResult)
             );
 
              // --- بداية منطق معالجة العملة للمرتجع (002) ---
-            if (!empty($location_details->currency)) {
-                $new_symbol = $location_details->currency->symbol;
-                $old_symbol = $business_details->currency_symbol;
-                $receipt_details->currency_symbol = $new_symbol;
+            // if (!empty($location_details->currency)) {
+            //     $new_symbol = $location_details->currency->symbol;
+            //     $old_symbol = $business_details->currency_symbol;
+            //     $receipt_details->currency_symbol = $new_symbol;
 
-                $fields_to_fix = [
-                    'subtotal', 'total', 'tax', 'discount', 'shipping_charges', 
-                    'total_paid', 'total_due', 'all_due', 'round_off', 'total_previous_due'
-                ];
+            //     $fields_to_fix = [
+            //         'subtotal', 'total', 'tax', 'discount', 'shipping_charges', 
+            //         'total_paid', 'total_due', 'all_due', 'round_off', 'total_previous_due'
+            //     ];
 
-                foreach ($fields_to_fix as $field) {
-                    if (!empty($receipt_details->$field)) {
-                        $current_val = (string)$receipt_details->$field;
+            //     foreach ($fields_to_fix as $field) {
+            //         if (!empty($receipt_details->$field)) {
+            //             $current_val = (string)$receipt_details->$field;
                         
-                        // استبدال الرمز القديم بالجديد
-                        if ($new_symbol != $old_symbol) {
-                            $current_val = str_replace($old_symbol, $new_symbol, $current_val);
-                        }
+            //             // استبدال الرمز القديم بالجديد
+            //             if ($new_symbol != $old_symbol) {
+            //                 $current_val = str_replace($old_symbol, $new_symbol, $current_val);
+            //             }
                         
-                        // تأمين الظهور في الفرع الرئيسي (إذا لم يوجد رمز، نقوم بإضافته)
-                        if (strpos($current_val, $new_symbol) === false) {
-                            $current_val = $new_symbol . ' ' . $current_val;
-                        }
-                        $receipt_details->$field = $current_val;
-                    }
-                }
+            //             // تأمين الظهور في الفرع الرئيسي (إذا لم يوجد رمز، نقوم بإضافته)
+            //             if (strpos($current_val, $new_symbol) === false) {
+            //                 $current_val = $new_symbol . ' ' . $current_val;
+            //             }
+            //             $receipt_details->$field = $current_val;
+            //         }
+            //     }
 
-                // معالجة أسطر المنتجات المرتجعة
-                if (!empty($receipt_details->lines)) {
-                    foreach ($receipt_details->lines as $key => $line) {
-                        if (!empty($line['line_total'])) {
-                            $line_total = (string)$line['line_total'];
-                            if ($new_symbol != $old_symbol) {
-                                $line_total = str_replace($old_symbol, $new_symbol, $line_total);
-                            }
-                            if (strpos($line_total, $new_symbol) === false) {
-                                $line_total = $new_symbol . ' ' . $line_total;
-                            }
-                            $receipt_details->lines[$key]['line_total'] = $line_total;
-                        }
-                    }
-                }
-            } else {
-                $receipt_details->currency_symbol = $business_details->currency_symbol;
-            }
-            // --- نهاية منطق العملة ---
+            //     // معالجة أسطر المنتجات المرتجعة
+            //     if (!empty($receipt_details->lines)) {
+            //         foreach ($receipt_details->lines as $key => $line) {
+            //             if (!empty($line['line_total'])) {
+            //                 $line_total = (string)$line['line_total'];
+            //                 if ($new_symbol != $old_symbol) {
+            //                     $line_total = str_replace($old_symbol, $new_symbol, $line_total);
+            //                 }
+            //                 if (strpos($line_total, $new_symbol) === false) {
+            //                     $line_total = $new_symbol . ' ' . $line_total;
+            //                 }
+            //                 $receipt_details->lines[$key]['line_total'] = $line_total;
+            //             }
+            //         }
+            //     }
+            // } else {
+            //     $receipt_details->currency_symbol = $business_details->currency_symbol;
+            // }
+            // // --- نهاية منطق العملة ---
 
 
             $output['print_title'] = $receipt_details->invoice_no;

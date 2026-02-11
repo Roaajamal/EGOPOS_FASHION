@@ -467,6 +467,7 @@ class BusinessController extends Controller
            $pos_settings['enable_fatora'] = 0;
            }
            //////////////////// 001
+
            
             $pre_busines_detail = $this->businessUtil->getDetails($business_id);
             $pre_pos_setting = json_decode($pre_busines_detail->pos_settings, true) ?? [];
@@ -491,6 +492,10 @@ class BusinessController extends Controller
             $business_details['pos_settings'] = json_encode($pos_settings);
             //////////////////// 001
 
+            ////////// setting for show invoice number 002 
+           $pos_settings['enable_invoice_number'] = !empty($pos_settings['enable_invoice_number']) ? 1 : 0;
+           ////////////////// 002
+           
             // Save pos_settings as JSON
             $business_details['pos_settings'] = json_encode($pos_settings);
 

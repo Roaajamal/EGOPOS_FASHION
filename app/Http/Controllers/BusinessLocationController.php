@@ -46,7 +46,7 @@ class BusinessLocationController extends Controller
             $business_id = request()->session()->get('user.business_id');
 
             $locations = BusinessLocation::where('business_locations.business_id', $business_id)
-                ->leftjoin('currencies as curr', 'business_locations.currency_id', '=', 'curr.id') ///// to add currency 002
+             //   ->leftjoin('currencies as curr', 'business_locations.currency_id', '=', 'curr.id') ///// to add currency 002
                 ->leftjoin(
                     'invoice_schemes as ic',
                     'business_locations.invoice_scheme_id',
@@ -70,8 +70,8 @@ class BusinessLocationController extends Controller
                     'business_locations.selling_price_group_id',
                     '=',
                     'spg.id'
-                )
-                ->select(['business_locations.id','business_locations.name', 'location_id','curr.currency as currency', 'landmark', 
+                )  /////////// 'curr.currency as currency'  002
+                ->select(['business_locations.id','business_locations.name', 'location_id', 'landmark', 
                 'city', 'zip_code', 'state', 'business_locations.country', 'spg.name as price_group', 
                 'ic.name as invoice_scheme', 'il.name as invoice_layout', 'sil.name as sale_invoice_layout', 
                 'business_locations.is_active', ]);
@@ -137,10 +137,10 @@ class BusinessLocationController extends Controller
             $accounts = Account::forDropdown($business_id, true, false);
         }
 
-        $currencies = \App\Currency::select(
-        \DB::raw("CONCAT(currency, ' (', code, ')') as info"), 
-        'id'
-        )->pluck('info', 'id'); ////////// 002
+        // $currencies = \App\Currency::select(
+        // \DB::raw("CONCAT(currency, ' (', code, ')') as info"), 
+        // 'id'
+        // )->pluck('info', 'id'); ////////// 002
 
         return view('business_location.create')
                     ->with(compact(
@@ -149,7 +149,7 @@ class BusinessLocationController extends Controller
                         'price_groups',
                         'payment_types',
                         'accounts',
-                        'currencies' //////// 002
+                       // 'currencies' //////// 002
                     ));
     }
 
@@ -252,10 +252,10 @@ class BusinessLocationController extends Controller
         }
         $featured_products = $location->getFeaturedProducts(true, false);
 
-        $currencies = \App\Currency::select(
-        \DB::raw("CONCAT(currency, ' (', code, ')') as info"), 
-        'id'
-         )->pluck('info', 'id'); ////// 002
+        // $currencies = \App\Currency::select(
+        // \DB::raw("CONCAT(currency, ' (', code, ')') as info"), 
+        // 'id'
+        //  )->pluck('info', 'id'); ////// 002
 
         return view('business_location.edit')
                 ->with(compact(
@@ -266,7 +266,7 @@ class BusinessLocationController extends Controller
                     'payment_types',
                     'accounts',
                     'featured_products',
-                    'currencies'
+                  //  'currencies'
                 ));
     }
 

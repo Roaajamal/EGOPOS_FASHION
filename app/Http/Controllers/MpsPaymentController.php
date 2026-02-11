@@ -438,4 +438,88 @@ private function extractFromRawResponse($response)
     
     return $result;
 }
+
+
+/**
+ * جلب إعدادات MPS للمستخدم الحالي
+ */
+/**
+ * جلب إعدادات MPS حسب location_id محدد
+ */
+public static function getMpsSettingsByLocation($location_id, $business_id = null)
+{
+    if (!$location_id) {
+        return null;
+    }
+    
+    if (!$business_id) {
+        $business_id = auth()->user()->business_id ?? null;
+    }
+    
+    if (!$business_id) {
+        return null;
+    }
+    
+    return EcrIntegrationSetting::where('is_enabled', 1)
+                ->where('provider_type', 'mps')
+                ->where('business_id', $business_id)
+                ->where('business_location_id', $location_id)
+                ->first();
+}
+/**
+ * جلب إعدادات MPS للمستخدم الحالي
+ */
+public static function getMpsSettings()
+{
+    $user = auth()->user();
+    
+    if (!$user || !$user->business_id || !$user->location_id) {
+        return null;
+    }
+    
+    return self::getMpsSettingsByLocation($user->location_id, $user->business_id);
+}
+
+/**
+ * API: التحقق من حالة MPS لفرع معين
+ */
+public function checkMpsStatus(Request $request)
+{
+    $location_id = $request->input('location_id');
+    $business_id = $request->input('business_id');
+    
+    $settings = self::getMpsSettingsByLocation($location_id, $business_id);
+    
+    return response()->json([
+        'enabled' => $settings !== null,
+        'settings' => $settings ? [
+            'merchant_name' => $settings->merchant_name,
+            'terminal_id' => $settings->terminal_id
+        ] : null
+    ]);
+}
+
+public function getSettings(Request $request)
+{
+    $location_id = $request->input('location_id');
+    $business_id = $request->input('business_id') ?? auth()->user()->business_id;
+    
+    if (!$location_id || !$business_id) {
+        return response()->json([
+            'enabled' => false,
+            'message' => 'المعلومات غير مكتملة'
+        ]);
+    }
+    
+    $settings = EcrIntegrationSetting::where('provider_type', 'mps')
+        ->where('business_id', $business_id)
+        ->where('business_location_id', $location_id)
+        ->first();
+    
+    return response()->json([
+        'enabled' => $settings !== null,
+        'is_enabled' => $settings ? (int)$settings->is_enabled : 0,
+        'settings' => $settings
+    ]);
+}
     }

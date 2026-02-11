@@ -1,12 +1,10 @@
 <div class="row">
 	<div class="col-md-4">
 		<div class="form-group">
-			
 			<div class="input-group">
 				<span class="input-group-addon">
 					<i class="fa fa-user"></i>
 				</span>
-				
 				<input type="hidden" id="default_customer_id" 
 				value="{{ $walk_in_customer['id'] ?? ''}}" >
 				<input type="hidden" id="default_customer_name" 
@@ -28,7 +26,6 @@
 			<small class="text-danger hide contact_due_text"><strong>@lang('account.customer_due'):</strong> <span></span></small>
 		</div>
 	</div>
-	
 	<div class="col-md-8">
 		<div class="form-group">
 			<div class="input-group">
@@ -64,9 +61,7 @@
 		</div>
 	</div>
 	@endif
-	
 	<input type="hidden" name="pay_term_number" id="pay_term_number" value="{{$walk_in_customer['pay_term_number'] ?? ''}}">
-	
 	<input type="hidden" name="pay_term_type" id="pay_term_type" value="{{$walk_in_customer['pay_term_type'] ?? ''}}">
 	
 	@if(!empty($commission_agent))
@@ -92,7 +87,6 @@
 			</div>
 		</div>
 	@endif
-	
 	@if(config('constants.enable_sell_in_diff_currency') == true)
 		<div class="col-md-4 col-sm-6">
 			<div class="form-group">
@@ -134,7 +128,6 @@
 		{!! Form::hidden('default_price_group', $default_price_group_id, ['id' => 'default_price_group']) !!}
 	@endif
 
-	
 	@if(in_array('types_of_service', $enabled_modules) && !empty($types_of_service))
 		<div class="col-md-4 col-sm-6">
 			<div class="form-group">
@@ -171,7 +164,6 @@
 			</div>
 		</div>
 	@endif
-	
 	@if(in_array('subscription', $enabled_modules))
 		<div class="col-md-4 col-sm-6">
 			<label>
@@ -240,12 +232,10 @@
 					<th class="text-center tw-text-sm md:!tw-text-base tw-font-bold col-md-2 {{$hide_tax}}">
 						@lang('sale.price_inc_tax')
 					</th>
-					
 					<th class="text-center tw-text-sm md:!tw-text-base tw-font-bold col-md-2">
 						@lang('sale.subtotal')
 					</th>
 					<th class="text-center"><i class="fas fa-times tw-text-base" aria-hidden="true"></i></th>
-					
 				</tr>
 			</thead>
 			<tbody></tbody>

@@ -437,7 +437,7 @@ class StockTransferController extends Controller
                     'p.unit_id', // هام جداً لجلب الوحدات الفرعية
                     'u.short_name as unit',
                     'u.allow_decimal as unit_allow_decimal',
-                    'variations.default_purchase_price as last_purchased_price',
+                    'variations.dpp_inc_tax as last_purchased_price',
                     \DB::raw('COALESCE(vld.qty_available, 0) as qty_available')
                 ])->first();
 

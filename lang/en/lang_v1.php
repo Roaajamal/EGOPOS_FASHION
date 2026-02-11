@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'show_invoice_number' => ' Show Invoice Number ',
+    'enable_farora_system' => ' Enable Farora System ' ,
     'fatora_status' => 'Fatora Status',
 'sent' => 'Sent',
 'not_sent' => 'Not Sent',

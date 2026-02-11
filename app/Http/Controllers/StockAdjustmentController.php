@@ -362,7 +362,7 @@ public function import(Request $request)
                     'p.product_custom_field1',
                     'p.product_custom_field2',
                     'p.product_custom_field3',
-                    'variations.default_purchase_price as last_purchased_price',
+                    'variations.dpp_inc_tax as last_purchased_price',
                     \DB::raw('COALESCE(vld.qty_available, 0) as qty_available')
                 ])->first();
 
@@ -399,16 +399,19 @@ public function import(Request $request)
             'download_url' => null
         ];
 
-        if (count($skipped_products) > 0) {
-            $file_name = 'skipped_products_' . time() . '.xlsx';
-            $folder_path = 'temp_excel/';
-            if (!\Storage::disk('public')->exists($folder_path)) {
-                \Storage::disk('public')->makeDirectory($folder_path);
-            }
-            
-            \Excel::store(new \App\Exports\DataExport($skipped_products), $folder_path . $file_name, 'public');
-            $response['download_url'] = asset('storage/' . $folder_path . $file_name);
-        }
+      if (count($skipped_products) > 0) {
+    $file_name = 'skipped_products_' . time() . '.xlsx';
+    $folder_path = 'files/temp_excel/'; // جعلته داخل مجلد files ليكون التنظيم موحداً
+
+    if (!\Storage::disk('public')->exists($folder_path)) {
+        \Storage::disk('public')->makeDirectory($folder_path);
+    }
+    
+    \Excel::store(new \App\Exports\DataExport($skipped_products), $folder_path . $file_name, 'public');
+    
+    // تأكد من أن الرابط يمر عبر التخزين (بشرط تنفيذ php artisan storage:link)
+    $response['download_url'] = asset('storage/' . $folder_path . $file_name);
+}
 
         return response()->json($response);
 
