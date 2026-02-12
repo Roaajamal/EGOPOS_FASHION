@@ -1576,6 +1576,15 @@
               </label>
             </div>
           </div> 
+          <!--  add roles for daily sales report 001 --> 
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'daily_sales_report.view', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.daily_sales_report.view' ) }}
+              </label>
+            </div>
+          </div>
            <!--  add roles for quantity entry report and missing product report 001 --> 
           <div class="col-md-12">
             <div class="checkbox">
@@ -1589,8 +1598,8 @@
           <div class="col-md-12">
             <div class="checkbox">
               <label>
-                {!! Form::checkbox('permissions[]', 'report.missing_product_report', false, 
-                [ 'class' => 'input-icheck']); !!} {{ __( 'missing_product.missing_product_report_view' ) }}
+                {!! Form::checkbox('permissions[]', 'report.missing_product_report', false,
+                 ['class' => 'input-icheck']); !!} {{ __( 'missing_product.missing_product_report_view' ) }}
               </label>
             </div>
           </div>
@@ -1599,6 +1608,58 @@
 
         </div>
         </div>
+        <!--    add permissions for reports columns 009  --> 
+      <div class="row checkgroup">
+    <div class="col-md-12">
+        <hr>
+        <h4 class="tw-font-bold tw-text-lg text-primary">
+            <i class="fa fa-table"></i> صلاحيات ظهور أعمدة التقارير
+        </h4>
+        <p class="text-muted">حدد الأعمدة التي يسمح لهذا الدور بمشاهدتها في التقارير المختلفة</p>
+    </div>
+
+    @foreach(config('report_settings') as $report_key => $report_details)
+        <div class="col-md-12">
+            <h5 class="tw-font-bold" style="background: #f1f1f1; padding: 10px; border-radius: 5px;">
+                {{ $report_details['label'] }}
+            </h5>
+        </div>
+        
+        @foreach($report_details['columns'] as $col_key => $col_label)
+            @php
+                // في حالة التعديل (Edit)، نتحقق من الإعدادات المخزنة
+                $is_checked = false;
+                if(isset($role)) {
+                    $current_setting = \DB::table('report_column_settings')
+                                        ->where('report_key', $report_key)
+                                        ->where('column_key', $col_key)
+                                        ->first();
+                                        
+                    if($current_setting) {
+                        $allowed_roles = json_decode($current_setting->role_ids, true);
+                        $is_checked = in_array($role->id, $allowed_roles);
+                    }
+                }
+            @endphp
+            <div class="col-md-3">
+                <div class="checkbox">
+                    <label>
+                        {{-- حقل مخفي لضمان إرسال قيمة 0 عند عدم التحديد --}}
+                        <input type="hidden" name="column_settings[{{$report_key}}][{{$col_key}}]" value="0">
+                        <input type="checkbox" 
+                               name="column_settings[{{$report_key}}][{{$col_key}}]" 
+                               value="1" 
+                               class="input-icheck" 
+                               {{ $is_checked ? 'checked' : '' }}>
+                        {{ $col_label }}
+                    </label>
+                </div>
+            </div>
+        @endforeach
+        <div class="clearfix"></div>
+    @endforeach
+</div>
+  <!--  009  -->
         <hr>
         <div class="row check_group">
         <div class="col-md-1">
@@ -1844,3 +1905,40 @@
 </section>
 <!-- /.content -->
 @endsection
+
+<script type="text/javascript">
+$(document).ready(function() {
+    // دالة الإظهار والإخفاء المنفصلة
+    function toggleReportContainer(reportKey) {
+        console.log("إظهار حاوية: " + reportKey);
+        
+        // إخفاء جميع الحاويات أولاً
+        $('.report-columns-container').hide();
+        
+        if (reportKey !== "") {
+            var target = $('#container_' + reportKey);
+            if (target.length > 0) {
+                target.show(); // استخدام show مباشر بدلاً من fadeIn للتأكد من العمل
+            }
+        }
+    }
+
+    // 1. التعامل مع التغيير في القائمة المنسدلة العادية
+    $(document).on('change', '#select_report_to_manage', function() {
+        toggleReportContainer($(this).val());
+    });
+
+    // 2. التعامل مع التغيير الخاص بـ Select2 (حل المشكلة الأساسي)
+    $('#select_report_to_manage').on('select2:select', function (e) {
+        var data = e.params.data;
+        toggleReportContainer(data.id);
+    });
+
+    // 3. تفعيل أزرار "تحديد الكل" لدعم iCheck في POS
+    $(document).on('click', '.select-all-columns', function() {
+        var targetId = $(this).data('target');
+        // نظام POS يستخدم iCheck دائماً للـ checkboxes
+        $('#' + targetId).find('input.input-icheck').iCheck('check');
+    });
+});
+</script>

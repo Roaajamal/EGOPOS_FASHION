@@ -7,6 +7,7 @@
      'purchase_sell_report' => 'مشتريات ومبيعات',
      'purchase_sell' => 'تقرير المشتريات والمبيعات',
      'purchase_sell_msg' => 'تفاصيل المشتريات والمبيعات للفترة المحددة',
+     'quantity_entry_report_view' => ' عرض تقرير ادخال الكميات ',
      'total_purchase' => 'إجمالي المشتريات',
      'purchase_inc_tax' => 'المشتريات (جميع الضرائب مدرجة)',
      'total_sell' => 'اجمالي المبيعات',
