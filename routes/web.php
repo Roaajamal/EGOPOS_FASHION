@@ -59,6 +59,29 @@ Route::group(['middleware' => ['auth']], function () {
 });
 
 
+
+/////////////////  invoice number 008
+Route::get('/get-next-invoice-no', function () {
+    $location_id = request()->get('location_id');
+    $business_id = request()->session()->get('user.business_id');
+    
+    $location = \App\BusinessLocation::where('business_id', $business_id)->find($location_id);
+    $scheme = \App\InvoiceScheme::find($location->invoice_scheme_id);
+    
+    $actual_next_no = $scheme->start_number + $scheme->invoice_count;
+    $number = str_pad($actual_next_no, $scheme->total_digits, '0', STR_PAD_LEFT);
+    
+    return $scheme->prefix . $number;
+});
+//////////////////////// quantity entry routes 001
+
+/////////// route for advanced setting 
+Route::group(['middleware' => ['auth', 'SetSessionData', 'language', 'timezone'], ], function () {
+    Route::get('/advanced-settings', [\App\Http\Controllers\AdvancedSettingController::class, 'index']);
+    Route::post('/advanced-settings/update', [\App\Http\Controllers\AdvancedSettingController::class, 'update']);
+});
+/////////////////////  
+
 // routes لـ ECR Integration
 Route::group(['middleware' => ['auth', 'SetSessionData', 'language', 'timezone']], function () {
     // حفظ إعدادات MPS
@@ -79,6 +102,9 @@ Route::group(['middleware' => ['auth', 'SetSessionData', 'language', 'timezone']
     // حذف إعدادات MPS
     Route::delete('/ecr-integration/{location_id}/delete', [EcrIntegrationController::class, 'deleteSettings'])
         ->name('ecr-integration.delete');
+    //////////// for show or hide meps button 
+   // Route للتحقق من حالة MPS
+  Route::get('/ecr/settings/{location_id}', [EcrIntegrationController::class, 'getSettings']);
 });
 Route::middleware(['auth'])->group(function () {
 
@@ -676,7 +702,7 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     //Printers...
     Route::resource('printers', PrinterController::class);
 ////////////////// 001 
-Route::post('/stock-adjustments/import', [App\Http\Controllers\StockAdjustmentController::class, 'import'])->name('stock_adjustment.export');
+    Route::post('/stock-adjustments/import', [App\Http\Controllers\StockAdjustmentController::class, 'import'])->name('stock_adjustment.export');
     Route::get('/stock-adjustments/remove-expired-stock/{purchase_line_id}', [StockAdjustmentController::class, 'removeExpiredStock']);
     Route::post('/stock-adjustments/get_product_row', [StockAdjustmentController::class, 'getProductRow']);
     Route::resource('stock-adjustments', StockAdjustmentController::class);

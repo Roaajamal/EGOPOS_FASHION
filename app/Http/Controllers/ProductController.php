@@ -284,40 +284,9 @@ class ProductController extends Controller
                         return '--';
                     }
                 })
-                ->addColumn(    /////////////  edit 002
+                ->addColumn(
                     'purchase_price',
-    function ($row) use ($location_id) {
-        $html = '<div style="white-space: nowrap;">';
-        $business_settings = session()->get('business');
-        
-        if (!empty($location_id) && $location_id != 'none') {
-            $location = BusinessLocation::with(['currency'])->find($location_id);
-            $c_data = (object)[
-                'currency_symbol' => $location->currency->symbol ?? '',
-                'thousand_separator' => $location->currency->thousand_separator ?? ',',
-                'decimal_separator' => $location->currency->decimal_separator ?? '.',
-                'currency_precision' => $business_settings['currency_precision'] ?? 2,
-                'currency_symbol_placement' => $business_settings['currency_symbol_placement'] ?? 'before',
-            ];
-            $html .= $this->productUtil->num_f($row->min_purchase_price, true, $c_data);
-        } else {
-            // في حال اختيار "الكل"، سنعرض السعر بعملة أول فرع مرتبط بالمنتج
-            // أو عملة المؤسسة إذا لم يرتبط بفرع
-            $location = $row->product_locations->first();
-            $c_data = null;
-            if (!empty($location) && !empty($location->currency)) {
-                $c_data = (object)[
-                    'currency_symbol' => $location->currency->symbol ?? '',
-                    'thousand_separator' => $location->currency->thousand_separator ?? ',',
-                    'decimal_separator' => $location->currency->decimal_separator ?? '.',
-                    'currency_precision' => $business_settings['currency_precision'] ?? 2,
-                    'currency_symbol_placement' => $business_settings['currency_symbol_placement'] ?? 'before',
-                ];
-            }
-            $html .= $this->productUtil->num_f($row->min_purchase_price, true, $c_data);
-        }
-        return $html . '</div>';
-                    }
+                    '<div style="white-space: nowrap;">@format_currency($min_purchase_price) @if($max_purchase_price != $min_purchase_price && $type == "variable") -  @format_currency($max_purchase_price)@endif </div>'
                 )
                 ->addColumn(
                     'selling_price',

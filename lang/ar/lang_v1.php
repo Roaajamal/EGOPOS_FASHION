@@ -1,6 +1,8 @@
 <?php
 
 return [
+    'show_invoice_number' => 'اظهار رقم الفاتورة ',
+    'enable_farora_system' => 'تفعيل نظام الفوترة الاردنية' ,
     'fatora_status' => 'حالة الفوترة',
     'fatora_action'=> 'اجراء الفاتورة ',
     'sent' => 'مرسلة',

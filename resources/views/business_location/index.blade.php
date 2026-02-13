@@ -45,7 +45,7 @@
                         <th>@lang( 'business.state' )</th>
                         <th>@lang( 'business.country' )</th>
                         <th>@lang( 'lang_v1.price_group' )</th>
-                        <th>@lang( 'business.currency' )</th>   <!--  002 -->
+                      <!--  <th>@lang( 'business.currency' )</th>     002 -->
                         <th>@lang( 'invoice.invoice_scheme' )</th>
                         <th>@lang('lang_v1.invoice_layout_for_pos')</th>
                         <th>@lang('lang_v1.invoice_layout_for_sale')</th>

@@ -45,17 +45,24 @@ $(document).ready(function () {
 
     //Toastr setting
     toastr.options.preventDuplicates = true;
-    toastr.options.timeOut = '3000';
+    toastr.options.timeOut = '3000'; // للرسائل العادية (success, warning)
+    toastr.options.extendedTimeOut = 0; // ما تختفي لما المستخدم يحوم عليها
+    toastr.options.closeButton = true; // إضافة زر X للإغلاق اليدوي
+    toastr.options.tapToDismiss = false; // منع الإغلاق بالضغط على الرسالة
+    //toastr.options.closeHtml = '<button><i class="fa fa-times"></i></button>'; // شكل زر الإغلاق
 
     //Play notification sound on success, error and warning
     toastr.options.onShown = function () {
-        if ($(this).hasClass('toast-success')) {
-            var audio = $('#success-audio')[0];
+        // رسائل الخطأ تضل موجودة لحد ما المستخدم يشيلها يدوياً
+        if ($(this).hasClass('toast-error')) {
+            // تعديل الوقت لرسائل الخطأ فقط
+            $(this).css('opacity', '1');
+            var audio = $('#error-audio')[0];
             if (audio !== undefined) {
                 audio.play();
             }
-        } else if ($(this).hasClass('toast-error')) {
-            var audio = $('#error-audio')[0];
+        } else if ($(this).hasClass('toast-success')) {
+            var audio = $('#success-audio')[0];
             if (audio !== undefined) {
                 audio.play();
             }
@@ -65,6 +72,17 @@ $(document).ready(function () {
                 audio.play();
             }
         }
+    };
+
+    // تخصيص رسائل الخطأ لتضل موجودة
+    var originalError = toastr.error;
+    toastr.error = function(message, title, optionsOverride) {
+        optionsOverride = optionsOverride || {};
+        optionsOverride.timeOut = 0; // ما تختفي أبداً
+        optionsOverride.extendedTimeOut = 0;
+        optionsOverride.closeButton = true; // زر الإغلاق
+        optionsOverride.tapToDismiss = false; // ما تنسكر بالضغط
+        return originalError(message, title, optionsOverride);
     };
 
     //Default setting for jQuey validator

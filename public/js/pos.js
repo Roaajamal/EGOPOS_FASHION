@@ -78,7 +78,22 @@ $(document).ready(function() {
         if ($('#types_of_service_id').length && $('#types_of_service_id').val()) {
             $('#types_of_service_id').change();
         }
-    });
+         ////////////  008
+        var selected_location_id = $(this).val();
+
+        if (selected_location_id) {
+        // تحديث الحقل المخفي فوراً
+        $('input#location_id').val(selected_location_id);
+
+        // استدعاء التحديث وتمرير الـ ID الجديد يدوياً لكسر أي تأخير
+        if (typeof update_next_invoice_no === "function") {
+            // نمرر تأخير 0 ليحدث التغيير فوراً عند التنقل بين الفروع
+            update_next_invoice_no(0, selected_location_id);
+          }
+          }
+         
+         /////////////// 008
+       });
 
     //get customer
     $('select#customer_id').select2({
@@ -562,6 +577,7 @@ $(document).ready(function() {
                 if (result.success == 1) {
                     reset_pos_form();
                     toastr.success(result.msg);
+                 //   update_next_invoice_no();  ////////////  008
                 } else {
                     toastr.error(result.msg);
                 }
@@ -872,6 +888,7 @@ $(document).on('submit', 'form#add_pos_sell_form', function(e) {
 
                     // 3. تصفير النموذج
                     reset_pos_form();
+                  
 
                     // 4. فتح رابط الواتساب إذا وجد
                     if (result.whatsapp_link) {
@@ -2263,6 +2280,11 @@ function reset_pos_form(){
     // Set global_is_clear_local_storage to true to clear local storage
     global_is_clear_local_storage = true;
     saveFormDataToLocalStorage();
+  
+    ///////////// 008
+    if (typeof update_next_invoice_no === "function") {
+        update_next_invoice_no();
+    }
 }
 
 function set_default_customer() {
@@ -3500,4 +3522,11 @@ function saveFormDataToLocalStorage() {
     localStorage.setItem("pos_form_data_array", JSON.stringify(formArray));
 
     // console.log("Form data successfully saved to LocalStorage.");
+
+     //////////////// to add invoice number 008
+// دالة لتحديث الرقم من السيرفر
+
+
+
+
 }

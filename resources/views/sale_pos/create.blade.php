@@ -297,9 +297,53 @@ document.addEventListener('DOMContentLoaded', function () {
             search.blur();
         });
     });
+
+    
+});
+
+</script>
+<script>
+// --- كود تحديث رقم الفاتورة (008) ---
+
+// 1. الدالة الأساسية لجلب الرقم من السيرفر
+// أضفنا لها معامل delay للتحكم في وقت الانتظار
+function update_next_invoice_no(delay = 1500) {
+    if ($('#next_invoice_no_display').length <= 0) {
+        return false; 
+    }
+    // جلب الـ ID الخاص بالموقع (الفرع)
+    var location_id = $('select#select_location_id').val() || $('input#location_id').val();
+    
+    if (location_id) {
+        // استخدام setTimeout لضمان تحديث قاعدة البيانات قبل الطلب
+        setTimeout(function() {
+            $.ajax({
+                method: 'GET',
+                url: '/get-next-invoice-no',
+                data: { location_id: location_id },
+                success: function(next_no) {
+                    if (next_no) {
+                        $('#next_invoice_no_display').text(next_no);
+                    }
+                },
+                error: function() {
+                    console.log("تنبيه: تعذر تحديث رقم الفاتورة");
+                }
+            });
+        }, delay);
+    }
+}
+
+$(document).ready(function() {
+    // 2. تحديث الرقم فوراً عند تغيير الفرع يدويًا من القائمة
+    $(document).on('change', 'select#select_location_id', function() {
+        // نمرر delay = 0 لأننا نريد التغيير فوراً عند اختيار الفرع
+        if (typeof update_next_invoice_no === "function") {
+            update_next_invoice_no(0);
+        }
+    });
 });
 </script>
-
 
 
 

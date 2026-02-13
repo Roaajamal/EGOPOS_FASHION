@@ -170,3 +170,32 @@ if (!function_exists('can_edit_fatora_invoice')) {
         return $fatoraInvoice === null; // Can edit only if not sent
     }
 }
+///////// function for column visible 009 
+if (!function_exists('is_col_visible')) {
+    function is_col_visible($report_key, $column_key) {
+        $user = auth()->user();
+        if (empty($user)) {
+            return false;
+        }
+
+        // السوبر أدمن يرى كل شيء دائماً
+        if ($user->hasRole('Admin#' . $user->business_id) || $user->can('superadmin')) {
+            return true;
+        }
+
+        $user_role_id = $user->roles->first()->id;
+        
+        $setting = \DB::table('report_column_settings')
+                    ->where('report_key', $report_key)
+                    ->where('column_key', $column_key)
+                    ->first();
+
+        // إذا لم يتم ضبط إعداد لهذا العمود، يظهر افتراضياً
+        if (!$setting) {
+            return true;
+        }
+
+        $allowed_roles = json_decode($setting->role_ids, true);
+        return is_array($allowed_roles) && in_array($user_role_id, $allowed_roles);
+    }
+}

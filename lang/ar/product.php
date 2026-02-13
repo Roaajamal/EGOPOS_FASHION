@@ -6,6 +6,7 @@
      'profit_percent' => 'x الهامش (٪)',
      'add_new_product' => 'منتج جديد',
      'add_product_for_labels' => 'إضافة منتجات لتوليد الملصقات',
+     'image' => 'الصورة', 
      'product_type' => 'نوع المنتج',
      'category' => 'الصنف',
      'sub_category' => 'الصنف الفرعي',

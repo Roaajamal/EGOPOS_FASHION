@@ -1,5 +1,6 @@
 @php
     $is_mobile = isMobile();
+   
 @endphp
 
 <div class="row">
@@ -26,12 +27,19 @@
     فتح درج الكاش
 </button>
 @endcan
+
+<!--   meps setting --> 
+
 <button id="pay_card_full" 
+        type="button"
         class="tw-font-bold tw-text-white tw-bg-blue-600 tw-p-2 tw-rounded-md tw-cursor-pointer tw-flex tw-items-center tw-gap-1"
         title="@lang('business.pay_by_card_tooltip')"
-      <!-- مخفي بداية -->
-    <i class="fas fa-credit-card"></i> @lang('business.pay_by_visa')
+       > <!-- مهم: مخفي افتراضياً -->
+    <i class="fas fa-credit-card"></i> 
+    @lang('business.pay_by_visa')
 </button>
+<!--   meps setting --> 
+
 <!-- صندوق الأدوات (مخفي) -->
 <div id="cashDrawerBox" style="display:none; margin-top:15px;">
     <h3>🔌 فتح درج الكاش</h3>
@@ -456,6 +464,7 @@ $(document).ready(function() {
     $('#location_id').change(function() {
         checkMpsSettings();
     });
+
     
     // إذا كان هناك زر إعادة تحميل
     $(document).on('locationChanged', function() {
@@ -463,6 +472,8 @@ $(document).ready(function() {
     });
 });
 </script>
+
+
 <script>
 // فنكشن واحد فقط يأخذ البيانات من الجلسة ويرسل 5 للميبس
 async function testSend5ToController() {
@@ -616,6 +627,8 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+
+
 
 @if (isset($transaction))
     @include('sale_pos.partials.edit_discount_modal', [

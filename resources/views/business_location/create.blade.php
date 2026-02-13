@@ -55,19 +55,7 @@
                         {!! Form::text('country', null, ['class' => 'form-control', 'placeholder' => __( 'business.country'), 'required' ]); !!}
                     </div>
                 </div>
-                 <!--  add currency --> 
-                <div class="col-sm-6">
-    <div class="form-group">
-        {!! Form::label('currency_id', __('business.currency') . ':*') !!}
-        <div class="input-group">
-            <span class="input-group-addon">
-                <i class="fas fa-money-bill-alt"></i>
-            </span>
-            {!! Form::select('currency_id', $currencies, null, ['class' => 'form-control', 'placeholder' => __('messages.please_select'), 'required']); !!}
-        </div>
-    </div>
-</div>
- <!--  add currency --> 
+                
                 <div class="clearfix"></div>
                 <div class="col-sm-6">
                     <div class="form-group">
