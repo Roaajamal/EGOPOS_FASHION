@@ -60,8 +60,8 @@ return [
             'engine' => null,
          'options' => extension_loaded('pdo_mysql') ? array_filter([
           PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'), // server
-        //   Pdo\Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),  // local
-]) : [],
+          //   Pdo\Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),  // local
+          ]) : [],
             //'dump' => [ 'dump_binary_path' => 'D:\laragon\bin\mysql\mysql-8.0.30-winx64\bin'] 
             // Uncomment above line for windows & provide path to mysql dump binary for backup to work
         ],
