@@ -44,7 +44,6 @@
                         {!! Form::select('unit', $units, null, ['placeholder' => __('messages.all'), 'class' => 'form-control select2', 'style' => 'width:100%']); !!}
                     </div>
                 </div>
-
                 @if($show_manufacturing_data)
                     <div class="col-md-3">
                         <div class="form-group">

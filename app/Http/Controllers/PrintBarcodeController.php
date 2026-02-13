@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Business;
+use App\Services\PrintService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -19,23 +21,68 @@ class PrintBarcodeController extends Controller
         try {
             $business_id = Auth::check() ? Auth::user()->business_id : 1;
             
-            // جلب بعض المنتجات للعرض الأولي
+            // جلب المنتجات للعرض (أحدث المنتجات أولاً، ومن لديه تباين واحد على الأقل للباركود)
             $products = Product::where('business_id', $business_id)
                 ->with(['brand', 'category', 'variations'])
                 ->where('type', '!=', 'modifier')
-                ->orderBy('name')
-                ->take(20)
+                ->whereHas('variations')
+                ->orderBy('created_at', 'desc')
+                ->take(50)
                 ->get();
             
-            $designData = $this->getBarcodeDesign($business_id);
+            $designData = PrintService::forBusiness($business_id)->getBarcodeDesign();
             
-            return view('printbarcode.printbar', compact('products', 'designData'));
+            $print_after_save_product_id = request()->get('product_id');
+            $print_after_save_all = request()->get('print_all', 0);
+            $print_copies = (int) request()->get('print_copies', 1);
+            $print_send_mode = request()->get('print_send_mode', 'one_by_one');
+            if ($print_copies < 1) $print_copies = 1;
+            if ($print_copies > 999) $print_copies = 999;
+            $product_ids_param = request()->get('product_ids', '');
+            $print_after_save_product_ids = [];
+            if (is_string($product_ids_param) && $product_ids_param !== '') {
+                $print_after_save_product_ids = array_values(array_filter(array_map('intval', explode(',', $product_ids_param))));
+            } elseif (is_array($product_ids_param)) {
+                $print_after_save_product_ids = array_values(array_filter(array_map('intval', $product_ids_param)));
+            }
+            $auto_print = (bool) request()->get('auto_print', 0);
+            $default_printer = request()->get('default_printer', '');
+            if ($default_printer === '' && Auth::check()) {
+                $business = Business::find($business_id);
+                $common = $business && $business->common_settings ? $business->common_settings : [];
+                $default_printer = (string) ($common['default_barcode_printer'] ?? '');
+            }
+            if ($default_printer === '') {
+                $default_printer = \App\Services\PrintService::DEFAULT_PRINTER_NAME;
+            }
+            return view('printbarcode.printbar', compact('products', 'designData', 'print_after_save_product_id', 'print_after_save_all', 'print_copies', 'print_send_mode', 'print_after_save_product_ids', 'auto_print', 'default_printer'));
             
         } catch (\Exception $e) {
             Log::error('❌ خطأ في صفحة الباركود: ' . $e->getMessage());
             Log::error($e->getTraceAsString());
             return response("Error: " . $e->getMessage(), 500);
         }
+    }
+
+    /**
+     * إرجاع رابط طباعة الباركود فقط (للاستدعاء من أي صفحة أو AJAX بدون فتح صفحة).
+     * الاستخدام: GET /print-barcode/url?product_id=123&print_copies=1
+     * الاستجابة: { "success": true, "print_url": "..." }
+     */
+    public function getPrintUrl(Request $request)
+    {
+        $product_id = (int) $request->get('product_id');
+        if ($product_id < 1) {
+            return response()->json(['success' => false, 'message' => 'product_id مطلوب'], 400);
+        }
+        $business_id = Auth::check() ? Auth::user()->business_id : 1;
+        $printService = PrintService::forBusiness($business_id);
+        $print_url = $printService->getBarcodePrintUrl($product_id, [
+            'print_copies'    => (int) $request->get('print_copies', 1),
+            'print_send_mode' => $request->get('print_send_mode', 'one_by_one'),
+        ]);
+
+        return response()->json(['success' => true, 'print_url' => $print_url]);
     }
 
     /**
@@ -51,19 +98,23 @@ class PrintBarcodeController extends Controller
 
             $products = Product::where('business_id', $business_id)
                 ->with(['category', 'brand', 'variations'])
-                ->when($search, function($query) use ($search) {
-                    return $query->where('name', 'LIKE', "%{$search}%")
-                               ->orWhere('sku', 'LIKE', "%{$search}%")
-                               ->orWhereHas('variations', function($q) use ($search) {
-                                   $q->where('sub_sku', 'LIKE', "%{$search}%");
-                               });
-                })
                 ->where('type', '!=', 'modifier')
+                ->whereHas('variations')
+                ->when($search, function($query) use ($search) {
+                    return $query->where(function($q) use ($search) {
+                        $q->where('name', 'LIKE', "%{$search}%")
+                          ->orWhere('sku', 'LIKE', "%{$search}%")
+                          ->orWhereHas('variations', function($vq) use ($search) {
+                              $vq->where('sub_sku', 'LIKE', "%{$search}%");
+                          });
+                    });
+                })
+                ->orderBy('created_at', 'desc')
                 ->get();
 
             Log::info('✅ عدد المنتجات التي تم العثور عليها: ' . $products->count());
 
-            $designData = $this->getBarcodeDesign($business_id);
+            $designData = PrintService::forBusiness($business_id)->getBarcodeDesign();
 
             return view('printbarcode.printbar', compact('products', 'search', 'designData'));
             
@@ -87,8 +138,8 @@ class PrintBarcodeController extends Controller
                 })
                 ->get();
 
-            // جلب التصميم المحفوظ
-            $designData = $this->getBarcodeDesign($business_id);
+            // جلب التصميم المحفوظ من الخدمة المركزية
+            $designData = PrintService::forBusiness($business_id)->getBarcodeDesign();
 
             return view('printbarcode.print-preview', compact('products', 'designData'));
             
@@ -121,9 +172,9 @@ class PrintBarcodeController extends Controller
                 ], 400);
             }
 
-            // جلب تصميم الباركود
+            // جلب تصميم الباركود من الخدمة المركزية
             $business_id = Auth::check() ? Auth::user()->business_id : 1;
-            $designData = $this->getBarcodeDesign($business_id);
+            $designData = PrintService::forBusiness($business_id)->getBarcodeDesign();
 
             // توليد محتوى ZPL بناء على التصميم المخزن
             $zplContent = $this->generateZPLContent($productData, $designData);
@@ -366,7 +417,7 @@ class PrintBarcodeController extends Controller
     {
         try {
             $business_id = Auth::check() ? Auth::user()->business_id : 1;
-            $designData = $this->getBarcodeDesign($business_id);
+            $designData = PrintService::forBusiness($business_id)->getBarcodeDesign();
 
             return response()->json([
                 'success' => true,
@@ -383,106 +434,19 @@ class PrintBarcodeController extends Controller
     }
 
     /**
-     * دالة مساعدة لجلب تصميم الباركود
+     * إرجاع ZPL لملصق واحد — لاستخدامه في الإرسال المباشر للطابعة (raw) حتى تصل الأوامر للطابعة.
+     * POST product_data[]: name, barcode, sku, price, brand
      */
-    private function getBarcodeDesign($business_id)
+    public function getZpl(Request $request)
     {
-        try {
-            $design = DB::table('barcode_design_settings')
-                      ->where('business_id', $business_id)
-                      ->first();
-
-            if ($design && !empty($design->design)) {
-                $designData = json_decode($design->design, true);
-                $designData = $this->normalizeDesignData($designData);
-                
-                Log::info('📋 تم تحميل تصميم الباركود من قاعدة البيانات', ['design' => $designData]);
-                return $designData;
-            }
-
-            return $this->getDefaultDesign();
-
-        } catch (\Exception $e) {
-            Log::warning('لا يمكن تحميل تصميم الباركود: ' . $e->getMessage());
-            return $this->getDefaultDesign();
+        $productData = $request->input('product_data');
+        if (! is_array($productData)) {
+            return response()->json(['success' => false, 'message' => 'product_data مطلوب'], 400);
         }
-    }
-
-    /**
-     * تطبيع بيانات التصميم
-     */
-    private function normalizeDesignData($designData)
-    {
-        if (!isset($designData['label_size'])) {
-            $designData['label_size'] = ['width' => 50, 'height' => 25];
-        }
-        
-        if (!isset($designData['elements'])) {
-            $designData['elements'] = [];
-        }
-        
-        if (!isset($designData['barcode_settings'])) {
-            $designData['barcode_settings'] = [
-                'format' => 'CODE128',
-                'width' => 2,
-                'height' => 40,
-                'displayValue' => true,
-                'fontSize' => 12
-            ];
-        }
-        
-        if (!isset($designData['extra_elements'])) {
-            $designData['extra_elements'] = [];
-        }
-        
-        return $designData;
-    }
-     
-    private function getDefaultDesign()
-    {
-        return [
-            'label_size' => [
-                'width' => 50,
-                'height' => 25
-            ],
-            'barcode_settings' => [
-                'format' => 'CODE128',
-                'width' => 2,
-                'height' => 40,
-                'displayValue' => true,
-                'fontSize' => 12
-            ],
-            'elements' => [
-                'product_name' => [
-                    'text' => '{{ product_name }}',
-                    'left' => '5px',
-                    'top' => '5px',
-                    'fontSize' => '12px',
-                    'fontFamily' => 'Arial',
-                    'color' => '#000000',
-                    'visible' => true
-                ],
-                'barcode-container' => [
-                    'text' => '{{ sku }}',
-                    'left' => '5px',
-                    'top' => '25px',
-                    'fontSize' => '10px',
-                    'fontFamily' => 'Arial',
-                    'color' => '#000000',
-                    'visible' => true
-                ],
-                'price' => [
-                    'text' => '{{ price }}',
-                    'left' => '5px',
-                    'top' => '70px',
-                    'fontSize' => '12px',
-                    'fontFamily' => 'Arial',
-                    'color' => '#000000',
-                    'visible' => true
-                ]
-            ],
-            'extra_elements' => []
-        ];
+        $business_id = Auth::check() ? Auth::user()->business_id : 1;
+        $designData = PrintService::forBusiness($business_id)->getBarcodeDesign();
+        $zpl = $this->generateZPLContent($productData, $designData);
+        return response()->json(['success' => true, 'zpl' => $zpl]);
     }
 
     /**
@@ -520,9 +484,9 @@ class PrintBarcodeController extends Controller
                 
                 $quantity = $quantities[$product->id] ?? 1;
                 
-                // توليد ZPL لكل منتج
+                // توليد ZPL لكل منتج من التصميم المحفوظ في الخدمة
                 $business_id = Auth::check() ? Auth::user()->business_id : 1;
-                $designData = $this->getBarcodeDesign($business_id);
+                $designData = PrintService::forBusiness($business_id)->getBarcodeDesign();
                 $zplContent = $this->generateZPLContent($productData, $designData);
                 
                 $results[] = [
@@ -545,5 +509,110 @@ class PrintBarcodeController extends Controller
                 'message' => 'حدث خطأ أثناء الطباعة'
             ], 500);
         }
+    }
+
+    /**
+     * جلب توليفات اللون/المقاس لمنتج (لصفحة طباعة الباركود — اختيار ما يطبع).
+     * للمنتج الفردي يُرجع توليفة واحدة حتى تعمل الطباعة التلقائية بعد «حفظ وطباعة» من صفحة الكميات.
+     */
+    public function getProductVariations($product_id)
+    {
+        try {
+            $business_id = Auth::check() ? Auth::user()->business_id : 1;
+            $product = Product::where('business_id', $business_id)->where('id', $product_id)->with(['variations'])->first();
+
+            if (! $product) {
+                return response()->json(['success' => false, 'message' => 'المنتج غير موجود'], 404);
+            }
+
+            $combinations = $product->size_color_combinations;
+            $by_color = null;
+
+            if (is_array($combinations) && ! empty($combinations['by_color'])) {
+                $by_color = $combinations['by_color'];
+            }
+
+            if (empty($by_color) && $product->type == 'variable') {
+                $variations = $product->variations()->with('product_variation')->get();
+                $flat = [];
+                foreach ($variations as $v) {
+                    $flat[] = [
+                        'variation_id' => $v->id,
+                        'sub_sku' => $v->sub_sku,
+                        'value' => $v->name,
+                        'sell_price_inc_tax' => $v->sell_price_inc_tax,
+                        'label' => $v->name,
+                        'size' => $v->name,
+                    ];
+                }
+                return response()->json([
+                    'success' => true,
+                    'product' => ['id' => $product->id, 'name' => $product->name, 'sku' => $product->sku],
+                    'by_color' => null,
+                    'combinations' => $flat,
+                ]);
+            }
+
+            // منتج فردي: إرجاع توليفة واحدة من التباين الأول مع اللون والمقاس (من product_custom_field1/2) لمعاينة الملصق
+            if (empty($by_color) && $product->type == 'single') {
+                $first = $product->variations->first();
+                $flat = [];
+                if ($first) {
+                    $flat[] = [
+                        'variation_id' => $first->id,
+                        'sub_sku' => $first->sub_sku ?: $product->sku,
+                        'value' => $product->name,
+                        'sell_price_inc_tax' => $first->sell_price_inc_tax ?? $first->default_sell_price ?? 0,
+                        'label' => $product->name,
+                        'size' => (string) ($product->product_custom_field2 ?? ''),
+                        'custom_field_1' => (string) ($product->product_custom_field1 ?? ''),
+                        'custom_field_2' => (string) ($product->product_custom_field2 ?? ''),
+                    ];
+                }
+                return response()->json([
+                    'success' => true,
+                    'product' => [
+                        'id' => $product->id,
+                        'name' => $product->name,
+                        'sku' => $product->sku,
+                        'custom_field_1' => (string) ($product->product_custom_field1 ?? ''),
+                        'custom_field_2' => (string) ($product->product_custom_field2 ?? ''),
+                    ],
+                    'by_color' => null,
+                    'combinations' => $flat,
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'product' => ['id' => $product->id, 'name' => $product->name, 'sku' => $product->sku],
+                'by_color' => $by_color,
+                'combinations' => null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('PrintBarcodeController@getProductVariations: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * حفظ الطابعة الافتراضية للباركود (تُستخدم عند «حفظ وطباعة»).
+     */
+    public function saveDefaultPrinter(Request $request)
+    {
+        $printer = $request->input('printer_name', '');
+        if (! Auth::check()) {
+            return response()->json(['success' => false], 403);
+        }
+        $business_id = Auth::user()->business_id;
+        $business = Business::find($business_id);
+        if (! $business) {
+            return response()->json(['success' => false], 404);
+        }
+        $common = $business->common_settings ?? [];
+        $common['default_barcode_printer'] = $printer;
+        $business->common_settings = $common;
+        $business->save();
+        return response()->json(['success' => true]);
     }
 }

@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Yajra\DataTables\Facades\DataTables;
 use App\Events\ProductsCreatedOrModified;
+use App\Services\PrintService;
 use App\TransactionSellLine;
 
 class ProductController extends Controller
@@ -74,7 +75,7 @@ class ProductController extends Controller
             $location_id = request()->get('location_id', null);
             $permitted_locations = auth()->user()->permitted_locations();
 
-            $query = Product::with(['media'])
+            $query = Product::with(['media', 'product_locations'])
                 ->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
                 ->join('units', 'products.unit_id', '=', 'units.id')
                 ->leftJoin('categories as c1', 'products.category_id', '=', 'c1.id')
@@ -109,6 +110,7 @@ class ProductController extends Controller
                 }
             }
 
+            // صف لكل تباين (لون/مقاس) — المنتج يظهر أكثر من مرة حسب التوليفات
             $products = $query->select(
                 'products.id',
                 'products.name as product',
@@ -127,22 +129,41 @@ class ProductController extends Controller
                 'products.product_custom_field7', 'products.product_custom_field8', 'products.product_custom_field9',
                 'products.product_custom_field10', 'products.product_custom_field11', 'products.product_custom_field12',
                 'products.product_custom_field13', 'products.product_custom_field14', 'products.product_custom_field15',
-                'products.product_custom_field16', 'products.product_custom_field17', 'products.product_custom_field18', 
+                'products.product_custom_field16', 'products.product_custom_field17', 'products.product_custom_field18',
                 'products.product_custom_field19', 'products.product_custom_field20',
                 'products.alert_quantity',
+                'v.id as variation_id',
+                'v.name as variation_name',
+                'v.sub_sku as variation_sub_sku',
                 DB::raw('SUM(vld.qty_available) as current_stock'),
-                DB::raw('MAX(v.sell_price_inc_tax) as max_price'),
-                DB::raw('MIN(v.sell_price_inc_tax) as min_price'),
-                DB::raw('MAX(v.dpp_inc_tax) as max_purchase_price'),
-                DB::raw('MIN(v.dpp_inc_tax) as min_purchase_price')
-                );
+                'v.sell_price_inc_tax as max_price',
+                'v.sell_price_inc_tax as min_price',
+                'v.dpp_inc_tax as max_purchase_price',
+                'v.dpp_inc_tax as min_purchase_price'
+            );
 
             //if woocomerce enabled add field to query
             if ($is_woocommerce) {
                 $products->addSelect('woocommerce_disable_sync');
             }
 
-            $products->groupBy('products.id');
+            $products->groupBy(
+                'products.id', 'products.name', 'products.type', 'products.sku', 'products.image', 'products.enable_stock',
+                'products.is_inactive', 'products.not_for_selling', 'products.alert_quantity',
+                'products.category_id', 'products.sub_category_id', 'products.unit_id', 'products.brand_id', 'products.tax',
+                'products.product_custom_field1', 'products.product_custom_field2', 'products.product_custom_field3',
+                'products.product_custom_field4', 'products.product_custom_field5', 'products.product_custom_field6',
+                'products.product_custom_field7', 'products.product_custom_field8', 'products.product_custom_field9',
+                'products.product_custom_field10', 'products.product_custom_field11', 'products.product_custom_field12',
+                'products.product_custom_field13', 'products.product_custom_field14', 'products.product_custom_field15',
+                'products.product_custom_field16', 'products.product_custom_field17', 'products.product_custom_field18',
+                'products.product_custom_field19', 'products.product_custom_field20',
+                'c1.name', 'c2.name', 'units.actual_name', 'brands.name', 'tax_rates.name',
+                'v.id', 'v.name', 'v.sub_sku', 'v.sell_price_inc_tax', 'v.dpp_inc_tax'
+            );
+            if ($is_woocommerce) {
+                $products->groupBy('products.woocommerce_disable_sync');
+            }
 
             $type = request()->get('type', null);
             if (! empty($type)) {
@@ -194,7 +215,13 @@ class ProductController extends Controller
                 ->addColumn(
                     'product_locations',
                     function ($row) {
-                        return $row->product_locations->implode('name', ', ');
+                        $id = $row->id ?? 0;
+                        if ($id <= 0) {
+                            return '—';
+                        }
+                        $product = \App\Product::with('product_locations')->find($id);
+                        $locations = $product && $product->product_locations ? $product->product_locations : null;
+                        return $locations && $locations->isNotEmpty() ? $locations->implode('name', ', ') : '—';
                     }
                 )
                 ->editColumn('category', '{{$category}} @if(!empty($sub_category))<br/> -- {{$sub_category}}@endif')
@@ -262,14 +289,20 @@ class ProductController extends Controller
                     $product = $row->not_for_selling == 1 ? $product.' <span class="label bg-gray">'.__('lang_v1.not_for_selling').
                         '</span>' : $product;
 
-                    if ($is_woocommerce && ! $row->woocommerce_disable_sync) {
+                    // عرض الصنف الفرعي (لون - مقاس) تحت اسم المنتج عند وجود تباين
+                    if (! empty($row->variation_name)) {
+                        $product .= '<br><small class="text-muted" style="font-weight: normal;">‹ ' . e($row->variation_name) . '</small>';
+                    }
+
+                    if ($is_woocommerce && empty($row->woocommerce_disable_sync)) {
                         $product = $product.'<br><i class="fab fa-wordpress"></i>';
                     }
 
                     return $product;
                 })
                 ->editColumn('image', function ($row) {
-                    return '<div style="display: flex;"><img src="'.$row->image_url.'" alt="Product image" class="product-thumbnail-small"></div>';
+                    $url = isset($row->image_url) ? $row->image_url : (isset($row->image) && $row->image ? asset('/uploads/img/'.rawurlencode($row->image)) : asset('/img/default.png'));
+                    return '<div style="display: flex;"><img src="'.e($url).'" alt="Product image" class="product-thumbnail-small"></div>';
                 })
                 ->editColumn('type', '@lang("lang_v1." . $type)')
                 ->addColumn('mass_delete', function ($row) {
@@ -292,11 +325,48 @@ class ProductController extends Controller
                     'selling_price',
                     '<div style="white-space: nowrap;">@format_currency($min_price) @if($max_price != $min_price && $type == "variable") -  @format_currency($max_price)@endif </div>'
                 )
+                ->editColumn('sku', function ($row) {
+                    return e($row->variation_sub_sku ?? $row->sku ?? '');
+                })
+                ->editColumn('product_custom_field1', function ($row) {
+                    $varName = trim((string) ($row->variation_name ?? ''));
+                    if ($varName !== '' && strtoupper($varName) !== 'DUMMY') {
+                        $parts = array_values(array_filter(array_map('trim', preg_split('/\s*[-–]\s*/', $varName))));
+                        if (count($parts) >= 3) {
+                            return e($parts[1] ?? '');
+                        }
+                        if (count($parts) === 2) {
+                            return e($parts[0] ?? '');
+                        }
+                        if (count($parts) === 1) {
+                            return e($parts[0] ?? '');
+                        }
+                    }
+                    return e($row->product_custom_field1 ?? '');
+                })
+                ->editColumn('product_custom_field2', function ($row) {
+                    $varName = trim((string) ($row->variation_name ?? ''));
+                    if ($varName !== '' && strtoupper($varName) !== 'DUMMY') {
+                        $parts = array_values(array_filter(array_map('trim', preg_split('/\s*[-–]\s*/', $varName))));
+                        if (count($parts) >= 3) {
+                            return e($parts[2] ?? '');
+                        }
+                        if (count($parts) === 2) {
+                            return e($parts[1] ?? '');
+                        }
+                    }
+                    return e($row->product_custom_field2 ?? '');
+                })
                 ->filterColumn('products.sku', function ($query, $keyword) {
-                    $query->whereHas('variations', function ($q) use ($keyword) {
-                        $q->where('sub_sku', 'like', "%{$keyword}%");
-                    })
-                    ->orWhere('products.sku', 'like', "%{$keyword}%");
+                    if (trim((string) $keyword) === '') {
+                        return;
+                    }
+                    $query->where(function ($q) use ($keyword) {
+                        $q->whereHas('variations', function ($vq) use ($keyword) {
+                            $vq->where('sub_sku', 'like', "%{$keyword}%");
+                        })
+                        ->orWhere('products.sku', 'like', "%{$keyword}%");
+                    });
                 })
                 ->setRowAttr([
                     'data-href' => function ($row) {
@@ -361,6 +431,12 @@ class ProductController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        if (request()->get('clear_form') == '1') {
+            request()->session()->forget('product_form_old_input');
+            request()->session()->forget('opening_stock_return_to_create');
+            return redirect()->action([\App\Http\Controllers\ProductController::class, 'create']);
+        }
+
         $business_id = request()->session()->get('user.business_id');
 
         //Check if subscribed or not, then check for products quota
@@ -407,28 +483,89 @@ class ProductController extends Controller
             if (! empty($duplicate_product->id)) {
                 $rack_details = $this->productUtil->getRackDetails($business_id, $duplicate_product->id);
             }
+        } elseif (session()->has('product_form_old_input')) {
+            // استعادة المدخلات بعد «حفظ وطباعة» (تحديث الصفحة مع الإبقاء على البيانات)
+            $old = session('product_form_old_input');
+            session()->forget('product_form_old_input');
+            $duplicate_product = new \stdClass;
+            foreach ($old as $k => $v) {
+                $duplicate_product->$k = $v;
+            }
+            $duplicate_product->id = 0;
+            // حقول اختيارية قد لا ترد في الطلب (مثلاً عند عدم تحديد checkbox) — تجنّب Undefined property
+            $optionalDefaults = [
+                'enable_sr_no' => 0,
+                'not_for_selling' => 0,
+                'enable_stock' => isset($duplicate_product->enable_stock) ? $duplicate_product->enable_stock : 1,
+                'alert_quantity' => null,
+                'weight' => null,
+                'product_description' => null,
+            ];
+            foreach ($optionalDefaults as $key => $default) {
+                if (! property_exists($duplicate_product, $key)) {
+                    $duplicate_product->$key = $default;
+                }
+            }
+            if (! empty($duplicate_product->category_id)) {
+                $sub_categories = Category::where('business_id', $business_id)
+                        ->where('parent_id', $duplicate_product->category_id)
+                        ->pluck('name', 'id')
+                        ->toArray();
+            }
+            $form_restored_from_session = true;
         }
 
+        $form_restored_from_session = $form_restored_from_session ?? false;
+        $print_product_id = (int) request()->get('print_product_id', 0);
+        $print_product_url = '';
+        if ($print_product_id > 0) {
+            $printService = PrintService::forBusiness($business_id);
+            $print_product_url = $printService->getBarcodePrintUrl($print_product_id, [
+                'print_copies' => 1,
+                'print_send_mode' => 'one_by_one',
+            ]);
+        }
         $selling_price_group_count = SellingPriceGroup::countSellingPriceGroups($business_id);
 
         $module_form_parts = $this->moduleUtil->getModuleData('product_form_part');
         $product_types = $this->product_types();
 
-        $common_settings = session()->get('business.common_settings');
+        $common_settings = session()->get('business.common_settings') ?? [];
         $warranties = Warranty::forDropdown($business_id);
+
+        // سعر الشراء الافتراضي: حساب قبل/بعد الضريبة حسب إعدادات المنتج
+        $default_dpp = null;
+        $default_dpp_inc_tax = null;
+        $use_default_purchase = empty($duplicate_product) || (isset($duplicate_product->id) && $duplicate_product->id == 0);
+        if ($use_default_purchase && ! empty($common_settings['default_purchase_price']) && is_numeric($common_settings['default_purchase_price'])) {
+            $val = (float) $common_settings['default_purchase_price'];
+            $tax_type = $common_settings['default_purchase_price_tax_type'] ?? 'exclusive';
+            $tax_id = $common_settings['default_tax_id'] ?? null;
+            $tax_rate = 0;
+            if ($tax_id) {
+                $tax_rate = (float) (TaxRate::where('id', $tax_id)->value('amount') ?? 0);
+            }
+            if ($tax_type === 'inclusive') {
+                $default_dpp_inc_tax = $val;
+                $default_dpp = $tax_rate > 0 ? round($val / (1 + $tax_rate / 100), 4) : $val;
+            } else {
+                $default_dpp = $val;
+                $default_dpp_inc_tax = $tax_rate > 0 ? round($val * (1 + $tax_rate / 100), 4) : $val;
+            }
+        }
 
         //product screen view from module
         $pos_module_data = $this->moduleUtil->getModuleData('get_product_screen_top_view');
 
         return view('product.create')
-            ->with(compact('categories', 'brands', 'units', 'taxes', 'barcode_types', 'default_profit_percent', 'tax_attributes', 'barcode_default', 'business_locations', 'duplicate_product', 'sub_categories', 'rack_details', 'selling_price_group_count', 'module_form_parts', 'product_types', 'common_settings', 'warranties', 'pos_module_data'));
+            ->with(compact('categories', 'brands', 'units', 'taxes', 'barcode_types', 'default_profit_percent', 'tax_attributes', 'barcode_default', 'business_locations', 'duplicate_product', 'sub_categories', 'rack_details', 'selling_price_group_count', 'module_form_parts', 'product_types', 'common_settings', 'warranties', 'pos_module_data', 'form_restored_from_session', 'print_product_id', 'print_product_url', 'default_dpp', 'default_dpp_inc_tax'));
     }
 
     private function product_types()
     {
-        //Product types also includes modifier.
-        return ['single' => __('lang_v1.single'),
-            'variable' => __('lang_v1.variable'),
+        // فردي فقط (+ كومبو) — إيقاف التعامل مع نوع «متباين»؛ الأحجام/الألوان تُدار ضمن الفردي
+        return [
+            'single' => __('lang_v1.single'),
             'combo' => __('lang_v1.combo'),
         ];
     }
@@ -492,10 +629,84 @@ class ProductController extends Controller
 
             $product_details['warranty_id'] = ! empty($request->input('warranty_id')) ? $request->input('warranty_id') : null;
 
+            $common_settings = session()->get('business.common_settings') ?? [];
+            $size_color_feature_enabled = ! isset($common_settings['enable_product_size_color']) || ! empty($common_settings['enable_product_size_color']);
+            $size_color_data = $request->input('size_color_qty');
+            $has_size_color = is_array($size_color_data) && count(array_filter($size_color_data, function ($sizes) {
+                return is_array($sizes) && count($sizes) > 0;
+            })) > 0;
+
             DB::beginTransaction();
 
-            $product = Product::create($product_details);
+            // فردي + أحجام/ألوان: إنشاء صف في جدول products لكل توليفة (لون-مقاس) بدل منتج واحد مع تباينات
+            if ($request->input('type') == 'single' && $has_size_color && $size_color_feature_enabled) {
+                $product_locations = $request->input('product_locations');
+                $location_ids = [];
+                if (! empty($product_locations) && is_array($product_locations)) {
+                    $location_ids = array_values(array_filter($product_locations, function ($id) {
+                        return $id !== '' && $id !== null;
+                    }));
+                }
+                if (empty($location_ids)) {
+                    $first = BusinessLocation::where('business_id', $business_id)->first();
+                    if ($first) {
+                        $location_ids = [$first->id];
+                    }
+                }
+                $single_dsp = $request->input('single_dsp');
+                $single_dsp_inc_tax = $request->input('single_dsp_inc_tax');
+                $variable_price = $request->input('variable_single_price');
+                if ((empty($single_dsp) || (float) $single_dsp == 0) && $request->filled('variable_single_price')) {
+                    $single_dsp = $variable_price;
+                    $single_dsp_inc_tax = $variable_price;
+                }
+                $matrixResult = $this->productUtil->createProductsFromSizeColorMatrix($product_details, $size_color_data, [
+                    'single_dsp' => $single_dsp,
+                    'single_dsp_inc_tax' => $single_dsp_inc_tax,
+                    'single_dpp' => $request->input('single_dpp', 0),
+                    'single_dpp_inc_tax' => $request->input('single_dpp_inc_tax', 0),
+                    'profit_percent' => $request->input('profit_percent', 0),
+                    'location_ids' => $location_ids,
+                    'transaction_date' => \Carbon::now()->format('Y-m-d H:i:s'),
+                    'user_id' => $request->session()->get('user.id'),
+                ]);
+                $product = $matrixResult['first'];
+                $all_product_ids = $matrixResult['product_ids'] ?? [];
 
+                DB::commit();
+                $output = ['success' => 1, 'msg' => __('product.product_added_success')];
+
+                if ($request->input('submit_type') == 'submit_n_print') {
+                    $printService = PrintService::forBusiness($business_id);
+                    $print_url = $printService->getBarcodePrintUrl($product->id, [
+                        'print_copies'       => (int) $request->input('print_copies', 1),
+                        'print_send_mode'    => $request->input('print_send_mode', 'one_by_one'),
+                        'product_ids'        => $all_product_ids,
+                    ]);
+                    if ($request->ajax() || $request->wantsJson()) {
+                        // put بدل flash لأن الطلب التالي هو تحميل iframe الطباعة فيستهلك الـ flash؛ نريد الإبقاء على الحقول عند redirect لصفحة إنشاء منتج جديد
+                        $request->session()->put('product_form_old_input', $request->except('_token', 'image'));
+                        $output['print_url'] = $print_url;
+                        $output['redirect_url'] = action([\App\Http\Controllers\ProductController::class, 'create']);
+                        return response()->json($output);
+                    }
+                    $url = 'products?' . $printService->getBarcodePrintQueryString($product->id, [
+                        'print_copies'    => (int) $request->input('print_copies', 1),
+                        'print_send_mode' => $request->input('print_send_mode', 'one_by_one'),
+                        'product_ids'     => $all_product_ids,
+                    ]);
+                    return redirect($url)->with('status', $output);
+                }
+                if ($request->input('submit_type') == 'submit_n_add_selling_prices') {
+                    return redirect()->action([\App\Http\Controllers\ProductController::class, 'addSellingPrices'], [$product->id]);
+                }
+                if ($request->input('submit_type') == 'save_n_add_another') {
+                    return redirect()->action([\App\Http\Controllers\ProductController::class, 'create'])->with('status', $output);
+                }
+                return redirect('products')->with('status', $output);
+            }
+
+            $product = Product::create($product_details);
             event(new ProductsCreatedOrModified($product_details, 'added'));
 
             if (empty(trim($request->input('sku')))) {
@@ -504,10 +715,14 @@ class ProductController extends Controller
                 $product->save();
             }
 
-            //Add product locations
             $product_locations = $request->input('product_locations');
-            if (! empty($product_locations)) {
-                $product->product_locations()->sync($product_locations);
+            if (! empty($product_locations) && is_array($product_locations)) {
+                $location_ids = array_values(array_unique(array_filter($product_locations, function ($id) {
+                    return $id !== '' && $id !== null;
+                })));
+                $product->product_locations()->sync($location_ids);
+            } else {
+                $product->product_locations()->sync([]);
             }
 
             if ($product->type == 'single') {
@@ -564,13 +779,38 @@ class ProductController extends Controller
                 'msg' => __('messages.something_went_wrong'),
             ];
 
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json($output);
+            }
             return redirect('products')->with('status', $output);
         }
 
         if ($request->input('submit_type') == 'submit_n_add_opening_stock') {
+            $request->session()->put('product_form_old_input', $request->except('_token', 'image'));
+            $request->session()->put('opening_stock_return_to_create', true);
             return redirect()->action([\App\Http\Controllers\OpeningStockController::class, 'add'],
                 ['product_id' => $product->id]
             );
+        }
+        if ($request->input('submit_type') == 'submit_n_print') {
+            $business_id = $request->session()->get('user.business_id');
+            $printService = PrintService::forBusiness($business_id);
+            $print_url = $printService->getBarcodePrintUrl($product->id, [
+                'print_copies'    => (int) $request->input('print_copies', 1),
+                'print_send_mode' => $request->input('print_send_mode', 'one_by_one'),
+            ]);
+            if ($request->ajax() || $request->wantsJson()) {
+                // put بدل flash لأن الطلب التالي هو تحميل iframe الطباعة فيستهلك الـ flash؛ نريد الإبقاء على الحقول عند redirect لصفحة إنشاء منتج جديد
+                $request->session()->put('product_form_old_input', $request->except('_token', 'image'));
+                $output['print_url'] = $print_url;
+                $output['redirect_url'] = action([\App\Http\Controllers\ProductController::class, 'create']);
+                return response()->json($output);
+            }
+            $url = 'products?' . $printService->getBarcodePrintQueryString($product->id, [
+                'print_copies'    => (int) $request->input('print_copies', 1),
+                'print_send_mode' => $request->input('print_send_mode', 'one_by_one'),
+            ]);
+            return redirect($url)->with('status', $output);
         } elseif ($request->input('submit_type') == 'submit_n_add_selling_prices') {
             return redirect()->action([\App\Http\Controllers\ProductController::class, 'addSellingPrices'],
                 [$product->id]
@@ -651,6 +891,9 @@ class ProductController extends Controller
 
         $module_form_parts = $this->moduleUtil->getModuleData('product_form_part');
         $product_types = $this->product_types();
+        if ($product->type === 'variable') {
+            $product_types['variable'] = __('lang_v1.variable');
+        }
         $common_settings = session()->get('business.common_settings');
         $warranties = Warranty::forDropdown($business_id);
 
@@ -783,23 +1026,28 @@ class ProductController extends Controller
 
             event(new ProductsCreatedOrModified($product, 'updated'));
 
-            //Add product locations
+            //فروع النشاط — كل منتج لحاله في جدول product_locations (صف لكل product_id + location_id)
             $product_locations = ! empty($request->input('product_locations')) ?
                                 $request->input('product_locations') : [];
+            if (! is_array($product_locations)) {
+                $product_locations = [];
+            }
+            $location_ids = array_values(array_unique(array_filter($product_locations, function ($id) {
+                return $id !== '' && $id !== null;
+            })));
 
             $permitted_locations = auth()->user()->permitted_locations();
-            //If not assigned location exists don't remove it
             if ($permitted_locations != 'all') {
                 $existing_product_locations = $product->product_locations()->pluck('id');
-
                 foreach ($existing_product_locations as $pl) {
                     if (! in_array($pl, $permitted_locations)) {
-                        $product_locations[] = $pl;
+                        $location_ids[] = $pl;
                     }
                 }
+                $location_ids = array_values(array_unique($location_ids));
             }
 
-            $product->product_locations()->sync($product_locations);
+            $product->product_locations()->sync($location_ids);
 
             if ($product->type == 'single') {
                 $single_data = $request->only(['single_variation_id', 'single_dpp', 'single_dpp_inc_tax', 'single_dsp_inc_tax', 'profit_percent', 'single_dsp']);
@@ -1478,6 +1726,8 @@ class ProductController extends Controller
 
         return view('product.partials.quick_add_product')
                 ->with(compact('categories', 'brands', 'units', 'taxes', 'barcode_types', 'default_profit_percent', 'tax_attributes', 'product_name', 'locations', 'product_for', 'enable_expiry', 'enable_lot', 'module_form_parts', 'business_locations', 'common_settings', 'warranties'));
+  
+  
     }
 
     /**

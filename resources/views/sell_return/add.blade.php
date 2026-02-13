@@ -198,94 +198,75 @@
 <script src="{{ asset('js/printer.js?v=' . $asset_v) }}"></script>
 <script src="{{ asset('js/sell_return.js?v=' . $asset_v) }}"></script>
 <script type="text/javascript">
-    $(document).ready(function() {
-        // --- 1. تحديث العملة بناءً على موقع الفاتورة الأصلية (تعديل 002) ---
-        @if(!empty($sell->location->currency))
-            __currency_symbol = "{{$sell->location->currency->symbol}}";
-            __currency_thousand_separator = "{{$sell->location->currency->thousand_separator}}";
-            __currency_decimal_separator = "{{$sell->location->currency->decimal_separator}}";
-            __currency_symbol_placement = "{{$sell->location->currency->currency_symbol_placement}}";
-            __currency_precision = "{{session('business.currency_precision', 2)}}";
-            
-            // تحديث سمات العناصر التي تعرض العملة
-            $('.display_currency').each(function(){
-                $(this).data('currency_symbol', true);
-            });
-        @endif
+	$(document).ready(function() {
+		$('form#sell_return_form').validate();
+		update_sell_return_total();
+		//Date picker
+		// $('#transaction_date').datepicker({
+		//     autoclose: true,
+		//     format: datepicker_date_format
+		// });
+	});
+	$(document).on('change', 'input.return_qty, #discount_amount, #discount_type', function() {
+		update_sell_return_total()
+	});
 
-        // تفعيل التحقق من الفورم
-        $('form#sell_return_form').validate();
-        
-        // حساب الإجماليات لأول مرة عند تحميل الصفحة
-        update_sell_return_total();
+	function update_sell_return_total() {
+		var net_return = 0;
+		$('table#sell_return_table tbody tr').each(function() {
+			var quantity = __read_number($(this).find('input.return_qty'));
+			var unit_price = __read_number($(this).find('input.unit_price'));
+			var subtotal = quantity * unit_price;
+			$(this).find('.return_subtotal').text(__currency_trans_from_en(subtotal, true));
+			net_return += subtotal;
+		});
+		var discount = 0;
+		if ($('#discount_type').val() == 'fixed') {
+			discount = __read_number($("#discount_amount"));
+		} else if ($('#discount_type').val() == 'percentage') {
+			var discount_percent = __read_number($("#discount_amount"));
+			discount = __calculate_amount('percentage', discount_percent, net_return);
+		}
+		discounted_net_return = net_return - discount;
+
+		var tax_percent = $('input#tax_percent').val();
+		var total_tax = __calculate_amount('percentage', tax_percent, discounted_net_return);
+		var net_return_inc_tax = total_tax + discounted_net_return;
+
+		$('input#tax_amount').val(total_tax);
+		$('span#total_return_discount').text(__currency_trans_from_en(discount, true));
+		$('span#total_return_tax').text(__currency_trans_from_en(total_tax, true));
+		$('span#net_return').text(__currency_trans_from_en(net_return_inc_tax, true));
+	}
+
+	$('form#sell_return_form').on('submit', function(e) {
+    var total_qty = 0;
+    $('input.return_qty').each(function() {
+        total_qty += __read_number($(this));
     });
-
-    // --- 2. مراقبة التغييرات في الكمية أو الخصم ---
-    $(document).on('change', 'input.return_qty, #discount_amount, #discount_type', function() {
-        update_sell_return_total();
-    });
-
-    // --- 3. دالة حساب الإجمالي وتنسيق العملة (كاملة بدون حذف) ---
-    function update_sell_return_total() {
-        var net_return = 0;
-        $('table#sell_return_table tbody tr').each(function() {
-            var quantity = __read_number($(this).find('input.return_qty'));
-            var unit_price = __read_number($(this).find('input.unit_price'));
-            var subtotal = quantity * unit_price;
-            
-            // استخدام الرموز الجديدة المحدثة في الخطوة رقم 1
-            $(this).find('.return_subtotal').text(__currency_trans_from_en(subtotal, true));
-            net_return += subtotal;
-        });
-
-        var discount = 0;
-        if ($('#discount_type').val() == 'fixed') {
-            discount = __read_number($("#discount_amount"));
-        } else if ($('#discount_type').val() == 'percentage') {
-            var discount_percent = __read_number($("#discount_amount"));
-            discount = __calculate_amount('percentage', discount_percent, net_return);
-        }
-        
-        var discounted_net_return = net_return - discount;
-
-        var tax_percent = $('input#tax_percent').val();
-        var total_tax = __calculate_amount('percentage', tax_percent, discounted_net_return);
-        var net_return_inc_tax = total_tax + discounted_net_return;
-
-        $('input#tax_amount').val(total_tax);
-        $('span#total_return_discount').text(__currency_trans_from_en(discount, true));
-        $('span#total_return_tax').text(__currency_trans_from_en(total_tax, true));
-        $('span#net_return').text(__currency_trans_from_en(net_return_inc_tax, true));
+    
+    if (total_qty <= 0) {
+        e.preventDefault();
+        toastr.error('يجب إدخال كمية واحدة على الأقل للإرجاع');
     }
-
-    // --- 4. التحقق قبل إرسال الفورم ---
-    $('form#sell_return_form').on('submit', function(e) {
-        var total_qty = 0;
-        $('input.return_qty').each(function() {
-            total_qty += __read_number($(this));
-        });
-        
-        if (total_qty <= 0) {
-            e.preventDefault();
-            toastr.error('يجب إدخال كمية واحدة على الأقل للإرجاع');
-        }
-    });
-
-    // --- 5. التعامل مع أخطاء الأجاكس (نظام الفوترة) ---
-    $(document).ajaxError(function(event, jqXHR, ajaxSettings, thrownError) {
+});
+$(document).ajaxError(function(event, jqXHR, ajaxSettings, thrownError) {
         if (ajaxSettings.url.indexOf('sell-return/store') !== -1) {
             console.log("حدث خطأ في الطباعة ولكن تم الحفظ بنجاح.");
-            window.location.href = "/pos/create"; 
+            window.location.href = "/pos/create"; // التحويل اليدوي لصفحة الـ POS
         }
     });
 
-    // --- 6. مؤقت التحويل التلقائي لضمان تجربة مستخدم سلسة ---
+    // تعديل زر الإرسال لضمان التحويل حتى لو فشلت الطباعة
     $('form#sell_return_form').on('submit', function(e) {
+        // نترك الفورم يرسل بشكل طبيعي، ولكن نضع مؤقت بسيط للتحويل في حال تعطل السكربت الأصلي
         setTimeout(function() {
             if ($('.tw-dw-btn-primary').is(':disabled')) { 
+                // إذا كان الزر معطلاً (يعني جاري الحفظ) وتأخر الرد، قم بالتحويل
                 console.log("تأخر الرد، جاري التحويل التلقائي...");
             }
         }, 5000); 
     });
+
 </script>
 @endsection

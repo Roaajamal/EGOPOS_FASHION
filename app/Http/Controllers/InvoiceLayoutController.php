@@ -71,9 +71,9 @@ class InvoiceLayoutController extends Controller
             $business_id = $request->session()->get('user.business_id');
             $input['business_id'] = $business_id;
 
-          ///////////////// للتأكد من تصميم فاتورة الهدية والمرتجع ما يتكررو مرتين
+    ///////////////// للتأكد من تصميم فاتورة الهدية والمرتجع ما يتكررو مرتين
           // مصفوفة الأنواع المطلوب حمايتها
-        $design_type = $request->input('design');
+$design_type = $request->input('design');
         $unique_designs = ['gift', 'invoice_return'];
 
         // الشرط: إذا كان التصميم "هدية" أو "مرتجع"
@@ -321,7 +321,6 @@ if (in_array($new_design_type, $unique_designs)) {
         'english-arabic' => 'English-Arabic ('.__('lang_v1.for_normal_printer').')',
         'invoice_return' => __('invoice_return'),
         'gift' => __('gift'), 
-        'slip' => __('slip'),
     ];
 
     $business_id = request()->session()->get('user.business_id');

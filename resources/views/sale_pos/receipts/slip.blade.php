@@ -66,7 +66,7 @@
             <img style="width: 100%;margin-bottom: 10px;" src="{{$receipt_details->letter_head}}">
         </div>
     @endif
-			<div class="invoice-info-small">
+			<div class="border-top textbox-info">
 				<p class="f-left"><strong>{!! $receipt_details->invoice_no_prefix !!}</strong></p>
 				<p class="f-right">
 					{{$receipt_details->invoice_no}}
@@ -214,18 +214,19 @@
 			@endif
 
 	        <!-- customer info -->
-	       <div class="invoice-info-small customer-section" style="margin-top: 5px;">
-    @if(!empty($receipt_details->customer_info))
-        <div class="flex-row">
-            <span class="label">
-                <strong>{{$receipt_details->customer_label ?? 'العميل:'}}</strong>
-            </span>
-            <span class="value">
-                {!! $receipt_details->customer_info !!}
-            </span>
-        </div>
-    @endif
-</div>
+	        <div class="textbox-info">
+	        	<p style="vertical-align: top;"><strong>
+	        		{{$receipt_details->customer_label ?? ''}}
+	        	</strong></p>
+
+	        	<p>
+	        		@if(!empty($receipt_details->customer_info))
+	        			<div class="bw">
+						{!! $receipt_details->customer_info !!}
+						</div>
+					@endif
+	        	</p>
+	        </div>
 			
 			@if(!empty($receipt_details->client_id_label))
 				<div class="textbox-info">
@@ -338,7 +339,7 @@
 					</p>
 				</div>
 			@endif
-            <table style="width: 100%; margin-top: 15px !important; table-layout: fixed; border-collapse: collapse;" class="table-f-12 mb-10">
+            <table style="margin-top: 25px !important" class="border-bottom width-100 table-f-12 mb-10">
                 <thead class="border-bottom-dotted">
                     <tr>
                         <th class="serial_number">#</th>
@@ -489,126 +490,180 @@
 				</div>
 			@endif
 			@if(empty($receipt_details->hide_price))
-    <div class="totals-section" style="margin-top: 10px; border-top: 1px solid #000; padding-top: 5px;">
-
-        {{-- المجموع الفرعي --}}
-        <div class="flex-row">
-            <span class="sub-headings">{!! $receipt_details->subtotal_label !!}</span>
-            <span class="sub-headings bold">{{$receipt_details->subtotal}}</span>
-        </div>
-
-        {{-- مصاريف الشحن --}}
-        @if(!empty($receipt_details->shipping_charges))
-            <div class="flex-row">
-                <span>{!! $receipt_details->shipping_charges_label !!}</span>
-                <span>(+) {{$receipt_details->shipping_charges}}</span>
-            </div>
-        @endif
-
-        {{-- مصاريف التغليف --}}
-        @if(!empty($receipt_details->packing_charge))
-            <div class="flex-row">
-                <span>{!! $receipt_details->packing_charge_label !!}</span>
-                <span>(+) {{$receipt_details->packing_charge}}</span>
-            </div>
-        @endif
-
-        {{-- الخصومات (الخصم العام + خصم السطور) --}}
-        @if(!empty($receipt_details->discount) || !empty($receipt_details->total_line_discount))
-            <div class="flex-row">
-                <span>{!! $receipt_details->discount_label !!} @if(!empty($receipt_details->total_line_discount)) (إضافي) @endif</span>
-                <span class="discount-color">(-) {{ number_format((float)str_replace(',', '', $receipt_details->discount) + (float)str_replace(',', '', $receipt_details->total_line_discount), 2) }}</span>
-            </div>
-        @endif
-
-        {{-- مصاريف إضافية --}}
-        @if(!empty($receipt_details->additional_expenses))
-            @foreach($receipt_details->additional_expenses as $key => $val)
-                <div class="flex-row">
-                    <span>{{$key}}:</span>
-                    <span>(+) {{$val}}</span>
+                <div class="flex-box">
+                    <p class="left text-right sub-headings">
+                    	{!! $receipt_details->subtotal_label !!}
+                    </p>
+                    <p class="width-50 text-right sub-headings">
+                    	{{$receipt_details->subtotal}}
+                    </p>
                 </div>
-            @endforeach
-        @endif
 
-        {{-- نقاط المكافآت --}}
-        @if(!empty($receipt_details->reward_point_label))
-            <div class="flex-row">
-                <span>{!! $receipt_details->reward_point_label !!}</span>
-                <span>(-) {{$receipt_details->reward_point_amount}}</span>
-            </div>
-        @endif
+                <!-- Shipping Charges -->
+				@if(!empty($receipt_details->shipping_charges))
+					<div class="flex-box">
+						<p class="left text-right">
+							{!! $receipt_details->shipping_charges_label !!}
+						</p>
+						<p class="width-50 text-right">
+							{{$receipt_details->shipping_charges}}
+						</p>
+					</div>
+				@endif
 
-        {{-- الضريبة --}}
-        @if(!empty($receipt_details->tax))
-            <div class="flex-row">
-                <span>{!! $receipt_details->tax_label !!}</span>
-                <span>(+) {{$receipt_details->tax}}</span>
-            </div>
-        @endif
+				@if(!empty($receipt_details->packing_charge))
+					<div class="flex-box">
+						<p class="left text-right">
+							{!! $receipt_details->packing_charge_label !!}
+						</p>
+						<p class="width-50 text-right">
+							{{$receipt_details->packing_charge}}
+						</p>
+					</div>
+				@endif
 
-        {{-- جبر الكسر (Round off) --}}
-        @if($receipt_details->round_off_amount > 0)
-            <div class="flex-row">
-                <span>{!! $receipt_details->round_off_label !!}</span>
-                <span>{{$receipt_details->round_off}}</span>
-            </div>
-        @endif
+				<!-- Discount -->
+				@if( !empty($receipt_details->discount) )
+					<div class="flex-box">
+						<p class="width-50 text-right">
+							{!! $receipt_details->discount_label !!}
+						</p>
 
-        {{-- المجموع النهائي --}}
-        <div class="flex-row total-line" style="border-top: 1px double #000; border-bottom: 1px double #000; margin: 5px 0; padding: 5px 0;">
-            <span class="bold" style="font-size: 1.2em;">{!! $receipt_details->total_label !!}</span>
-            <span class="bold" style="font-size: 1.2em;">{{$receipt_details->total}}</span>
-        </div>
+						<p class="width-50 text-right">
+							(-) {{$receipt_details->discount}}
+						</p>
+					</div>
+				@endif
 
-        {{-- المجموع بالكلمات --}}
-        @if(!empty($receipt_details->total_in_words))
-            <p style="text-align: center; font-size: 0.8em; margin-bottom: 5px;"><em>{{$receipt_details->total_in_words}}</em></p>
-        @endif
+				@if( !empty($receipt_details->total_line_discount) )
+					<div class="flex-box">
+						<p class="width-50 text-right">
+							{!! $receipt_details->line_discount_label !!}
+						</p>
 
-        {{-- سجل الدفعات --}}
-        @if(!empty($receipt_details->payments))
-            @foreach($receipt_details->payments as $payment)
-                <div class="flex-row" style="font-size: 0.9em; color: #444;">
-                    <span>{{$payment['method']}} ({{$payment['date']}})</span>
-                    <span>{{$payment['amount']}}</span>
-                </div>
-            @endforeach
-        @endif
+						<p class="width-50 text-right">
+							(-) {{$receipt_details->total_line_discount}}
+						</p>
+					</div>
+				@endif
 
-        <hr style="border-top: 1px dashed #ccc; margin: 5px 0;">
+				@if( !empty($receipt_details->additional_expenses) )
+					@foreach($receipt_details->additional_expenses as $key => $val)
+						<div class="flex-box">
+							<p class="width-50 text-right">
+								{{$key}}:
+							</p>
 
-        {{-- المدفوع والمتبقي والديون السابقة --}}
-        @if(!empty($receipt_details->total_paid))
-            <div class="flex-row">
-                <span>{!! $receipt_details->total_paid_label !!}</span>
-                <span class="bold">{{$receipt_details->total_paid}}</span>
-            </div>
-        @endif
+							<p class="width-50 text-right">
+								(+) {{$val}}
+							</p>
+						</div>
+					@endforeach
+				@endif
 
-        @if(!empty($receipt_details->total_due))
-            <div class="flex-row due-highlight">
-                <span class="bold">{!! $receipt_details->total_due_label !!}</span>
-                <span class="bold">{{$receipt_details->total_due}}</span>
-            </div>
-        @endif
+				@if(!empty($receipt_details->reward_point_label) )
+					<div class="flex-box">
+						<p class="width-50 text-right">
+							{!! $receipt_details->reward_point_label !!}
+						</p>
 
-        @if(!empty($receipt_details->total_previous_due))
-            <div class="flex-row">
-                <span>{!! $receipt_details->total_previous_due_label !!}</span>
-                <span>{{$receipt_details->total_previous_due}}</span>
-            </div>
-        @endif
+						<p class="width-50 text-right">
+							(-) {{$receipt_details->reward_point_amount}}
+						</p>
+					</div>
+				@endif
 
-        @if(!empty($receipt_details->all_due))
-            <div class="flex-row all-due-section">
-                <span class="bold">{!! $receipt_details->all_bal_label !!}</span>
-                <span class="bold" style="font-size: 1.1em; border-bottom: 2px solid #000;">{{$receipt_details->all_due}}</span>
-            </div>
-        @endif
+				@if( !empty($receipt_details->tax) )
+					<div class="flex-box">
+						<p class="width-50 text-right">
+							{!! $receipt_details->tax_label !!}
+						</p>
+						<p class="width-50 text-right">
+							(+) {{$receipt_details->tax}}
+						</p>
+					</div>
+				@endif
 
-    </div>
-@endif
+				@if( $receipt_details->round_off_amount > 0)
+					<div class="flex-box">
+						<p class="width-50 text-right">
+							{!! $receipt_details->round_off_label !!} 
+						</p>
+						<p class="width-50 text-right">
+							{{$receipt_details->round_off}}
+						</p>
+					</div>
+				@endif
+
+				<div class="flex-box">
+					<p class="width-50 text-right sub-headings">
+						{!! $receipt_details->total_label !!}
+					</p>
+					<p class="width-50 text-right sub-headings">
+						{{$receipt_details->total}}
+					</p>
+				</div>
+				@if(!empty($receipt_details->total_in_words))
+				<p colspan="2" class="text-right mb-0">
+					<small>
+					({{$receipt_details->total_in_words}})
+					</small>
+				</p>
+				@endif
+				@if(!empty($receipt_details->payments))
+					@foreach($receipt_details->payments as $payment)
+						<div class="flex-box">
+							<p class="width-50 text-right">{{$payment['method']}} ({{$payment['date']}}) </p>
+							<p class="width-50 text-right">{{$payment['amount']}}</p>
+						</div>
+					@endforeach
+				@endif
+
+				<!-- Total Paid-->
+				@if(!empty($receipt_details->total_paid))
+					<div class="flex-box">
+						<p class="width-50 text-right">
+							{!! $receipt_details->total_paid_label !!}
+						</p>
+						<p class="width-50 text-right">
+							{{$receipt_details->total_paid}}
+						</p>
+					</div>
+				@endif
+
+				<!-- Total Due-->
+				@if(!empty($receipt_details->total_due) && !empty($receipt_details->total_due_label))
+					<div class="flex-box">
+						<p class="width-50 text-right">
+							{!! $receipt_details->total_due_label !!}
+						</p>
+						<p class="width-50 text-right">
+							{{$receipt_details->total_due}}
+						</p>
+					</div>
+				@endif
+				@if(!empty($receipt_details->total_previous_due))
+					<div class="flex-box">
+						<p class="width-50 text-right">
+							{!! $receipt_details->total_previous_due_label !!}
+						</p>
+						<p class="width-50 text-right">
+							{{$receipt_details->total_previous_due}}
+						</p>
+					</div>
+				@endif
+				@if(!empty($receipt_details->all_due))
+					<div class="flex-box">
+						<p class="width-50 text-right">
+							{!! $receipt_details->all_bal_label !!}
+						</p>
+						<p class="width-50 text-right">
+							{{$receipt_details->all_due}}
+						</p>
+					</div>
+				@endif
+				
+			@endif
             <div class="border-bottom width-100">&nbsp;</div>
             @if(empty($receipt_details->hide_price) && !empty($receipt_details->tax_summary_label) )
 	            <!-- tax -->
@@ -656,92 +711,143 @@
 </html>
 
 <style type="text/css">
+/* --- إعدادات الخطوط العامة --- */
 * {
-    font-family: 'Arial', sans-serif;
+    font-family: 'Arial', 'Helvetica', sans-serif;
     color: #000;
-    line-height: 1.1;
-}
-
-@media print {
-    @page { margin: 0; }
-    body { margin: 0; padding: 0; direction: rtl; } /* إضافة اتجاه اليمين لليسار */
-    
-    .ticket {
-        width: 76mm; /* ترك هامش بسيط للطابعة */
-        margin: 0 auto;
-        padding: 1mm;
-    }
-
-    /* ضبط الجدول لمنع التداخل */
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        table-layout: fixed; /* إجبار الأعمدة على احترام العرض */
-        margin-top: 5px;
-    }
-
-    th, td {
-        font-size: 10px; /* تصغير الخط قليلاً لمنع التداخل */
-        padding: 3px 0;
-        word-wrap: break-word;
-        vertical-align: top;
-    }
-
-    /* العرض الجديد للأعمدة لتقريب المسافات */
-    .col-index { width: 15px; text-align: right; }      /* رقم السطر - مساحة صغيرة جداً */
-    .col-desc  { width: auto; text-align: right; }     /* اسم المنتج - يأخذ باقي المساحة */
-    .col-qty   { width: 35px; text-align: center; }    /* الكمية */
-    .col-price { width: 45px; text-align: left; }      /* الإجمالي النهائي */
-
-    .border-bottom-dotted { border-bottom: 1px dotted #000; }
-    .f-8 { font-size: 8px; }
-    .centered { text-align: center; }
-}
-
-/* تنسيقات العرض خارج الطباعة */
-.flex-box { display: flex; justify-content: space-between; font-size: 11px; margin: 2px 0; }
-.f-left { float: right; font-weight: bold; } /* عكس الفلوت ليناسب العربي */
-.f-right { float: left; }
-.textbox-info { clear: both; width: 100%; display: block; margin-bottom: 2px; }
-
-.flex-row {
-    display: flex;
-    justify-content: space-between; /* هذا ما يجعل النص يميناً والسعر يساراً */
-    align-items: center;
-    width: 100%;
-    margin-bottom: 4px;
-}
-
-.bold { font-weight: bold; }
-
-.due-highlight {
-    background-color: #f2f2f2;
-    padding: 3px;
-   
-}
-
-.all-due-section {
-    margin-top: 5px;
-    padding-top: 5px;
-    border-top: 1px solid #333;
-}
-
-.discount-color { color: #000; } /* يمكنك تغييرها لـ red إذا كانت الطابعة ملونة */
-
-.invoice-info-small {
-    font-size: 11px; /* يمكنك تغيير الرقم لـ 10px إذا أردته أصغر أكثر */
-    color: #333;
-    margin-bottom: 10px;
     line-height: 1.2;
 }
 
-.invoice-info-small .flex-row {
-    margin-bottom: 2px; /* تقليل المسافة بين السطور */
+.f-8 { font-size: 9px !important; }
+.f-12 { font-size: 12px !important; }
+
+/* --- إعدادات الطباعة --- */
+@media print {
+    @page {
+        margin: 0;
+    }
+    
+    body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+    }
+
+    .ticket {
+        width: 80mm;
+        max-width: 80mm;
+        margin: 0 auto;
+        padding: 2mm;
+        box-sizing: border-box;
+    }
+
+    * {
+        font-size: 11px;
+    }
+
+    .headings {
+        font-size: 14px;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-bottom: 2px;
+        text-align: center;
+    }
+
+    .sub-headings {
+        font-size: 12px !important;
+        font-weight: bold !important;
+    }
+
+    /* --- تصحيح ضبط الجداول --- */
+    table {
+        width: 100%;
+        table-layout: fixed; 
+        border-collapse: collapse;
+        margin-bottom: 5px;
+    }
+
+    /* توزيع المساحات للأعمدة */
+    th.serial_number, td.serial_number { 
+        width: 8%; 
+        text-align: center;
+    }
+    
+    th.description, td.description { 
+        width: 44%; 
+        text-align: left; 
+        padding-left: 8px; /* زيادة مسافة الأمان بعد الكمية */
+    }
+
+    th.quantity, td.quantity { 
+        width: 18%; 
+        text-align: center; 
+    }
+
+    th.unit_price, td.unit_price { 
+        width: 15%; 
+        text-align: right; 
+    }
+
+    th.price, td.price { 
+        width: 15%; 
+        text-align: right; 
+    }
+
+    td {
+        white-space: normal;
+        word-wrap: break-word;
+        padding: 3px 2px;
+        vertical-align: top;
+    }
+
+    .border-top { border-top: 1px solid #000; }
+    .border-bottom { border-bottom: 1px solid #000; }
+    .border-bottom-dotted { border-bottom: 1px dotted #000; }
 }
 
-/* لضمان أن العناوين (مثل "التاريخ:") لا تأخذ مساحة كبيرة */
-.invoice-info-small span:first-child {
-    font-weight: normal;
+/* --- تنسيقات العناصر داخل الفاتورة --- */
+.centered { text-align: center; }
+.width-100 { width: 100%; }
+.mb-10 { margin-bottom: 10px; }
+.mt-5 { margin-top: 5px; }
+
+.textbox-info {
+    display: block;
+    clear: both;
+    width: 100%;
+    margin-bottom: 2px;
 }
 
+.f-left { float: left; font-weight: bold; }
+.f-right { float: right; }
+
+.flex-box {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    margin: 2px 0;
+}
+
+.flex-box p {
+    margin: 0;
+}
+
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+
+img {
+    max-width: 100% !important;
+    height: auto;
+}
+
+.center-block {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+img.center-block {
+    max-width: 70% !important; 
+    height: 30px !important;
+}
 </style>

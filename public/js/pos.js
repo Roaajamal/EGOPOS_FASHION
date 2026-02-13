@@ -3,12 +3,57 @@ var global_p_category_id = null;
 var global_is_clear_local_storage = false;
 $(document).ready(function() {
     customer_set = false;
-    //Prevent enter key function except texarea
+    //Prevent enter key function except textarea (في حقل البحث نعالج Enter في keydown أدناه لتفعيل السكان)
     $('form').on('keyup keypress', function(e) {
         var keyCode = e.keyCode || e.which;
         if (keyCode === 13 && e.target.tagName != 'TEXTAREA') {
             e.preventDefault();
             return false;
+        }
+    });
+
+    // مستمع عام لسكان الباركود حتى لو المؤشر ليس على حقل البحث
+    // يجمع الأحرف السريعة ثم عند Enter يطلق بحث المنتج في #search_product
+    var barcodeBuffer = '';
+    var barcodeTimer = null;
+    $(document).on('keydown', function(e) {
+        var tag = (e.target.tagName || '').toUpperCase();
+        // لو المستخدم يكتب داخل input/textarea/select أو contenteditable لا نتدخل
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || $(e.target).is('[contenteditable=true]')) {
+            return;
+        }
+
+        var key = e.key;
+
+        if (key === 'Enter') {
+            if (barcodeBuffer.length >= 2) {
+                e.preventDefault();
+                var code = barcodeBuffer;
+                barcodeBuffer = '';
+
+                var $input = $('#search_product');
+                if ($input.length) {
+                    $input.val(code);
+                    if ($input.data('ui-autocomplete')) {
+                        $input.autocomplete('search', code);
+                    }
+                }
+            } else {
+                barcodeBuffer = '';
+            }
+            return;
+        }
+
+        // الأحرف القابلة للطباعة فقط (حرف واحد)
+        if (typeof key === 'string' && key.length === 1) {
+            barcodeBuffer += key;
+            if (barcodeTimer) {
+                clearTimeout(barcodeTimer);
+            }
+            // إذا توقف الإدخال أكثر من 500ms نعتبر أنه ليس سكان واحد
+            barcodeTimer = setTimeout(function() {
+                barcodeBuffer = '';
+            }, 500);
         }
     });
 
@@ -26,20 +71,6 @@ $(document).ready(function() {
     $('select#select_location_id').change(function() {
         reset_pos_form();
 
-        
-        var selected_location = $(this).find(':selected');
-        
-        // --- تحديث بيانات العملة (002) ---
-        var currency_symbol = selected_location.data('currency_symbol');
-        if (currency_symbol !== undefined) {
-            __currency_symbol = currency_symbol;
-            __currency_thousand_separator = selected_location.data('currency_thousand_separator');
-            __currency_decimal_separator = selected_location.data('currency_decimal_separator');
-            __currency_precision = selected_location.data('currency_precision');
-            __currency_symbol_placement = selected_location.data('currency_symbol_placement');
-            
-            $('.display_currency').data('currency_symbol', currency_symbol);
-        }
         var default_price_group = $(this).find(':selected').data('default_price_group')
         if (default_price_group) {
             if($("#price_group option[value='" + default_price_group + "']").length > 0) {
@@ -78,22 +109,7 @@ $(document).ready(function() {
         if ($('#types_of_service_id').length && $('#types_of_service_id').val()) {
             $('#types_of_service_id').change();
         }
-         ////////////  008
-        var selected_location_id = $(this).val();
-
-        if (selected_location_id) {
-        // تحديث الحقل المخفي فوراً
-        $('input#location_id').val(selected_location_id);
-
-        // استدعاء التحديث وتمرير الـ ID الجديد يدوياً لكسر أي تأخير
-        if (typeof update_next_invoice_no === "function") {
-            // نمرر تأخير 0 ليحدث التغيير فوراً عند التنقل بين الفروع
-            update_next_invoice_no(0, selected_location_id);
-          }
-          }
-         
-         /////////////// 008
-       });
+    });
 
     //get customer
     $('select#customer_id').select2({
@@ -331,6 +347,17 @@ $(document).ready(function() {
                     .appendTo(ul);
             }
         };
+
+        // عند Enter (أو بعد سكان الباركود) — إطلاق البحث فوراً وإضافة المنتج إن وُجد واحد فقط
+        $('#search_product').on('keydown', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                var val = $(this).val().trim();
+                if (val.length >= 2) {
+                    $(this).autocomplete('search', val);
+                }
+            }
+        });
     }
 
     //Update line total and check for quantity not greater than max quantity
@@ -577,7 +604,6 @@ $(document).ready(function() {
                 if (result.success == 1) {
                     reset_pos_form();
                     toastr.success(result.msg);
-                 //   update_next_invoice_no();  ////////////  008
                 } else {
                     toastr.error(result.msg);
                 }
@@ -869,8 +895,8 @@ $(document).on('submit', 'form#add_pos_sell_form', function(e) {
 
         var data = $(form).serialize();
         var is_gift = $('#is_gift_receipt').is(':checked') ? 1 : 0;
-       
-        data = data + '&status=final&is_gift_receipt=' + is_gift ;
+       var is_slip = $('#is_slip_receipt').is(':checked') ? 1 : 0;
+        data = data + '&status=final&is_gift_receipt=' + is_gift + '&is_slip_receipt=' + is_slip;
 
         var url = $(form).attr('action');
         $.ajax({
@@ -888,7 +914,6 @@ $(document).on('submit', 'form#add_pos_sell_form', function(e) {
 
                     // 3. تصفير النموذج
                     reset_pos_form();
-                  
 
                     // 4. فتح رابط الواتساب إذا وجد
                     if (result.whatsapp_link) {
@@ -1760,11 +1785,11 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
 
                     round_row_to_iraqi_dinnar($(this));
 
-                 //   if (!$('#__is_mobile').length) {
-                  //      $('input#search_product')
-                    //        .focus()
-                      //      .select();
-                    //}
+                    if (!$('#__is_mobile').length) {
+                        $('input#search_product')
+                            .focus()
+                            .select();
+                    }
                 }
         });
     }
@@ -1872,11 +1897,11 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
                     round_row_to_iraqi_dinnar(this_row);
                     __currency_convert_recursively(this_row);
 
-                //    if (!$('#__is_mobile').length) {
-                  //      $('input#search_product')
-                    //        .focus()
-                      //      .select();
-                //    }
+                    if (!$('#__is_mobile').length) {
+                        $('input#search_product')
+                            .focus()
+                            .select();
+                    }
 
                     //Used in restaurant module
                     if (result.html_modifier) {
@@ -1891,11 +1916,11 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
                     $(".pos_product_div").animate({ scrollTop: $('.pos_product_div').prop("scrollHeight")}, 1000);
                 } else {
                     toastr.error(result.msg);
-                  //  if (!$('#__is_mobile').length) {
-                    //    $('input#search_product')
-                      //      .focus()
-                        //    .select();
-                    //}
+                    if (!$('#__is_mobile').length) {
+                        $('input#search_product')
+                            .focus()
+                            .select();
+                    }
                 }
             },
         });
@@ -2280,11 +2305,6 @@ function reset_pos_form(){
     // Set global_is_clear_local_storage to true to clear local storage
     global_is_clear_local_storage = true;
     saveFormDataToLocalStorage();
-  
-    ///////////// 008
-    if (typeof update_next_invoice_no === "function") {
-        update_next_invoice_no();
-    }
 }
 
 function set_default_customer() {
@@ -3522,11 +3542,4 @@ function saveFormDataToLocalStorage() {
     localStorage.setItem("pos_form_data_array", JSON.stringify(formArray));
 
     // console.log("Form data successfully saved to LocalStorage.");
-
-     //////////////// to add invoice number 008
-// دالة لتحديث الرقم من السيرفر
-
-
-
-
 }

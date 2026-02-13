@@ -10,13 +10,16 @@ class DataExport implements FromCollection, WithHeadings, ShouldAutoSize
 {
     protected $data;
 
+    /**
+     * استلام البيانات المرفوضة من الكنترولر
+     */
     public function __construct(array $data)
     {
         $this->data = $data;
     }
 
     /**
-     * إرجاع مجموعة البيانات التي سيتم كتابتها في الملف
+     * تحويل المصفوفة إلى Collection لكي تفهمها الحزمة
      */
     public function collection()
     {
@@ -24,14 +27,14 @@ class DataExport implements FromCollection, WithHeadings, ShouldAutoSize
     }
 
     /**
-     * تحديد عناوين الأعمدة في ملف الإكسل
+     * تعريف عناوين الأعمدة في ملف الإكسل الناتج
      */
     public function headings(): array
     {
         return [
             'SKU',
-            'Quantity',
-            'Reason (سبب الرفض)'
+            'الكمية المطلوبة',
+            'سبب عدم الإضافة'
         ];
     }
 }
