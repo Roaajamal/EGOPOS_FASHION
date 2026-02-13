@@ -158,35 +158,6 @@ class RoleController extends Controller
                 if (! empty($permissions)) {
                     $role->syncPermissions($permissions);
                 }
-                // --- كود حفظ صلاحيات الأعمدة للدور الجديد ---  009
-if ($request->has('column_settings')) {
-    $column_settings = $request->input('column_settings');
-    foreach ($column_settings as $report_key => $columns) {
-        foreach ($columns as $column_key => $value) {
-            if ($value == "1") {
-                $setting = \DB::table('report_column_settings')
-                            ->where('report_key', $report_key)
-                            ->where('column_key', $column_key)
-                            ->first();
-
-                $allowed_roles = $setting ? json_decode($setting->role_ids, true) : [];
-
-                if (!in_array($role->id, $allowed_roles)) {
-                    $allowed_roles[] = (int)$role->id;
-                }
-
-                \DB::table('report_column_settings')->updateOrInsert(
-                    ['report_key' => $report_key, 'column_key' => $column_key],
-                    [
-                        'role_ids' => json_encode(array_values($allowed_roles)), 
-                        'updated_at' => now()
-                    ]
-                );
-            }
-        }
-    }
-}
-// --- نهاية كود حفظ صلاحيات الأعمدة ---
                 db::commit();
                 $output = ['success' => 1,
                     'msg' => __('user.role_added'),
@@ -289,40 +260,6 @@ if ($request->has('column_settings')) {
                     $role->is_service_staff = $is_service_staff;
                     $role->name = $role_name.'#'.$business_id;
                     $role->save();
-                    // --- كود تحديث صلاحيات الأعمدة ---  009
-                if ($request->has('column_settings')) {
-                   $column_settings = $request->input('column_settings');
-                   foreach ($column_settings as $report_key => $columns) {
-                   foreach ($columns as $column_key => $value) {
-                   // جلب الإعداد الحالي لهذا العمود
-                    $setting = \DB::table('report_column_settings')
-                        ->where('report_key', $report_key)
-                        ->where('column_key', $column_key)
-                        ->first();
- 
-                   $allowed_roles = $setting ? json_decode($setting->role_ids, true) : [];
-
-                if ($value == "1") {
-                     // إذا تم التحديد، أضف ID الدور للمصفوفة إذا لم يكن موجوداً
-                     if (!in_array($id, $allowed_roles)) { 
-                       $allowed_roles[] = (int)$id; 
-                      }
-                      } else {
-                      // إذا تم إلغاء التحديد، احذف ID الدور من المصفوفة
-                      $allowed_roles = array_diff($allowed_roles, [(int)$id]);
-                      }
-
-                     \DB::table('report_column_settings')->updateOrInsert(
-                     ['report_key' => $report_key, 'column_key' => $column_key],
-                       [
-                      'role_ids' => json_encode(array_values($allowed_roles)), 
-                        'updated_at' => now()
-                      ]
-                      );
-                        }
-                         }
-                           }
-                        // --- نهاية كود تحديث صلاحيات الأعمدة ---
 
                     //Include selling price group permissions
                     $spg_permissions = $request->input('spg_permissions');

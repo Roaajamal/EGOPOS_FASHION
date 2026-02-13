@@ -36,7 +36,7 @@ class BusinessLocationController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-     public function index()
+    public function index()
     {
         if (! auth()->user()->can('business_settings.access')) {
             abort(403, 'Unauthorized action.');
@@ -46,7 +46,6 @@ class BusinessLocationController extends Controller
             $business_id = request()->session()->get('user.business_id');
 
             $locations = BusinessLocation::where('business_locations.business_id', $business_id)
-             //   ->leftjoin('currencies as curr', 'business_locations.currency_id', '=', 'curr.id') ///// to add currency 002
                 ->leftjoin(
                     'invoice_schemes as ic',
                     'business_locations.invoice_scheme_id',
@@ -70,11 +69,9 @@ class BusinessLocationController extends Controller
                     'business_locations.selling_price_group_id',
                     '=',
                     'spg.id'
-                )  /////////// 'curr.currency as currency'  002
-                ->select(['business_locations.id','business_locations.name', 'location_id', 'landmark', 
-                'city', 'zip_code', 'state', 'business_locations.country', 'spg.name as price_group', 
-                'ic.name as invoice_scheme', 'il.name as invoice_layout', 'sil.name as sale_invoice_layout', 
-                'business_locations.is_active', ]);
+                )
+                ->select(['business_locations.name', 'location_id', 'landmark', 'city', 'zip_code', 'state',
+                    'country', 'business_locations.id', 'spg.name as price_group', 'ic.name as invoice_scheme', 'il.name as invoice_layout', 'sil.name as sale_invoice_layout', 'business_locations.is_active', ]);
 
             $permitted_locations = auth()->user()->permitted_locations();
             if ($permitted_locations != 'all') {
@@ -83,23 +80,22 @@ class BusinessLocationController extends Controller
 
             return Datatables::of($locations)
                 ->addColumn(
-        'action',
-        function ($row) {
-            $html = '<button type="button" data-href="' . action([\App\Http\Controllers\BusinessLocationController::class, 'edit'], [$row->id]) . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-primary btn-modal" data-container=".location_edit_modal"><i class="glyphicon glyphicon-edit"></i> ' . __("messages.edit") . '</button>
-            <a href="' . route('location.settings', [$row->id]) . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-accent"><i class="fa fa-wrench"></i> ' . __("messages.settings") . '</a>
-            <button type="button" data-href="' . action([\App\Http\Controllers\BusinessLocationController::class, 'activateDeactivateLocation'], [$row->id]) . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline activate-deactivate-location ' . ($row->is_active ? 'tw-dw-btn-error' : 'tw-dw-btn-accent') . ' tw-w-max"><i class="fa fa-power-off"></i> ' . ($row->is_active ? __("lang_v1.deactivate_location") : __("lang_v1.activate_location")) . '</button>';
-            
-            return $html;
-            }
-            )
-        ->removeColumn('id')
-        ->removeColumn('is_active')
-        ->rawColumns(['action'])
-        ->make(true);
-          }
+                    'action',
+                    '<button type="button" data-href="{{action(\'App\Http\Controllers\BusinessLocationController@edit\', [$id])}}" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-primary btn-modal" data-container=".location_edit_modal"><i class="glyphicon glyphicon-edit"></i> @lang("messages.edit")</button>
+                    <a href="{{route(\'location.settings\', [$id])}}" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline  tw-dw-btn-accent"><i class="fa fa-wrench"></i> @lang("messages.settings")</a>
+
+                    <button type="button" data-href="{{action(\'App\Http\Controllers\BusinessLocationController@activateDeactivateLocation\', [$id])}}" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline   activate-deactivate-location @if($is_active) tw-dw-btn-error @else tw-dw-btn-accent @endif tw-w-max"><i class="fa fa-power-off"></i> @if($is_active) @lang("lang_v1.deactivate_location") @else @lang("lang_v1.activate_location") @endif </button>
+                    '
+                )
+                ->removeColumn('id')
+                ->removeColumn('is_active')
+                ->rawColumns([11])
+                ->make(false);
+        }
 
         return view('business_location.index');
     }
+
     /**
      * Show the form for creating a new resource.
      *
@@ -137,19 +133,13 @@ class BusinessLocationController extends Controller
             $accounts = Account::forDropdown($business_id, true, false);
         }
 
-        // $currencies = \App\Currency::select(
-        // \DB::raw("CONCAT(currency, ' (', code, ')') as info"), 
-        // 'id'
-        // )->pluck('info', 'id'); ////////// 002
-
         return view('business_location.create')
                     ->with(compact(
                         'invoice_layouts',
                         'invoice_schemes',
                         'price_groups',
                         'payment_types',
-                        'accounts',
-                       // 'currencies' //////// 002
+                        'accounts'
                     ));
     }
 
@@ -252,11 +242,6 @@ class BusinessLocationController extends Controller
         }
         $featured_products = $location->getFeaturedProducts(true, false);
 
-        // $currencies = \App\Currency::select(
-        // \DB::raw("CONCAT(currency, ' (', code, ')') as info"), 
-        // 'id'
-        //  )->pluck('info', 'id'); ////// 002
-
         return view('business_location.edit')
                 ->with(compact(
                     'location',
@@ -265,8 +250,7 @@ class BusinessLocationController extends Controller
                     'price_groups',
                     'payment_types',
                     'accounts',
-                    'featured_products',
-                  //  'currencies'
+                    'featured_products'
                 ));
     }
 

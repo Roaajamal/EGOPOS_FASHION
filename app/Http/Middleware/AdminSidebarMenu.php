@@ -790,7 +790,7 @@ class AdminSidebarMenu
                         }
                      
                         
-if (auth()->user()->can('daily_sales_report.view')) {  //001
+if (auth()->user()->can('sales_report.view')) {  //001
     $sub->url( 
         action([\App\Http\Controllers\ReportController::class, 'dailySalesReport']),
         __('sales_detailed.daily_sales_report'),

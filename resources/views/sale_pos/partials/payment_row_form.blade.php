@@ -70,7 +70,6 @@
                           <th width="20%" class="text-center">@lang('lang_v1.count')</th>
                           <th width="20%">&nbsp;</th>
                           <th width="20%" class="text-left">@lang('sale.subtotal')</th>
-						  
                         </tr>
                       </thead>
                       <tbody>

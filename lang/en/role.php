@@ -19,9 +19,6 @@ return [
     'customer' => 'Customer',
     
     'report' => 'Report',
-    'quantity_entry.view' => ' View Quantity Entry Report',
-     'quantity_entry.create' => ' Create Quantity Entry ', 
-     'daily_sales_report.view' => ' View Daily Sales Report',
 
     'user.view' => 'View user',
     'user.create' => 'Add user',

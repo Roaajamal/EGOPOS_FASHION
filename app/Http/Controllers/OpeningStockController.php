@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\BusinessLocation;
 use App\Product;
 use App\PurchaseLine;
+use App\Services\PrintService;
 use App\Transaction;
 use App\Utils\ProductUtil;
 use App\Utils\TransactionUtil;
@@ -382,8 +383,28 @@ class OpeningStockController extends Controller
             return back()->with('status', $output);
         }
 
-        if (request()->ajax()) {
-            return $output;
+        $redirect_url = null;
+        $print_url = null;
+        if (request()->session()->get('opening_stock_return_to_create')) {
+            request()->session()->forget('opening_stock_return_to_create');
+            $redirect_url = action([\App\Http\Controllers\ProductController::class, 'create']) . '?print_product_id=' . (int) $product_id;
+            $print_url = PrintService::forBusiness($business_id)->getBarcodePrintUrl($product_id, [
+                'print_copies' => 1,
+                'print_send_mode' => 'one_by_one',
+            ]);
+        }
+
+        if (request()->ajax() || request()->wantsJson()) {
+            $out = $output;
+            if ($redirect_url !== null) {
+                $out['redirect_url'] = $redirect_url;
+                $out['print_url'] = $print_url;
+            }
+            return response()->json($out);
+        }
+
+        if ($redirect_url) {
+            return redirect()->to($redirect_url)->with('status', $output);
         }
 
         return redirect('products')->with('status', $output);

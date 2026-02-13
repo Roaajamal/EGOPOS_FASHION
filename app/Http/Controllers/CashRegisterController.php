@@ -194,62 +194,41 @@ class CashRegisterController extends Controller
      * @return \Illuminate\Http\Response
      */
     public function postCloseRegister(Request $request)
-{
-    if (! auth()->user()->can('close_cash_register')) {
-        abort(403, 'Unauthorized action.');
-    }
-
-    try {
-        // Disable in demo
-        if (config('app.env') == 'demo') {
-            $output = ['success' => 0,
-                'msg' => 'Feature disabled in demo!!',
-            ];
-            return redirect()->action([\App\Http\Controllers\HomeController::class, 'index'])->with('status', $output);
+    {
+        if (! auth()->user()->can('close_cash_register')) {
+            abort(403, 'Unauthorized action.');
         }
 
-        $input = $request->only(['closing_amount', 'total_card_slips', 'total_cheques', 'closing_note']);
-        $input['closing_amount'] = $this->cashRegisterUtil->num_uf($input['closing_amount']);
-        $user_id = $request->input('user_id');
-        $business_id = $request->session()->get('user.business_id');
+        try {
+            //Disable in demo
+            if (config('app.env') == 'demo') {
+                $output = ['success' => 0,
+                    'msg' => 'Feature disabled in demo!!',
+                ];
 
-        // --- تعديل مهم: جلب سجل الكاش قبل تحديثه للحصول على رقم الفرع ---
-        $register = CashRegister::where('user_id', $user_id)
-                                ->where('status', 'open')
-                                ->first();
+                return redirect()->action([\App\Http\Controllers\HomeController::class, 'index'])->with('status', $output);
+            }
 
-        if (!empty($register)) {
-            $location_id = $register->location_id; // هنا قمنا بتعريف location_id
-
+            $input = $request->only(['closing_amount', 'total_card_slips', 'total_cheques', 'closing_note']);
+            $input['closing_amount'] = $this->cashRegisterUtil->num_uf($input['closing_amount']);
+            $user_id = $request->input('user_id');
             $input['closed_at'] = \Carbon::now()->format('Y-m-d H:i:s');
             $input['status'] = 'close';
             $input['denominations'] = ! empty(request()->input('denominations')) ? json_encode(request()->input('denominations')) : null;
 
-            // تحديث سجل الكاش
-            $register->update($input);
-
-            // حذف المسودات الخاصة بهذا الفرع (Location)
-            $business = \App\Business::find($business_id);
-            $pos_settings = json_decode($business->pos_settings, true);
-            
-           if (isset($pos_settings['delete_draft_on_close']) && $pos_settings['delete_draft_on_close'] == 1) {
-    \App\Transaction::where('business_id', $business_id)
-        ->where('location_id', $register->location_id)
-        ->where('status', 'draft')
-        ->delete();
-}
+            CashRegister::where('user_id', $user_id)
+                                ->where('status', 'open')
+                                ->update($input);
+            $output = ['success' => 1,
+                'msg' => __('cash_register.close_success'),
+            ];
+        } catch (\Exception $e) {
+            \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
+            $output = ['success' => 0,
+                'msg' => __('messages.something_went_wrong'),
+            ];
         }
 
-        $output = ['success' => 1,
-            'msg' => __('cash_register.close_success'),
-        ];
-    } catch (\Exception $e) {
-        \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
-        $output = ['success' => 0,
-            'msg' => __('messages.something_went_wrong'),
-        ];
+        return redirect()->back()->with('status', $output);
     }
-
-    return redirect()->back()->with('status', $output);
-}
 }

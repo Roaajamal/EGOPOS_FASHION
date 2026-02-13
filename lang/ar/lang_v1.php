@@ -1,8 +1,6 @@
 <?php
 
 return [
-    'show_invoice_number' => 'اظهار رقم الفاتورة ',
-    'enable_farora_system' => 'تفعيل نظام الفوترة الاردنية' ,
     'fatora_status' => 'حالة الفوترة',
     'fatora_action'=> 'اجراء الفاتورة ',
     'sent' => 'مرسلة',
@@ -112,7 +110,7 @@ return [
     'stock_transfer_cannot_be_deleted' => 'لا يمكن حذف تحويل هذا العنصر لأنه تم بيع البعض منه بالفعل',
     'total_transfer_shipping_charges' => 'مجموع تكاليف شحن التحويل',
     'enable_inline_tax' => 'تفعيل الضريبة في السطر على الشراء والبيع',
-    'save_n_add_opening_stock' => 'احفظ وأضف مخزون الإفتتاح',
+    'save_n_add_opening_stock' => 'حفظ وأضف الكميات',
     'add_opening_stock' => 'أضف مخزون الإفتتاح',
     'opening_stock_added_successfully' => 'تمت إضافة المخزون الافتتاحي بنجاح',
     'update_n_edit_opening_stock' => 'تحديث وتعديل المخزون الافتتاحي',
@@ -1060,6 +1058,7 @@ return [
     'allow_login' => 'السماح بتسجيل الدخول',
     'login_not_allowed' => 'تسجيل الدخول غير مسموح به',
     'labels_for_contact_custom_fields' => 'تسميات الحقول المخصصة لجهة الاتصال',
+    'labels_for_product_sizes_colors' => 'اللون والمقاس (مكان ظهورهما على الباركود)',
     'labels_for_product_custom_fields' => 'تسميات الحقول المخصصة للمنتج',
     'labels_for_purchase_custom_fields' => 'تسمية حقول الحقول الشرائية',
     'labels_for_sell_custom_fields' => 'تسميات لبيع الحقول المخصصة',
@@ -1482,9 +1481,9 @@ return [
     'add_as_sub_cat' => 'أضف كفئة فرعية',
     'payable' => 'قابل للدفع',
     'bulk_edit' => 'Edición Masiva',
-    'add_to_location' => 'اضافة الى فرع',
-    'remove_from_location' => 'حذف من فرع',
-    'deactivate_selected' => 'الغاء تفعيل المنتج',
+    'add_to_location' => 'Agregar a la ubicación',
+    'remove_from_location' => 'Eliminar de la ubicación',
+    'deactivate_selected' => 'Desactivar Seleccionados',
     'deactive_product_tooltip' => 'Los productos desactivados no estarán disponibles para comprar o vender',
     'profit_by_service_staff' => 'Profit by service staff',
     'paid_amount' => 'Paid Amount',

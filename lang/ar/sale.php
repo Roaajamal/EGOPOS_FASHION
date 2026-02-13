@@ -4,7 +4,6 @@
      'sale' => 'المبيعات',
      'sells' => 'المبيعات',
      'list_sale' => 'قائمة المبيعات',
-     'invoice_number' => 'رقم الفاتورة ', 
      'add_sale' => 'إضافة بيع',
      'pos_sale' => 'نقطة بيع',
      'purchase_price_inc_tax' => 'التكلفة' ,

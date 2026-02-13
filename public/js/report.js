@@ -127,8 +127,6 @@ $(document).ready(function() {
         if ($('th.current_stock_mfg').length) {
             stock_report_cols.push({ data: 'total_mfg_stock', name: 'total_mfg_stock', searchable: false });
         }
-
-        
     //Stock report table
     stock_report_table = $('#stock_report_table').DataTable({
         processing: true,

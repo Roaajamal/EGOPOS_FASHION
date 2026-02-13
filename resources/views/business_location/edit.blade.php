@@ -120,7 +120,6 @@
                         'placeholder' => __('messages.please_select')]); !!}
                     </div>
                 </div>
-                 
                 <div class="clearfix"></div>
                 @php
                 $custom_labels = json_decode(session('business.custom_labels'), true);

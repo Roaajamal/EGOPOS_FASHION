@@ -67,52 +67,40 @@
 @section('javascript')
 <script type="text/javascript">
     $(document).ready( function(){
-      var start = moment();
-    var end = moment();
-
-    // 2. تحديث قيمة الحقل نصياً ليظهر للمستخدم "تاريخ اليوم ~ تاريخ اليوم"
-    $('#al_date_filter').val(
-        start.format(moment_date_format) + ' ~ ' + end.format(moment_date_format)
-    );
-
-    // 3. إعداد daterangepicker مع القيم الابتدائية
-    $('#al_date_filter').daterangepicker(
-        $.extend({}, dateRangeSettings, { // نستخدم إعدادات النظام الافتراضية
-            startDate: start,
-            endDate: end,
-        }),
-        function(start, end) {
+        $('#al_date_filter').daterangepicker(dateRangeSettings, function(start, end) {
             $('#al_date_filter').val(
                 start.format(moment_date_format) + ' ~ ' + end.format(moment_date_format)
             );
             activity_log_table.ajax.reload();
-        }
-    );
+        });
+        $('#al_date_filter').on('cancel.daterangepicker', function(ev, picker) {
+            $('#al_date_filter').val('');
+            activity_log_table.ajax.reload();
+        });
 
-    // عند إلغاء الفلتر، نرجعه فارغاً أو لليوم (حسب رغبتك، هنا سنتركه فارغاً)
-    $('#al_date_filter').on('cancel.daterangepicker', function(ev, picker) {
-        $(this).val('');
-        activity_log_table.ajax.reload();
-    });
+        activity_log_table = $('#activity_log_table').DataTable({
+            processing: true,
+            serverSide: true,
+            fixedHeader:false,
+            aaSorting: [[0, 'desc']],
+            "ajax": {
+                "url": '{{action([\App\Http\Controllers\ReportController::class, 'activityLog'])}}',
+                "data": function ( d ) {
+                    var start_date = '';
+                    var end_date = '';
+                    if ($('#al_date_filter').val()) {
+                        d.start_date = $('input#al_date_filter')
+                            .data('daterangepicker')
+                            .startDate.format('YYYY-MM-DD');
+                        d.end_date = $('input#al_date_filter')
+                            .data('daterangepicker')
+                            .endDate.format('YYYY-MM-DD');
+                    }
 
-    // تأكد أن تعريف DataTable يستخدم القيم الموجودة في الحقل عند أول مرة
-    activity_log_table = $('#activity_log_table').DataTable({
-        processing: true,
-        serverSide: true,
-        // ... الإعدادات الأخرى
-        "ajax": {
-            "url": '{{action([\App\Http\Controllers\ReportController::class, 'activityLog'])}}',
-            "data": function ( d ) {
-                var date_val = $('#al_date_filter').val();
-                if (date_val) {
-                    var picker = $('#al_date_filter').data('daterangepicker');
-                    d.start_date = picker.startDate.format('YYYY-MM-DD');
-                    d.end_date = picker.endDate.format('YYYY-MM-DD');
+                    d.user_id = $('#al_users_filter').val();
+                    d.subject_type = $('#subject_type').val();
                 }
-                d.user_id = $('#al_users_filter').val();
-                d.subject_type = $('#subject_type').val();
-            }
-        },
+            },
             columns: [
                 { data: 'created_at', name: 'created_at'  },
                 { data: 'subject_type', "orderable": false, "searchable": false},

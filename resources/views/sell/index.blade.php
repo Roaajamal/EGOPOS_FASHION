@@ -122,45 +122,25 @@
 @section('javascript')
 <script type="text/javascript">
 $(document).ready(function() {
-    // 1. إعداد فلتر التاريخ وضبط القيمة الافتراضية
-    if ($('#sell_list_filter_date_range').length) {
-        $('#sell_list_filter_date_range').daterangepicker(
-            dateRangeSettings,
-            function (start, end) {
-                $('#sell_list_filter_date_range').val(start.format(moment_date_format) + ' ~ ' + end.format(moment_date_format));
-                sell_table.ajax.reload();
-            }
-        );
-
-        // --- كود إجباري لضبط تاريخ اليوم عند فتح الصفحة ---
-        var start = moment().startOf('day');
-        var end = moment().endOf('day');
-        
-        // تحديث قيم الـ daterangepicker الداخلية
-        $('#sell_list_filter_date_range').data('daterangepicker').setStartDate(start);
-        $('#sell_list_filter_date_range').data('daterangepicker').setEndDate(end);
-        
-        // تحديث شكل الحقل النصي ليظهر التاريخ للمستخدم
+    // 1. إعداد فلتر التاريخ
+    $('#sell_list_filter_date_range').daterangepicker(dateRangeSettings, function(start, end) {
         $('#sell_list_filter_date_range').val(start.format(moment_date_format) + ' ~ ' + end.format(moment_date_format));
-        // ---------------------------------------------------
+        sell_table.ajax.reload();
+    });
 
-        $('#sell_list_filter_date_range').on('cancel.daterangepicker', function(ev, picker) {
-            $(this).val('');
-            sell_table.ajax.reload();
-        });
-    }
-
-    // 2. بناء مصفوفة الأعمدة
+    // 2. بناء مصفوفة الأعمدة ديناميكياً لضمان الترتيب الصحيح
     var sell_columns = [
         { data: 'action', name: 'action', orderable: false, searchable: false },
         { data: 'transaction_date', name: 'transaction_date' }
     ];
 
+    // أضف أعمدة الفوترة فقط إذا كانت مفعلة في الإعدادات
     @if(!empty($pos_settings['enable_fatora']))
         sell_columns.push({ data: 'fatora_status', name: 'fatora_status', orderable: false, searchable: false });
         sell_columns.push({ data: 'fatora_action', name: 'fatora_action', orderable: false, searchable: false });
     @endif
 
+    // إضافة باقي الأعمدة بالترتيب
     sell_columns.push(
         { data: 'invoice_no', name: 'invoice_no' },
         { data: 'conatct_name', name: 'conatct_name' },
@@ -199,27 +179,22 @@ $(document).ready(function() {
             "url": "/sells",
             "data": function(d) {
                 if ($('#sell_list_filter_date_range').val()) {
-                    var start = $('#sell_list_filter_date_range').data('daterangepicker').startDate.format('YYYY-MM-DD');
-                    var end = $('#sell_list_filter_date_range').data('daterangepicker').endDate.format('YYYY-MM-DD');
-                    d.start_date = start;
-                    d.end_date = end;
+                    d.start_date = $('#sell_list_filter_date_range').data('daterangepicker').startDate.format('YYYY-MM-DD');
+                    d.end_date = $('#sell_list_filter_date_range').data('daterangepicker').endDate.format('YYYY-MM-DD');
                 }
                 d.is_direct_sale = 1;
-                d.created_by = $('#created_by').val();
                 d.fatora_status = $('#fatora_status_filter').val();
-                d.location_id = $('#sell_list_filter_location_id').val(); // تم التعديل للمطابقة
-                d.customer_id = $('#sell_list_filter_customer_id').val(); // تم التعديل للمطابقة
+                d.location_id = $('#sell_list_filter_location_id').val();
+                d.customer_id = $('#sell_list_filter_customer_id').val();
                 d.payment_status = $('#sell_list_filter_payment_status').val();
                 d.payment_method = $('#payment_method').val();
-                d.commission_agent = $('#sales_cmsn_agnt').val();
-                d.shipping_status = $('#shipping_status').val();
                 d = __datatable_ajax_callback(d);
             }
         },
         scrollY: "75vh",
         scrollX: true,
         scrollCollapse: true,
-        columns: sell_columns,
+        columns: sell_columns, // استخدام المصفوفة الديناميكية
         "fnDrawCallback": function(oSettings) {
             __currency_convert_recursively($('#sell_table'));
         },
@@ -240,13 +215,13 @@ $(document).ready(function() {
             $('.payment_method_count').html(__count_status(data, 'payment_methods'));
         },
         createdRow: function(row, data, dataIndex) {
+            // تحديد عمود اسم العميل ديناميكياً لجعل الخلايا قابلة للنقر
             var customer_col_idx = {{ !empty($pos_settings['enable_fatora']) ? 5 : 3 }};
             $(row).find('td:eq('+customer_col_idx+')').attr('class', 'clickable_td');
         }
     });
 
-    // تحديث الجدول عند تغيير أي فلتر
-    $(document).on('change', '#created_by, #sell_list_filter_location_id, #sell_list_filter_customer_id, #sell_list_filter_payment_status, #payment_method, #fatora_status_filter, #shipping_status, #sales_cmsn_agnt', function() {
+    $(document).on('change', '#sell_list_filter_location_id, #sell_list_filter_customer_id, #sell_list_filter_payment_status, #payment_method, #fatora_status_filter', function() {
         sell_table.ajax.reload();
     });
 });

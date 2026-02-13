@@ -81,6 +81,12 @@ class PermissionsTableSeeder extends Seeder
             ['name' => 'category.delete'],
             ['name' => 'expense.access'],
 
+            ['name' => 'stock_transfer.view'],
+            ['name' => 'stock_transfer.create'],
+            ['name' => 'stock_transfer.update'],
+            ['name' => 'stock_transfer.delete'],
+            ['name' => 'stock_transfer.view_own'],
+
             ['name' => 'access_all_locations'],
             ['name' => 'dashboard.data'],
             // في جدول permissions

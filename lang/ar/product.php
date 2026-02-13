@@ -6,7 +6,6 @@
      'profit_percent' => 'x الهامش (٪)',
      'add_new_product' => 'منتج جديد',
      'add_product_for_labels' => 'إضافة منتجات لتوليد الملصقات',
-     'image' => 'الصورة', 
      'product_type' => 'نوع المنتج',
      'category' => 'الصنف',
      'sub_category' => 'الصنف الفرعي',
@@ -48,4 +47,5 @@
      'import_products' => 'استيراد المنتجات',
      'file_to_import' => 'ملف للاستيراد',
      'file_imported_successfully' => 'تم استيراد الملف بنجاح',
+    'size_color_combinations' => 'الألوان والمقاسات',
  ];

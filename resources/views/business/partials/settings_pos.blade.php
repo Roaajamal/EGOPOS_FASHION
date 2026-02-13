@@ -345,28 +345,24 @@
         <div class="checkbox">
             <br>
           <label>
-            {!! Form::checkbox('pos_settings[enable_fatora]', 1, !empty($pos_settings['enable_fatora']), ['class' => 'input-icheck']); !!} {{ __( 'lang_v1.enable_farora_system' ) }}   
+            {!! Form::checkbox('pos_settings[enable_fatora]', 1, !empty($pos_settings['enable_fatora']), ['class' => 'input-icheck']); !!} تفعيل نظام الفوترة الأردنية
           </label>
         </div>
     </div>
 </div>     
 <!-- add fawtara setting -->
-
-<!-- add invoice number setting -->     
-    <div class="col-sm-4">
+ <!-- add slip fatora setting -->     
+     <div class="col-sm-4">
     <div class="form-group">
         <div class="checkbox">
             <br>
           <label>
-            {{-- تأكدنا من مطابقة الاسم enable_invoice_number في كل مكان --}}
-            {!! Form::checkbox('pos_settings[enable_invoice_number]', 1, !empty($pos_settings['enable_invoice_number']), ['class' => 'input-icheck']); !!} 
-           {{ __( 'lang_v1.show_invoice_number' ) }}
-          </label>
+        </label>
+        {!! Form::checkbox('pos_settings[enable_slip]', 1, !empty($pos_settings['enable_slip']), ['class' => 'input-icheck']); !!}    طباعة slip
         </div>
     </div>
-</div>
-<!-- add invoice number setting -->
- 
+</div>     
+<!-- add slip setting -->
     </div>    
     <hr>
     @include('business.partials.settings_weighing_scale')

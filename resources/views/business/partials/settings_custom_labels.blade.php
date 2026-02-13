@@ -127,6 +127,53 @@
                 ['class' => 'form-control', 'id' => 'contact_custom_field_10_label']); !!}
             </div>
         </div>
+        {{-- بعد قسم المنتجات --}}
+<div class="clearfix"></div>
+<div class="col-sm-12">
+    <h4>@lang('lang_v1.labels_for_product_sizes_colors'):</h4>
+</div>
+
+{{-- Custom Field 1 for Sizes --}}
+<div class="col-sm-4">
+    <div class="form-group custom_label_product_div">
+        {!! Form::label('product_custom_field_label_1', __('product.sizes') . ' (Custom Field 1)'); !!}
+        <div class="input-group">
+            {!! Form::text('custom_labels[product][custom_field_1]', 
+                !empty($custom_labels['product']['custom_field_1']) ? $custom_labels['product']['custom_field_1'] : __('product.sizes'),
+                ['class' => 'form-control', 'id' => 'product_custom_field_label_1']); !!}
+            <div class="input-group-addon">
+                <select class="custom_labels_products" name="custom_labels[product_cf_details][1][type]">
+                    <option value="dropdown" selected>@lang('lang_v1.dropdown')</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group custom_label_product_dropdown">
+            <textarea name="custom_labels[product_cf_details][1][dropdown_options]" cols="36" rows="2" 
+                placeholder="S, M, L, XL, XXL">@if(!empty($custom_labels['product_cf_details'][1]['dropdown_options'])){{$custom_labels['product_cf_details'][1]['dropdown_options']}}@endif</textarea>
+        </div>
+    </div>
+</div>
+
+{{-- Custom Field 2 for Colors --}}
+<div class="col-sm-4">
+    <div class="form-group custom_label_product_div">
+        {!! Form::label('product_custom_field_label_2', __('product.colors') . ' (Custom Field 2)'); !!}
+        <div class="input-group">
+            {!! Form::text('custom_labels[product][custom_field_2]', 
+                !empty($custom_labels['product']['custom_field_2']) ? $custom_labels['product']['custom_field_2'] : __('product.colors'),
+                ['class' => 'form-control', 'id' => 'product_custom_field_label_2']); !!}
+            <div class="input-group-addon">
+                <select class="custom_labels_products" name="custom_labels[product_cf_details][2][type]">
+                    <option value="dropdown" selected>@lang('lang_v1.dropdown')</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group custom_label_product_dropdown">
+            <textarea name="custom_labels[product_cf_details][2][dropdown_options]" cols="36" rows="2" 
+                placeholder="BLK, WHT, BLU, RED, GRN">@if(!empty($custom_labels['product_cf_details'][2]['dropdown_options'])){{$custom_labels['product_cf_details'][2]['dropdown_options']}}@endif</textarea>
+        </div>
+    </div>
+</div>
         <div class="clearfix"></div>
         <div class="col-sm-12">
             <h4>@lang('lang_v1.labels_for_product_custom_fields'):</h4>

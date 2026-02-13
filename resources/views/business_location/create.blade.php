@@ -55,7 +55,6 @@
                         {!! Form::text('country', null, ['class' => 'form-control', 'placeholder' => __( 'business.country'), 'required' ]); !!}
                     </div>
                 </div>
-                
                 <div class="clearfix"></div>
                 <div class="col-sm-6">
                     <div class="form-group">
