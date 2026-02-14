@@ -191,9 +191,32 @@ class SellPosController extends Controller
 
         $default_location = !empty($register_details->location_id) ? BusinessLocation::findOrFail($register_details->location_id) : null;
 
+        //  // جلب عملة الموقع الافتراضي  002
+        // $location_currency = null;
+        // if (!empty($default_location)) {
+        //   // تحميل علاقة العملة التي أضفناها لموديل BusinessLocation
+        // $default_location->load('currency');
+        // $location_currency = $default_location->currency;
+        // }
+
         $business_locations = BusinessLocation::forDropdown($business_id, false, true);
-        $bl_attributes = $business_locations['attributes'];
+        $bl_attributes = [];
         $business_locations = $business_locations['locations'];
+       // $location_objects = BusinessLocation::where('business_id', $business_id)->with(['currency'])->get();
+
+    //     foreach ($location_objects as $lp) {
+    //     $bl_attributes[$lp->id] = [
+    //     'data-currency_symbol' => $lp->currency->symbol ?? '',
+    //     'data-currency_thousand_separator' => $lp->currency->thousand_separator ?? ',',
+    //     'data-currency_decimal_separator' => $lp->currency->decimal_separator ?? '.',
+    //     'data-currency_symbol_placement' => $lp->currency->currency_symbol_placement ?? 'before',
+    //     'data-currency_precision' => session('business.currency_precision', 2),
+    //     // الحفاظ على السمات الأصلية إذا وجدت
+    //     'data-default_price_group' => $lp->selling_price_group_id,
+    //     'data-default_invoice_scheme_id' => $lp->invoice_scheme_id,
+    //     'data-default_invoice_layout_id' => $lp->invoice_layout_id,
+    //    ];
+    //    }
 
         //set first location as default locaton
         if (empty($default_location)) {
@@ -260,6 +283,24 @@ class SellPosController extends Controller
         $edit_discount = auth()->user()->can('edit_product_discount_from_pos_screen');
         $edit_price = auth()->user()->can('edit_product_price_from_pos_screen');
 
+         // --- جلب رقم الفاتورة المتوقع القادم ---   008
+        $next_invoice_no = null;
+        if (!empty($default_location))
+        {
+           $scheme = \App\InvoiceScheme::find($default_location->invoice_scheme_id);
+           if ($scheme) {
+          // الحساب: رقم البداية + عدد الفواتير المصدرة حالياً
+          $actual_next_no = $scheme->start_number + $scheme->invoice_count;
+        
+          // ضبط عدد الأصفار (Padding) إذا كان محدداً في النظام
+          $number = str_pad($actual_next_no, $scheme->total_digits, '0', STR_PAD_LEFT);
+        
+          // تجميع الرقم مع البادئة (Prefix)
+          $next_invoice_no = $scheme->prefix . $number;
+                   }
+        }
+        //////////////////  008
+
         //Added check because $users is of no use if enable_contact_assign if false
         $users = config('constants.enable_contact_assign') ? User::forDropdown($business_id, false, false, false, true) : [];
 
@@ -268,6 +309,7 @@ class SellPosController extends Controller
                 'edit_discount',
                 'edit_price',
                 'business_locations',
+               // 'location_currency',  ////////// 002
                 'bl_attributes',
                 'business_details',
                 'taxes',
@@ -296,6 +338,7 @@ class SellPosController extends Controller
                 'default_invoice_schemes',
                 'invoice_layouts',
                 'users',
+                'next_invoice_no',
             ));
     }
 
@@ -749,7 +792,7 @@ private function receiptContent(
         $output = [
             'is_enabled' => false,
             'print_type' => 'browser',
-            'html_content' => null,
+            'html_content' => null, 
             'printer_config' => [],
             'data' => [],
         ];
@@ -774,17 +817,17 @@ private function receiptContent(
                                     ->first();
     
     // إذا لم يوجد نهائياً، نستخدم التصميم الافتراضي للموقع الحالي
-    if (empty($invoice_layout)) {
+     if (empty($invoice_layout)) {
         $layout_id = $location_details->invoice_layout_id;
         $invoice_layout = $this->businessUtil->invoiceLayout($business_id, $layout_id);
-    }
-    $layout_design = 'sale_pos.receipts.gift';
-} else {
+     }
+     $layout_design = 'sale_pos.receipts.gift';
+       } else {
     // الفاتورة العادية (تبقى كما هي)
     $layout_id = !empty($invoice_layout_id) ? $invoice_layout_id : $location_details->invoice_layout_id;
     $invoice_layout = $this->businessUtil->invoiceLayout($business_id, $layout_id);
     $layout_design = !empty($invoice_layout->design) ? 'sale_pos.receipts.' . $invoice_layout->design : 'sale_pos.receipts.classic';
-}
+     }
 
         // --- 2. جلب تفاصيل الطباعة ---
         $receipt_printer_type = is_null($printer_type) ? $location_details->receipt_printer_type : $printer_type;
@@ -798,25 +841,89 @@ private function receiptContent(
             $receipt_printer_type
         );
 
+        // --- معالجة العملة مع احترام الإعدادات (002) ---
+        if (!empty($location_details->currency)) {
+            $new_symbol = $location_details->currency->symbol;
+            $old_symbol = $business_details->currency_symbol;
+            $receipt_details->currency_symbol = $new_symbol;
+
+            $fields_to_fix = [
+                'subtotal', 'total', 'tax', 'discount', 'shipping_charges', 
+                'total_paid', 'total_due', 'all_due', 'round_off', 'total_previous_due', 'packing_charge'
+            ];
+
+            foreach ($fields_to_fix as $field) {
+                // شرط مهم: لا تعالج الحقل إلا إذا كان موجوداً وغير فارغ
+                if (!empty($receipt_details->$field)) {
+                    
+                    // تحويل القيمة لنص لضمان عدم حدوث خطأ في strpos
+                    $current_val = (string)$receipt_details->$field;
+
+                    if ($new_symbol != $old_symbol) {
+                        $current_val = str_replace($old_symbol, $new_symbol, $current_val);
+                    }
+                    
+                    // لا تضف الرمز إلا إذا كان النص لا يحتوي عليه أصلاً
+                    if (strpos($current_val, $new_symbol) === false) {
+                        $current_val = $new_symbol . ' ' . $current_val;
+                    }
+
+                    $receipt_details->$field = $current_val;
+                }
+            }
+
+            if (!empty($receipt_details->lines)) {
+                foreach ($receipt_details->lines as $key => $line) {
+                    if (!empty($line['line_total'])) {
+                        $line_total = (string)$line['line_total'];
+                        if ($new_symbol != $old_symbol) {
+                            $line_total = str_replace($old_symbol, $new_symbol, $line_total);
+                        }
+                        if (strpos($line_total, $new_symbol) === false) {
+                            $line_total = $new_symbol . ' ' . $line_total;
+                        }
+                        $receipt_details->lines[$key]['line_total'] = $line_total;
+                    }
+                }
+            }
+
+            if (!empty($receipt_details->payments)) {
+                foreach ($receipt_details->payments as $pk => $pv) {
+                    if (!empty($pv['amount'])) {
+                        $amount = (string)$pv['amount'];
+                        if ($new_symbol != $old_symbol) {
+                            $amount = str_replace($old_symbol, $new_symbol, $amount);
+                        }
+                        if (strpos($amount, $new_symbol) === false) {
+                            $amount = $new_symbol . ' ' . $amount;
+                        }
+                        $receipt_details->payments[$pk]['amount'] = $amount;
+                    }
+                }
+            }
+        }
+
         // إضافة الـ business_id لضمان عمل أكواد الـ Blade التي تعتمد عليه
         $receipt_details->business_id = $business_id;
 
         // --- 3. توليد الـ HTML (مع تمرير layout بشكل صريح كما في دالة المرتجع) ---
-        if ($is_package_slip) {
-            $view_path = 'sale_pos.receipts.packing_slip';
+       if ($is_package_slip) {
+           $view_path = 'sale_pos.receipts.packing_slip';
         } elseif ($is_delivery_note) {
-            $view_path = 'sale_pos.receipts.delivery_note';
-        }
-        elseif ($is_slip_receipt) {
-        // إذا كان الخيار المختار هو slip، يقرأ من المسار الذي حددته
-         $view_path = 'sale_pos.receipts.slip'; }
-          else {
-            $view_path = $layout_design;
-        }
+           $view_path = 'sale_pos.receipts.delivery_note';
+        } elseif ($is_gift_receipt) {
+           $view_path = 'sale_pos.receipts.gift';
+        } else {
+    
+           // إذا كان تصميم القالب المختار هو 'slip'، سيقرأ من ملف slip.blade.php
+           // وإلا سيقرأ التصميم المسجل (classic, elegant, إلخ)
+           $design = !empty($invoice_layout->design) ? $invoice_layout->design : 'classic';
+           $view_path = 'sale_pos.receipts.' . $design;
+            }
 
         $output['html_content'] = view($view_path)
             ->with(compact('receipt_details'))
-            ->with(['layout' => $invoice_layout]) // هذا السطر هو مفتاح حل مشكلة اللوجو
+            ->with(['layout' => $invoice_layout]) 
             ->render();
 
         // إعدادات مخرجات الطباعة

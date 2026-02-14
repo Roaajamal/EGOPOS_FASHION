@@ -321,6 +321,7 @@ if (in_array($new_design_type, $unique_designs)) {
         'english-arabic' => 'English-Arabic ('.__('lang_v1.for_normal_printer').')',
         'invoice_return' => __('invoice_return'),
         'gift' => __('gift'), 
+        'slip' => __('slip'),
     ];
 
     $business_id = request()->session()->get('user.business_id');

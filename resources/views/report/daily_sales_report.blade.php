@@ -42,36 +42,36 @@
                 <div class="table-responsive">
                     <table class="table table-bordered table-striped" id="daily_sales_grouped_table" style="width: 100%;">
                         <thead>
-                            <tr>
-                                <th>@lang('messages.date')</th>
-                                <th>{{__('sales_detailed.location')}}</th>
-                                <th>{{__('sales_detailed.number_of_sales')}} </th>
-                                <th> {{__('sales_detailed.total_sales')}}</th>
-                                <th>{{__('sales_detailed.number_of_returns')}} </th>
-                                <th> {{__('sales_detailed.total_of_returns')}}</th>
-                                <th>{{__('sales_detailed.net_sales')}} </th>
-                                <th> {{__('sales_detailed.total_before_tax')}}</th>
-                                <th> {{__('sales_detailed.tax')}}</th>
-                                <th> {{__('sales_detailed.tax_type')}}</th>
-                                <th>  {{__('sales_detailed.return_not_paid')}}</th>
-                                <th>{{__('sales_detailed.action')}}</th>
-                            </tr>
-                        </thead>
+    <tr>
+        @if(is_col_visible('daily_sales_grouped', 'date')) <th>@lang('messages.date')</th> @endif
+        @if(is_col_visible('daily_sales_grouped', 'location')) <th>{{__('sales_detailed.location')}}</th> @endif
+        @if(is_col_visible('daily_sales_grouped', 'number_of_sales')) <th>{{__('sales_detailed.number_of_sales')}} </th> @endif
+        @if(is_col_visible('daily_sales_grouped', 'total_sales')) <th> {{__('sales_detailed.total_sales')}}</th> @endif
+        @if(is_col_visible('daily_sales_grouped', 'number_of_returns')) <th>{{__('sales_detailed.number_of_returns')}} </th> @endif
+        @if(is_col_visible('daily_sales_grouped', 'total_returns')) <th> {{__('sales_detailed.total_of_returns')}}</th> @endif
+        @if(is_col_visible('daily_sales_grouped', 'net_sales')) <th>{{__('sales_detailed.net_sales')}} </th> @endif
+        @if(is_col_visible('daily_sales_grouped', 'total_before_tax')) <th> {{__('sales_detailed.total_before_tax')}}</th> @endif
+        @if(is_col_visible('daily_sales_grouped', 'tax')) <th> {{__('sales_detailed.tax')}}</th> @endif
+        @if(is_col_visible('daily_sales_grouped', 'tax_type')) <th> {{__('sales_detailed.tax_type')}}</th> @endif
+        @if(is_col_visible('daily_sales_grouped', 'return_not_paid')) <th> {{__('sales_detailed.return_not_paid')}}</th> @endif
+        @if(is_col_visible('daily_sales_grouped', 'action')) <th>{{__('sales_detailed.action')}}</th> @endif
+    </tr>
+</thead>
                         <tfoot>
-                            <tr class="bg-gray font-17 footer-total text-center">
-                                <td colspan="2"><strong>@lang('sale.total'):</strong></td>
-                                <td id="g_footer_total_invoices"></td>
-                                <td id="g_footer_total_sales"></td>
-                                <td id="g_footer_total_returns_cnt"></td>
-                                <td id="g_footer_total_returns_amt"></td>
-                                <td id="g_footer_net_sales"></td>
-                                <td id="g_footer_total_before_tax"></td>
-                                <td id="g_footer_total_tax"></td>
-                                <td></td>
-                                <td id="g_footer_total_return_due"></td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
+    <tr class="bg-gray font-17 footer-total text-center">
+        <td colspan="2"><strong>@lang('sale.total'):</strong></td>
+        @if(is_col_visible('daily_sales_grouped', 'number_of_sales')) <td id="g_footer_total_invoices"></td> @endif
+        @if(is_col_visible('daily_sales_grouped', 'total_sales')) <td id="g_footer_total_sales"></td> @endif
+        @if(is_col_visible('daily_sales_grouped', 'number_of_returns')) <td id="g_footer_total_returns_cnt"></td> @endif
+        @if(is_col_visible('daily_sales_grouped', 'total_returns')) <td id="g_footer_total_returns_amt"></td> @endif
+        @if(is_col_visible('daily_sales_grouped', 'net_sales')) <td id="g_footer_net_sales"></td> @endif
+        @if(is_col_visible('daily_sales_grouped', 'total_before_tax')) <td id="g_footer_total_before_tax"></td> @endif
+        @if(is_col_visible('daily_sales_grouped', 'tax')) <td id="g_footer_total_tax"></td> @endif
+        @if(is_col_visible('daily_sales_grouped', 'tax_type')) <td></td> @endif
+        @if(is_col_visible('daily_sales_grouped', 'return_not_paid')) <td id="g_footer_total_return_due"></td> @endif
+        @if(is_col_visible('daily_sales_grouped', 'action')) <td></td> @endif
+    </tr>
+</tfoot>
                     </table>
                 </div>
             @endcomponent
@@ -188,31 +188,81 @@
                     d.location_id = $('#location_id').val();
                 }
             },
-            columns: [
-                { data: 'date', name: 'date' },
-                { data: 'location_name', name: 'bl.name' },
-                { data: 'total_invoices', name: 'total_invoices' },
-                { data: 'total_sales', name: 'total_sales' },
-                { data: 'total_returns_count', name: 'total_returns_count' },
-                { data: 'total_return_amount', name: 'total_return_amount' },
-                { data: 'net_sales', name: 'net_sales' },
-                { data: 'total_before_tax', name: 'total_before_tax' },
-                { data: 'total_tax', name: 'total_tax' },
-                { data: 'tax_type', name: 'tax_type' },
-                { data: 'return_due', name: 'return_due' },
-                { data: 'action', name: 'action', orderable: false, searchable: false }
-            ],
-            footerCallback: function (row, data, start, end, display) {
-                var api = this.api();
-                $(api.column(2).footer()).html(__number_f(api.column(2).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0)));
-                $(api.column(3).footer()).html(__currency_trans_from_en(api.column(3).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0), true));
-                $(api.column(4).footer()).html(__number_f(api.column(4).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0)));
-                $(api.column(5).footer()).html(__currency_trans_from_en(api.column(5).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0), true));
-                $(api.column(6).footer()).html(__currency_trans_from_en(api.column(6).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0), true));
-                $(api.column(7).footer()).html(__currency_trans_from_en(api.column(7).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0), true));
-                $(api.column(8).footer()).html(__currency_trans_from_en(api.column(8).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0), true));
-                $(api.column(10).footer()).html(__currency_trans_from_en(api.column(10).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0), true));
-            }
+           columns: [
+    @if(is_col_visible('daily_sales_grouped', 'date')) 
+        { data: 'date', name: 'date' }, 
+    @endif
+
+    @if(is_col_visible('daily_sales_grouped', 'location')) 
+        { data: 'location_name', name: 'bl.name' }, 
+    @endif
+
+    @if(is_col_visible('daily_sales_grouped', 'number_of_sales')) 
+        { data: 'total_invoices', name: 'total_invoices', searchable: false }, 
+    @endif
+
+    @if(is_col_visible('daily_sales_grouped', 'total_sales')) 
+        { data: 'total_sales', name: 'total_sales', searchable: false }, 
+    @endif
+
+    @if(is_col_visible('daily_sales_grouped', 'number_of_returns')) 
+        { data: 'total_returns_count', name: 'total_returns_count', searchable: false }, 
+    @endif
+
+    @if(is_col_visible('daily_sales_grouped', 'total_returns')) 
+        { data: 'total_return_amount', name: 'total_return_amount', searchable: false }, 
+    @endif
+
+    @if(is_col_visible('daily_sales_grouped', 'net_sales')) 
+        { data: 'net_sales', name: 'net_sales', searchable: false, orderable: false }, 
+    @endif
+
+    @if(is_col_visible('daily_sales_grouped', 'total_before_tax')) 
+        { data: 'total_before_tax', name: 'total_before_tax', searchable: false }, 
+    @endif
+
+    @if(is_col_visible('daily_sales_grouped', 'tax')) 
+        { data: 'total_tax', name: 'total_tax', searchable: false }, 
+    @endif
+
+    @if(is_col_visible('daily_sales_grouped', 'tax_type')) 
+        { data: 'tax_type', name: 'tax_type', searchable: false }, 
+    @endif
+
+    @if(is_col_visible('daily_sales_grouped', 'return_not_paid')) 
+        { data: 'return_due', name: 'return_due', searchable: false }, 
+    @endif
+
+    @if(is_col_visible('daily_sales_grouped', 'action')) 
+        { data: 'action', name: 'action', orderable: false, searchable: false }, 
+    @endif
+],
+           footerCallback: function (row, data, start, end, display) {
+    var api = this.api();
+    
+    // دالة مساعدة لحساب المجموع بناءً على اسم العمود (data source name)
+    var sumColumn = function(colName, isCurrency = true) {
+        // جلب رقم العمود الحالي بناءً على اسمه البرمجي
+        var colIndex = api.column(colName + ':name').index();
+        
+        // التأكد من أن العمود موجود وظاهر حالياً
+        if (colIndex !== undefined) {
+            var total = api.column(colIndex).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0);
+            var html = isCurrency ? __currency_trans_from_en(total, true) : __number_f(total);
+            $(api.column(colIndex).footer()).html(html);
+        }
+    };
+
+    // حساب المجاميع ديناميكياً (الأسماء هنا تطابق الخاصية 'data' في تعريف الأعمدة)
+    sumColumn('total_invoices', false);
+    sumColumn('total_sales', true);
+    sumColumn('total_returns_count', false);
+    sumColumn('total_return_amount', true);
+    sumColumn('net_sales', true);
+    sumColumn('total_before_tax', true);
+    sumColumn('total_tax', true);
+    sumColumn('return_due', true);
+}
         });
 
         sales_detailed_table = $('#sales_detailed_table').DataTable({
