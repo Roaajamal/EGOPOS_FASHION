@@ -109,6 +109,21 @@ $(document).ready(function() {
         if ($('#types_of_service_id').length && $('#types_of_service_id').val()) {
             $('#types_of_service_id').change();
         }
+        ////////////  008
+        var selected_location_id = $(this).val();
+
+        if (selected_location_id) {
+        // تحديث الحقل المخفي فوراً
+        $('input#location_id').val(selected_location_id);
+
+        // استدعاء التحديث وتمرير الـ ID الجديد يدوياً لكسر أي تأخير
+        if (typeof update_next_invoice_no === "function") {
+            // نمرر تأخير 0 ليحدث التغيير فوراً عند التنقل بين الفروع
+            update_next_invoice_no(0, selected_location_id);
+          }
+          }
+         
+         /////////////// 008
     });
 
     //get customer
@@ -2305,6 +2320,11 @@ function reset_pos_form(){
     // Set global_is_clear_local_storage to true to clear local storage
     global_is_clear_local_storage = true;
     saveFormDataToLocalStorage();
+
+    ///////////// 008
+    if (typeof update_next_invoice_no === "function") {
+        update_next_invoice_no();
+    }
 }
 
 function set_default_customer() {

@@ -14,15 +14,11 @@ Route::middleware(['auth', 'SetSessionData', 'language', 'timezone', 'AdminSideb
     ->name('barcode.')
     ->group(function () {
         Route::get('/', [PrintBarcodeController::class, 'index'])->name('print.page');
-        Route::get('/url', [PrintBarcodeController::class, 'getPrintUrl'])->name('print.url');
         Route::get('/search', [PrintBarcodeController::class, 'search'])->name('search');
         Route::get('/design', [PrintBarcodeController::class, 'getDesign'])->name('design.get');
-        Route::get('/product-variations/{product_id}', [PrintBarcodeController::class, 'getProductVariations'])->name('product-variations');
-        Route::post('/save-default-printer', [PrintBarcodeController::class, 'saveDefaultPrinter'])->name('save-default-printer');
         Route::post('/print-preview', [PrintBarcodeController::class, 'printPreview'])->name('print-preview');
         Route::post('/print', [PrintBarcodeController::class, 'printBarcodes'])->name('print');
         Route::post('/print-send', [PrintBarcodeController::class, 'sendToPrinter'])->name('print-send');
-        Route::post('/zpl', [PrintBarcodeController::class, 'getZpl'])->name('zpl');
     });
         use App\Http\Controllers\EcrIntegrationController;
 use App\Http\Controllers\MpsPaymentController;
@@ -63,6 +59,29 @@ Route::group(['middleware' => ['auth']], function () {
 });
 
 
+
+/////////////////  invoice number 008
+Route::get('/get-next-invoice-no', function () {
+    $location_id = request()->get('location_id');
+    $business_id = request()->session()->get('user.business_id');
+    
+    $location = \App\BusinessLocation::where('business_id', $business_id)->find($location_id);
+    $scheme = \App\InvoiceScheme::find($location->invoice_scheme_id);
+    
+    $actual_next_no = $scheme->start_number + $scheme->invoice_count;
+    $number = str_pad($actual_next_no, $scheme->total_digits, '0', STR_PAD_LEFT);
+    
+    return $scheme->prefix . $number;
+});
+//////////////////////// invoice number 001
+
+/////////// route for advanced setting 
+Route::group(['middleware' => ['auth', 'SetSessionData', 'language', 'timezone'], ], function () {
+    Route::get('/advanced-settings', [\App\Http\Controllers\AdvancedSettingController::class, 'index']);
+    Route::post('/advanced-settings/update', [\App\Http\Controllers\AdvancedSettingController::class, 'update']);
+});
+/////////////////////  
+
 // routes لـ ECR Integration
 Route::group(['middleware' => ['auth', 'SetSessionData', 'language', 'timezone']], function () {
     // حفظ إعدادات MPS
@@ -83,6 +102,9 @@ Route::group(['middleware' => ['auth', 'SetSessionData', 'language', 'timezone']
     // حذف إعدادات MPS
     Route::delete('/ecr-integration/{location_id}/delete', [EcrIntegrationController::class, 'deleteSettings'])
         ->name('ecr-integration.delete');
+    //////////// for show or hide meps button 
+   // Route للتحقق من حالة MPS
+  Route::get('/ecr/settings/{location_id}', [EcrIntegrationController::class, 'getSettings']);
 });
 Route::middleware(['auth'])->group(function () {
 
@@ -183,12 +205,6 @@ Route::middleware(['auth'])->group(function () {
     // اختبار الاتصال
     Route::get('/barcode-test', [App\Http\Controllers\BarcodeDesignController::class, 'testConnection'])
          ->name('barcode.test');
-
-    // بحث منتجات وعرض توليفات اللون/المقاس (مجموعة حسب اللون)
-    Route::get('/barcode-design/products-search', [App\Http\Controllers\BarcodeDesignController::class, 'searchProducts'])
-         ->name('barcode.design.products_search');
-    Route::get('/barcode-design/product-variations/{product_id}', [App\Http\Controllers\BarcodeDesignController::class, 'getProductVariations'])
-         ->name('barcode.design.product_variations');
 
 });
 Route::get('/pos/get-product-by-barcode', [PosController::class, 'getProductByBarcode'])->name('pos.get-product-by-barcode');
@@ -392,8 +408,9 @@ include_once 'install_r.php';
 Route::post('/update-price-offer', [SellPosController::class, 'updatePriceWithOffer'])->name('update.price.offer');
 Route::middleware(['setData'])->group(function () {
     Route::get('/', function () {
-        return view('welcome');
+        return auth()->check() ? redirect('/home') : redirect('/login');
     });
+
 
     Auth::routes();
 
@@ -685,7 +702,7 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     //Printers...
     Route::resource('printers', PrinterController::class);
 ////////////////// 001 
-Route::post('/stock-adjustments/import', [App\Http\Controllers\StockAdjustmentController::class, 'import'])->name('stock_adjustment.export');
+    Route::post('/stock-adjustments/import', [App\Http\Controllers\StockAdjustmentController::class, 'import'])->name('stock_adjustment.export');
     Route::get('/stock-adjustments/remove-expired-stock/{purchase_line_id}', [StockAdjustmentController::class, 'removeExpiredStock']);
     Route::post('/stock-adjustments/get_product_row', [StockAdjustmentController::class, 'getProductRow']);
     Route::resource('stock-adjustments', StockAdjustmentController::class);

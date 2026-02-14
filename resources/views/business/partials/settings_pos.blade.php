@@ -351,18 +351,20 @@
     </div>
 </div>     
 <!-- add fawtara setting -->
- <!-- add slip fatora setting -->     
-     <div class="col-sm-4">
+ <!-- add invoice number setting -->     
+    <div class="col-sm-4">
     <div class="form-group">
         <div class="checkbox">
             <br>
           <label>
-        </label>
-        {!! Form::checkbox('pos_settings[enable_slip]', 1, !empty($pos_settings['enable_slip']), ['class' => 'input-icheck']); !!}    طباعة slip
+            {{-- تأكدنا من مطابقة الاسم enable_invoice_number في كل مكان --}}
+            {!! Form::checkbox('pos_settings[enable_invoice_number]', 1, !empty($pos_settings['enable_invoice_number']), ['class' => 'input-icheck']); !!} 
+           {{ __( 'lang_v1.show_invoice_number' ) }}
+          </label>
         </div>
     </div>
-</div>     
-<!-- add slip setting -->
+</div>
+<!-- add invoice number setting -->
     </div>    
     <hr>
     @include('business.partials.settings_weighing_scale')

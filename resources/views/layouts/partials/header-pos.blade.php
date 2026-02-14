@@ -56,6 +56,19 @@
                         data-html="true" data-trigger="hover" data-original-title="" title=""></i>
                 </div>
 
+                 <!--   invoice number  006  -->
+               @if(!empty($pos_settings['enable_invoice_number']))
+              <div class="col-sm-4">
+        <div class="well well-sm" style="padding: 5px 10px; margin-bottom: 5px;">
+            <strong>@lang('sale.invoice_number'): </strong>
+            <span id="next_invoice_no_display" class="text-success" style="font-size: 1em; font-weight: bold;">
+                {{ $next_invoice_no }}
+            </span>
+        </div>
+    </div>
+@endif
+                  <!--   invoice number  006  -->
+                     
                 @if (empty($pos_settings['hide_product_suggestion']))
                     <button type="button" title="{{ __('lang_v1.view_products') }}" data-placement="bottom"
                         class="tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-bg-white hover:tw-bg-white/60 tw-cursor-pointer tw-border-2 tw-flex tw-items-center tw-justify-center tw-rounded-md tw-w-8 tw-h-8 tw-text-gray-600 btn-modal pull-right tw-block md:tw-hidden"
