@@ -163,6 +163,7 @@ $('select#location_id').trigger('change');
             { data: 'ref_no', name: 'ref_no' },
             { data: 'location_from', name: 'l1.name' },
             { data: 'location_to', name: 'l2.name' },
+            { data: 'added_qty', name: 'added_qty', searchable: false },
             { data: 'status', name: 'status' },
             { data: 'shipping_charges', name: 'shipping_charges' },
             { data: 'final_total', name: 'final_total' },

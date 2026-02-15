@@ -7,6 +7,7 @@ use Closure;
 use Menu;
 use Modules\CustomDashboard\Entities\CustomDashboard;
 
+
 class AdminSidebarMenu
 {
     /**
@@ -243,22 +244,7 @@ class AdminSidebarMenu
                                 ['icon' => '', 'active' => request()->segment(1) == 'brands']
                             );
                         }
-
-                        //////////////////////////// quantity entry 
-                        // Entry Quantity Button In SideBar
-                        if (auth()->user()->can('quantity_entry.view') ||auth()->user()->can('quantity_entry.create')) {
-                            $sub->url(
-                                // Route in controller 
-                                action([\App\Http\Controllers\QuantityEntryController::class, 'index']),
-                                // For translate 
-                                __('quantity_entry.quantity_entry'),
-                                [
-                                    'icon' => '','active' => request()->segment(1) == 'quantity-entry'
-                                ] 
-                            );
-                        }
-                        ////////////////////////////////////////////// quantity entry 
-
+                       
                         $sub->url(
                             action([\App\Http\Controllers\WarrantyController::class, 'index']),
                             __('lang_v1.warranties'),
@@ -275,6 +261,43 @@ class AdminSidebarMenu
                     <path d="M12 12l-8 -4.5"></path>
                   </svg>', 'id' => 'tour_step5']
                 )->order(20);
+
+                 // Entry Quantity Button In SideBar
+                        // Entry Quantity Menu
+           if (auth()->user()->can('quantity_entry.view') || auth()->user()->can('quantity_entry.create')) {
+            $menu->dropdown(
+             __('quantity_entry.quantity_entry'),
+             function ($sub) {
+                if (auth()->user()->can('quantity_entry.view')) {
+                $sub->url(
+                    action([\App\Http\Controllers\QuantityEntryController::class, 'index']),
+                    __('quantity_entry.quantity_entry_list'),
+                    ['icon' => '', 'active' => request()->segment(1) == 'quantity-entry' && request()->segment(2) == null]
+                );
+            }
+            if (auth()->user()->can('quantity_entry.create')) {
+                $sub->url(
+                    action([\App\Http\Controllers\QuantityEntryController::class, 'create']),
+                    __('quantity_entry.quantity_entry'),
+                    ['icon' => '', 'active' => request()->segment(1) == 'quantity-entry' && request()->segment(2) == 'create']
+                );
+            }
+        },
+        [
+            'icon' => '<svg aria-hidden="true" class="tw-size-5 tw-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path d="M12 3l8 4.5v9l-8 4.5l-8 -4.5v-9l8 -4.5" />
+  <path d="M12 12l8 -4.5" />
+  <path d="M12 12v9" />
+  <path d="M12 12l-8 -4.5" />
+  <path d="M15 18h6" />
+  <path d="M18 15v6" />
+</svg>',
+            'style' => ''
+        ]
+    )->order(35);
+}
+            /////////////////// quantity entry
             }
 
             //Purchase dropdown

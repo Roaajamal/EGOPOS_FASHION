@@ -1,5 +1,10 @@
 <tr class="product_row">
     @php
+     // --- إضافة هذا السطر لحل مشكلة السعر 0 ---
+    // إذا كان السعر الافتراضي فارغاً، حاول استخدام سعر آخر شراء
+    if(empty($product->default_purchase_price) || $product->default_purchase_price == 0){
+        $product->default_purchase_price = !empty($product->last_purchased_price) ? $product->last_purchased_price : 0;
+    }
         $max_qty_rule = $product->qty_available;
         $formatted_max_quantity = $product->formatted_qty_available;
         $max_qty_msg = __('validation.custom-messages.quantity_not_available', ['qty'=> $formatted_max_quantity, 'unit' => $product->unit  ]);

@@ -37,6 +37,12 @@
                 {!! Form::select('created_by', $sales_representative, null, ['class' => 'form-control select2', 'style' => 'width:100%']); !!}
             </div>
         </div>
+        <div class="col-md-3">
+    <div class="form-group">
+        {!! Form::label('view_type', 'نوع العرض:') !!}
+        {!! Form::select('view_type', ['summary' => 'مجمل', 'detailed' => 'تفصيلي'], 'summary', ['class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'view_type']); !!}
+    </div>
+</div>
     @endcomponent
     @component('components.widget', ['class' => 'box-primary'])
         @slot('tool')
@@ -55,19 +61,32 @@
         @endslot
         <div class="table-responsive">
             <table class="table table-bordered table-striped ajax_view" id="sell_table">
-                <thead>
-                    <tr>
-                        <th>@lang('messages.date')</th>
-                        <th>@lang('purchase.ref_no')</th>
-                        <th>@lang('sale.customer_name')</th>
-                        <th>@lang('lang_v1.contact_no')</th>
-                        <th>@lang('sale.location')</th>
-                        <th>@lang('lang_v1.total_items')</th>
-                        <th>@lang('lang_v1.added_by')</th>
-                        <th>الحالة</th>
-                        <th>@lang('messages.action')</th>
-                    </tr>
-                </thead>
+               <thead>
+            <tr>
+                <th>@lang('messages.action')</th>
+                <th>@lang('messages.date')</th>
+                <th>@lang('purchase.ref_no')</th>
+                <th>@lang('sale.customer_name')</th>
+                <th>@lang('sale.location')</th>
+                
+                {{-- أعمدة العرض التفصيلي --}}
+                <th>اسم المنتج</th>
+                <th>SKU</th>
+                <th>الكمية</th>
+                <th>سعر الوحدة</th>
+                <th>الخصم</th>
+                <th>الضريبة</th>
+                <th>السعر (شامل الضريبة)</th>
+                <th>المجموع</th>
+                
+                {{-- أعمدة العرض المجمل --}}
+                <th>@lang('lang_v1.total_items')</th>
+                <th>إجمالي الكمية</th>
+                
+                <th>@lang('lang_v1.added_by')</th>
+                <th>الحالة</th>
+            </tr>
+        </thead>
             </table>
         </div>
     @endcomponent
@@ -96,11 +115,13 @@ $(document).ready( function(){
         "ajax": {
             "url": '/sells/draft-dt?is_quotation=0',
             "data": function ( d ) {
+                d.view_type = $('#view_type').val();
                 if($('#sell_list_filter_date_range').val()) {
                     var start = $('#sell_list_filter_date_range').data('daterangepicker').startDate.format('YYYY-MM-DD');
                     var end = $('#sell_list_filter_date_range').data('daterangepicker').endDate.format('YYYY-MM-DD');
                     d.start_date = start;
                     d.end_date = end;
+                   
                 }
 
                 if($('#sell_list_filter_location_id').length) {
@@ -118,24 +139,58 @@ $(document).ready( function(){
             "orderable": false,
             "searchable": false
         } ],
-        columns: [
-            { data: 'transaction_date', name: 'transaction_date'  },
-            { data: 'invoice_no', name: 'invoice_no'},
-            { data: 'conatct_name', name: 'conatct_name'},
-            { data: 'mobile', name: 'contacts.mobile'},
-            { data: 'business_location', name: 'bl.name'},
-            { data: 'total_items', name: 'total_items', "searchable": false},
-            { data: 'added_by', name: 'added_by'},
-            { data: 'draft_status', name: 'draft_status', "searchable": false},
-            { data: 'action', name: 'action'}
-        ],
-        "fnDrawCallback": function (oSettings) {
-            __currency_convert_recursively($('#purchase_table'));
-        }
+       columns: [
+    { data: 'action', name: 'action', orderable: false, searchable: false},
+    { data: 'transaction_date', name: 'transaction_date' },
+    { data: 'invoice_no', name: 'invoice_no'},
+    { data: 'conatct_name', name: 'conatct_name'},
+    { data: 'business_location', name: 'bl.name'},
+    
+    // إضافة defaultContent تمنع ظهور رسالة التنبيه (Alert) إذا كانت القيمة مفقودة
+    { data: 'product_name', name: 'p.name', visible: false, defaultContent: ''},
+    { data: 'sku', name: 'v.sub_sku', visible: false, defaultContent: ''},
+    { data: 'quantity', name: 'tsl.quantity', visible: false, defaultContent: ''},
+    { data: 'unit_price', name: 'tsl.unit_price', visible: false, defaultContent: ''},
+    { data: 'line_discount', name: 'tsl.line_discount_amount', visible: false, defaultContent: ''},
+    { data: 'tax', name: 'tsl.item_tax', visible: false, defaultContent: ''},
+    { data: 'unit_price_inc_tax', name: 'tsl.unit_price_inc_tax', visible: false, defaultContent: ''},
+    { data: 'subtotal', name: 'subtotal', visible: false, defaultContent: ''},
+    
+    { data: 'total_items', name: 'total_items', searchable: false, defaultContent: ''},
+    { data: 'total_quantity', name: 'total_quantity', searchable: false, defaultContent: ''},
+    
+    { data: 'added_by', name: 'added_by'},
+    { data: 'draft_status', name: 'draft_status', searchable: false, defaultContent: ''}
+],
+   "fnDrawCallback": function (oSettings) {
+    __currency_convert_recursively($('#sell_table'));
+    
+    var view_type = $('#view_type').val();
+    var api = this.api();
+    
+    if (view_type == 'detailed') {
+        // 1. إظهار أعمدة المنتج (من 5 إلى 12)
+        api.columns([5, 6, 7, 8, 9, 10, 11, 12]).visible(true); 
+        
+        // 2. إخفاء أعمدة المجمل (13 و 14)
+        api.columns([13, 14]).visible(false); 
+        
+        // 3. إخفاء عمود الخيارات (0) وعمود الحالة (16) في العرض التفصيلي
+        api.columns([0, 16]).visible(false); 
+    } else {
+        // عند العودة للعرض المجمل:
+        // إخفاء أعمدة المنتج وإظهار أعمدة المجمل
+        api.columns([5, 6, 7, 8, 9, 10, 11, 12]).visible(false);
+        api.columns([13, 14]).visible(true);
+        
+        // إعادة إظهار عمود الخيارات وعمود الحالة
+        api.columns([0, 16]).visible(true);
+    }
+}
     });
-    $(document).on('change', '#sell_list_filter_location_id, #sell_list_filter_customer_id, #created_by',  function() {
-        sell_table.ajax.reload();
-    });
+   $(document).on('change', '#sell_list_filter_location_id, #sell_list_filter_customer_id, #created_by, #view_type', function() {
+    sell_table.ajax.reload();
+});
 
     $(document).on('click', 'a.convert-to-proforma', function(e){
         e.preventDefault();

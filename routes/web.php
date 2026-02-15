@@ -159,8 +159,14 @@ Route::group([
     Route::prefix('quantity-entry')->group(function () {
 
         // صفحة الإدخال
-        Route::get('/', [QuantityEntryController::class, 'index'])
-            ->name('quantity_entry.index');
+        Route::get('/', [QuantityEntryController::class, 'index'])->name('quantity_entry.index');
+
+        Route::get('/show/{id}', [QuantityEntryController::class, 'show'])
+            ->name('quantity_entry.show');  
+
+       Route::get('/print/{id}', [QuantityEntryController::class, 'printInvoice'])->name('quantity_entry.printInvoice');   
+        
+       Route::get('/create', [QuantityEntryController::class, 'create'])->name('quantity_entry.create');  
 
         // البحث عن المنتجات
         Route::get('/get-products', [QuantityEntryController::class, 'getProducts'])
@@ -171,7 +177,7 @@ Route::group([
             ->name('quantity_entry.getEntryRow');
 
         // حفظ الكميات
-        Route::post('/purchases', [QuantityEntryController::class, 'store'])->name('purchases.store');
+        Route::post('/store', [QuantityEntryController::class, 'store'])->name('quantity_entry.store');
 
         Route::post('/import',[QuantityEntryController::class, 'import'])->name('quantity_entry.import');
         Route::post('/update-stock', [QuantityEntryController::class, 'updateProductStock']);

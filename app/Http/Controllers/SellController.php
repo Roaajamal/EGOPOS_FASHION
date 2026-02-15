@@ -1512,9 +1512,12 @@ $datatable->addColumn('gift_invoice', function ($row) {
         if (request()->ajax()) {
             $business_id = request()->session()->get('user.business_id');
             $is_quotation = request()->input('is_quotation', 0);
-
+            $view_type = request()->input('view_type', 'summary');
             $is_woocommerce = $this->moduleUtil->isModuleInstalled('Woocommerce');
 
+            if ($view_type == 'detailed') {
+            $sells = $this->getDetailedDraftQuery($business_id);
+            } else {
             $sells = Transaction::leftJoin('contacts', 'transactions.contact_id', '=', 'contacts.id')
                 ->leftJoin('users as u', 'transactions.created_by', '=', 'u.id')
                 ->join(
@@ -1544,7 +1547,8 @@ $datatable->addColumn('gift_invoice', function ($row) {
                     DB::raw('SUM(tsl.quantity) as total_quantity'),
                     DB::raw("CONCAT(COALESCE(u.surname, ''), ' ', COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) as added_by"),
                     'transactions.is_export'
-                );
+                )->groupBy('transactions.id');
+               }
 
             if ($is_quotation == 1) {
                 $sells->where('transactions.sub_status', 'quotation');
@@ -1592,7 +1596,6 @@ $datatable->addColumn('gift_invoice', function ($row) {
             if ($is_woocommerce) {
                 $sells->addSelect('transactions.woocommerce_order_id');
             }
-
             $sells->groupBy('transactions.id');
 
             return Datatables::of($sells)
@@ -1680,6 +1683,11 @@ $datatable->addColumn('gift_invoice', function ($row) {
                         return $html;
                     })
                 ->removeColumn('id')
+                ->addColumn('draft_status', function($row) {
+                    // يمكنك تخصيص الحالة بناءً على منطق تطبيقك
+                    // هنا سنفترض أنها "مسودة" لأن الفلتر أصلاً يمرر status = draft
+                    return '<span class="label bg-yellow">مسودة</span>';
+                })
                 ->editColumn('invoice_no', function ($row) {
                     $invoice_no = $row->invoice_no;
                     if (! empty($row->woocommerce_order_id)) {
@@ -1697,8 +1705,31 @@ $datatable->addColumn('gift_invoice', function ($row) {
                     return $invoice_no;
                 })
                 ->editColumn('transaction_date', '{{@format_date($transaction_date)}}')
-                ->editColumn('total_items', '{{@format_quantity($total_items)}}')
-                ->editColumn('total_quantity', '{{@format_quantity($total_quantity)}}')
+                ->editColumn('total_items', function($row) {
+                    return isset($row->total_items) ? $this->transactionUtil->num_f($row->total_items) : '';
+                 })
+                 ->editColumn('unit_price', function($row) {
+                    return isset($row->unit_price) ? $this->transactionUtil->num_f($row->unit_price, true) : '';
+                  })
+                  ->editColumn('unit_price_inc_tax', function($row) {
+                    return isset($row->unit_price_inc_tax) ? $this->transactionUtil->num_f($row->unit_price_inc_tax, true) : '';
+                  })
+                  ->editColumn('subtotal', function($row) {
+                    return isset($row->subtotal) ? $this->transactionUtil->num_f($row->subtotal, true) : '';
+                  })
+                  ->editColumn('quantity', function($row) {
+                    return isset($row->quantity) ? $this->transactionUtil->num_f($row->quantity, false, false, true) : '';
+                  })
+                 ->editColumn('total_quantity', function($row) {
+                    return isset($row->total_quantity) ? $this->transactionUtil->num_f($row->total_quantity,true) : '';
+                 })
+                 ->editColumn('tax', function($row) {
+                     return isset($row->tax) ? $this->transactionUtil->num_f($row->tax, true) : '';
+                 })
+                 ->editColumn('line_discount', function($row) {
+                    return isset($row->line_discount) ? $this->transactionUtil->num_f($row->line_discount, true) : '';
+                  })
+                
                 ->addColumn('conatct_name', '@if(!empty($supplier_business_name)) {{$supplier_business_name}}, <br>@endif {{$name}}')
                 ->filterColumn('conatct_name', function ($query, $keyword) {
                     $query->where(function ($q) use ($keyword) {
@@ -1717,10 +1748,48 @@ $datatable->addColumn('gift_invoice', function ($row) {
                             return '';
                         }
                     }, ])
-                ->rawColumns(['action', 'invoice_no', 'transaction_date', 'conatct_name'])
+                ->rawColumns(['action', 'invoice_no', 'transaction_date', 'conatct_name','draft_status'])
                 ->make(true);
         }
     }
+
+   protected function getDetailedDraftQuery($business_id)
+{
+    return Transaction::leftJoin('contacts', 'transactions.contact_id', '=', 'contacts.id')
+        ->leftJoin('users as u', 'transactions.created_by', '=', 'u.id')
+        ->join('business_locations AS bl', 'transactions.location_id', '=', 'bl.id')
+        ->leftJoin('transaction_sell_lines as tsl', function ($join) {
+            $join->on('transactions.id', '=', 'tsl.transaction_id')
+                ->whereNull('tsl.parent_sell_line_id');
+        })
+        ->leftJoin('variations as v', 'tsl.variation_id', '=', 'v.id')
+        ->leftJoin('products as p', 'v.product_id', '=', 'p.id')
+        ->where('transactions.business_id', $business_id)
+        ->where('transactions.type', 'sell')
+        ->where('transactions.status', 'draft')
+        ->select(
+            'transactions.id',
+            'transactions.transaction_date', // إضافة اسم الجدول لضمان الدقة
+            'transactions.invoice_no',
+            'contacts.name',
+            'contacts.mobile',
+            'contacts.supplier_business_name',
+            'bl.name as business_location',
+            'transactions.is_direct_sale',
+            'transactions.sub_status',
+            'p.name as product_name', // هذا الحقل كان يسبب Alert في الصورة
+            'v.sub_sku as sku',        // هذا الحقل ضروري للعرض التفصيلي
+            'tsl.quantity',
+            'tsl.unit_price_before_discount as unit_price', // هذا كان يسبب Exception
+            'tsl.line_discount_amount as line_discount',
+            'tsl.item_tax as tax',
+            'tsl.unit_price_inc_tax',
+            DB::raw('(tsl.quantity * tsl.unit_price_inc_tax) as subtotal'),
+            DB::raw("CONCAT(COALESCE(u.surname, ''), ' ', COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) as added_by"),
+            'transactions.is_export',
+            'transactions.location_id' // إضافة هذا الحقل ضروري لعمل الفلاتر بشكل صحيح
+        );
+}
     /**
      * Creates copy of the requested sale.
      *

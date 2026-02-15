@@ -36,6 +36,7 @@
                         <th>@lang('purchase.ref_no')</th>
                         <th>@lang('lang_v1.location_from')</th>
                         <th>@lang('lang_v1.location_to')</th>
+                        <th>@lang('lang_v1.quantity')</th>
                         <th>@lang('sale.status')</th>
                         <th>@lang('lang_v1.shipping_charges')</th>
                         <th>@lang('stock_adjustment.total_amount')</th>

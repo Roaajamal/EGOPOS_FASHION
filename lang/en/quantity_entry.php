@@ -4,6 +4,7 @@ return [
 
     'quantity_entry' => 'Quantity Entry',
     'quantity_date' => 'Entry Date',
+    'quantity_entry_list' =>  ' Quantity Entry List ', 
     'product_name' => 'Product',
     'attach_document' => 'Attach Document',
     'import_quantity_entry' => 'Import Quantity',
