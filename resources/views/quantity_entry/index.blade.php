@@ -1,180 +1,160 @@
 @extends('layouts.app')
-@section('title',  __('quantity_entry.quantity_entry'))
+@section('title',  __('quantity_entry.quantity_entry_list'))
+
 @section('content')
 
-@php
-$custom_labels = json_decode(session('business.custom_labels'), true);
-@endphp
-
+<!-- Content Header (Page header) -->
 <section class="content-header">
-    <h1 class="tw-text-xl md:tw-text-3xl tw-font-bold">{{__('quantity_entry.quantity_entry')}} </h1>
+    <h1 class="tw-text-xl md:tw-text-3xl tw-font-bold tw-text-black">@lang('quantity_entry.quantity_entry_list')
+        <small></small>
+    </h1>
 </section>
 
+<!-- Main content -->
 <section class="content">
-
-@include('layouts.partials.error')
-
-{!! Form::open([
-    'url' => action([\App\Http\Controllers\QuantityEntryController::class, 'store']),
-    'method' => 'post',
-    'id' => 'add_quantity_form',
-    'files' => true  // 👈 ضروري جداً لأنك ترفع ملف Document
-]) !!}
-
-@component('components.widget', ['class' => 'box-primary'])
-<div class="row">
-    <div class="col-md-3">
-        <div class="form-group">
-            {!! Form::label('ref_no', __('purchase.ref_no').':') !!}
-            @show_tooltip(__('lang_v1.leave_empty_to_autogenerate'))
-            {!! Form::text('ref_no', $ref_no ?? null, ['class' => 'form-control', 'id' => 'ref_no']); !!}
-        </div>
-    </div>
-
-    <div class="col-sm-4">
-        <div class="form-group">
-            {!! Form::label('transaction_date', __('quantity_entry.quantity_date')) !!}
-            <div class="input-group">
-                <span class="input-group-addon"><i class="fa fa-calendar"></i></span>
-                {!! Form::text('transaction_date', @format_datetime('now'), ['class' => 'form-control', 'readonly', 'required']) !!}
+    @component('components.widget', ['class' => 'box-primary', 'title' => __('quantity_entry.quantity_entry_list')])
+        @slot('tool')
+            <div class="box-tools">
+                @if(auth()->user()->can('quantity_entry.create'))
+                    <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full pull-right"
+                        href="{{action([\App\Http\Controllers\QuantityEntryController::class, 'create'])}}">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="icon icon-tabler icons-tabler-outline icon-tabler-plus">
+                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                            <path d="M12 5l0 14" />
+                            <path d="M5 12l14 0" />
+                        </svg> @lang('messages.add')
+                    </a>
+                @endif
             </div>
-        </div>
-    </div>
-
-    <div class="col-sm-4">
-        <div class="form-group">
-            {!! Form::label('location_id', __('quantity_entry.location')) !!}
-            {!! Form::select('location_id', $business_locations, null, ['class' => 'form-control select2', 'required']) !!}
-        </div>
-    </div>
-
-    <div class="col-sm-2">
-        <div class="form-group">
-            <button tabindex="-1" type="button" class="btn btn-link btn-modal" data-href="{{action([\App\Http\Controllers\ProductController::class, 'quickAdd'])}}" data-container=".quick_add_product_modal">
-                <i class="fa fa-plus"></i> @lang('product.add_new_product')
-            </button>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-md-3">
-        <div class="form-group">
-            {!! Form::label('quantity_entry.additional_notes',__('quantity_entry.additional_notes')) !!}
-            {!! Form::textarea('additional_notes', null, ['class' => 'form-control', 'rows' => 3]); !!}
-        </div>
-    </div>
-
-    <div class="col-md-6">
-        <div class="form-group">
-            {!! Form::label('document', __('purchase.attach_document') . ':') !!}
-            {!! Form::file('document', ['id' => 'upload_document', 'accept' => implode(',', array_keys(config('constants.document_upload_mimes_types')))]); !!}
-            <p class="help-block">
-                @lang('purchase.max_file_size', ['size' => (config('constants.document_size_limit') / 1000000)])
-                @includeIf('components.document_help_text')
-            </p>
-        </div>
-    </div>
-</div>
-@endcomponent
-
-@component('components.widget', ['class' => 'box-primary'])
-<div class="row">
-    <div class="col-sm-12 missing-product-warning"></div>
-
-    <div class="col-sm-2 text-center">
-        <button type="button" class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-dw-btn-sm" data-toggle="modal" data-target="#import_new_quantity_products_modal">
-            @lang('quantity_entry.import_quantities_entry')
-        </button>
-
-        <div class="mt-1">
-            <label class="d-inline-flex align-items-center" style="cursor: pointer; gap: 6px;">
-                {!! Form::checkbox('auto_select_products', 1, false, ['id' => 'auto_select_products_checkbox', 'class' => 'input-sm']) !!}
-                <small class="help-block m-0" style="font-size: 11px; line-height: 1;">
-                    @lang('quantity_entry.auto_select_products_help')
-                </small>
-            </label>
-        </div>
-    </div>
-
-    <div class="col-sm-10">
-        <div class="form-group">
-            <div class="input-group">
-                <span class="input-group-addon"><i class="fa fa-search"></i></span>
-                {!! Form::text('search_product', null, ['class' => 'form-control', 'id' => 'search_product', 'placeholder' => 'ابحث عن منتج']) !!}
-            </div>
-        </div>
-    </div>
-</div>
-
-<div class="row">
-    <div class="col-sm-12">
+        @endslot
         <div class="table-responsive">
-            <table class="table table-bordered table-striped" id="purchase_entry_table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                       
-                        <th>SKU</th>
-                        <th> {{ __('quantity_entry.product_name')}}</th>
-                        <th>{{ __('quantity_entry.new_quantity')}}</th>
-                        <th>{{ __('quantity_entry.cost_quantity_entry')}}</th>
-                        <th>{{ __('quantity_entry.total')}}</th>
-                        <th><i class="fa fa-trash"></i></th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
+            <table class="table table-bordered table-striped ajax_view" id="quantity_entry_table">
+               <thead>
+                  <tr>
+                       <th>@lang('messages.action')</th>
+                       <th>@lang('messages.date')</th>
+                      <th>@lang('purchase.ref_no')</th>
+                      <th>@lang('business.location')</th>
+                      <th>{{__('quantity_entry.new_quantity')}}</th>
+                      <th>@lang('stock_adjustment.total_amount')</th>
+                      <th>@lang('purchase.additional_notes')</th> <th>@lang('lang_v1.added_by')</th>
+    </tr>
+</thead>
             </table>
         </div>
-
-        <hr>
-
-        <div class="pull-right col-md-4">
-            <table class="table">
-                <tr>
-                    <th class="text-right">{{ __('quantity_entry.total_quantity')}} :</th>
-                    <td><span id="total_quantity">0</span></td>
-                </tr>
-                <tr>
-                    <th class="text-right"> {{ __('quantity_entry.total_price')}}:</th>
-                    <td>
-                        <span id="grand_total" class="display_currency">0</span>
-                        {!! Form::hidden('final_total', 0, ['id' => 'grand_total_hidden']) !!}
-                    </td>
-                </tr>
-            </table>
-        </div>
-
-        <input type="hidden" id="row_count" value="0">
-    </div>
-</div>
-@endcomponent
-
-@component('components.widget', ['class' => 'box-primary'])
-<div class="row">
-    <div class="col-md-12 text-center">
-        <button type="submit" class="tw-dw-btn tw-dw-btn-primary tw-dw-btn-lg tw-text-white">{{ __('quantity_entry.submit')}}</button>
-    </div>
-</div>
-@endcomponent
-
-{!! Form::close() !!}
+       <div id="receipt_section" style="display:none;"></div>
+    @endcomponent
 
 </section>
-
-<div class="modal fade quick_add_product_modal" tabindex="-1" role="dialog"></div>
-@include('quantity_entry.partials.import_new_quantity_products_modal')
-
-
-
-@endsection
-
+<section id="receipt_section" class="print_section hide"></section>
+<!-- /.content -->
+@stop
 @section('javascript')
-<script src="{{ asset('js/quantity_entry.js') }}"></script>
-
 <script>
 $(document).ready(function () {
-    __page_leave_confirmation('#add_quantity_form');
+    // 1. تعريف الجدول (DataTable)
+    var quantity_entry_table = $('#quantity_entry_table').DataTable({
+        processing: true,
+        serverSide: true,
+        ajax: '/quantity-entry',
+        columns: [
+            { data: 'action', name: 'action', orderable: false, searchable: false },
+            { data: 'transaction_date', name: 'transaction_date' },
+            { data: 'ref_no', name: 'ref_no' },
+            { data: 'location_name', name: 'BL.name' },
+            { data: 'added_qty', name: 'added_qty', searchable: false },
+            { data: 'final_total', name: 'final_total' },
+            { data: 'additional_notes', name: 'additional_notes' },
+            { data: 'added_by', name: 'u.first_name' }
+        ]
+    });
+
+    // 2. كود الطباعة المباشرة (حل مشكلة الصفحة الفاضية)
+  $(document).on('click', '.btn-print-now', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        var href = $(this).data('href');
+        toastr.info("جاري تحضير الفاتورة...");
+
+        $.ajax({
+            method: 'GET',
+            url: href,
+            dataType: 'json',
+            success: function(result) {
+                if (result.success == 1 && result.receipt.html_content) {
+                    
+                    // استخدام نافذة مخفية (Iframe) للطباعة لضمان عدم ظهور شاشات فاضية
+                    var frame = $('<iframe id="print_frame">').hide().appendTo('body');
+                    var doc = frame[0].contentWindow.document;
+                    
+                    doc.write('<html><head><title>Print</title>');
+                    // سحب التنسيقات لضمان الحدود السوداء
+                    $('link[rel="stylesheet"]').each(function() {
+                        doc.write('<link rel="stylesheet" href="' + $(this).attr('href') + '">');
+                    });
+                    doc.write('</head><body>');
+                    doc.write(result.receipt.html_content);
+                    doc.write('</body></html>');
+                    doc.close();
+
+                    // إعطاء وقت قصير جداً للتحميل ثم الطباعة
+                    setTimeout(function() {
+                        frame[0].contentWindow.focus();
+                        frame[0].contentWindow.print();
+                        frame.remove(); // حذف الفريم بعد الطباعة
+                    }, 500);
+                    
+                } else {
+                    toastr.error("فشل في استلام بيانات الطباعة");
+                }
+            }
+        });
+    });
+    // 3. كود فتح المودال عند الضغط على "عرض"
+    $(document).on('click', '.btn-modal', function(e) {
+        e.preventDefault();
+        var container = $(this).data('container');
+        $.ajax({
+            url: $(this).data('href'),
+            dataType: 'html',
+            success: function(result) {
+                $(container).html(result).modal('show');
+            },
+        });
+    });
 });
 </script>
 @endsection
+
+<style>
+    @media print {
+        /* إخفاء كل شيء في الصفحة عند الطباعة */
+        body * {
+            visibility: hidden;
+        }
+        /* إظهار منطقة الفاتورة فقط */
+        #receipt_section, #receipt_section * {
+            visibility: visible;
+        }
+        #receipt_section {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+        }
+        .no-print {
+            display: none !important;
+        }
+    }
+</style>
+
+@cannot('view_purchase_price')
+    <style>
+        .show_price_with_permission {
+            display: none !important;
+        }
+    </style>
+@endcannot

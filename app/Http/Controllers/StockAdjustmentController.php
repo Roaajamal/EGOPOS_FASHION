@@ -105,18 +105,18 @@ class StockAdjustmentController extends Controller
 
             return Datatables::of($stock_adjustments)
                 ->addColumn('action', function($row) use ($hide) {
-    $show_url = action([\App\Http\Controllers\StockAdjustmentController::class, 'show'], [$row->id]);
-    $edit_url = action([\App\Http\Controllers\StockAdjustmentController::class, 'edit'], [$row->id]);
-    $delete_url = action([\App\Http\Controllers\StockAdjustmentController::class, 'destroy'], [$row->id]);
+            $show_url = action([\App\Http\Controllers\StockAdjustmentController::class, 'show'], [$row->id]);
+            $edit_url = action([\App\Http\Controllers\StockAdjustmentController::class, 'edit'], [$row->id]);
+            $delete_url = action([\App\Http\Controllers\StockAdjustmentController::class, 'destroy'], [$row->id]);
 
-    $html = '<button type="button" data-href="' . $show_url . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-primary btn-modal" data-container=".view_modal"><i class="fa fa-eye"></i> ' . __("messages.view") . '</button>';
+           $html = '<button type="button" data-href="' . $show_url . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-primary btn-modal" data-container=".view_modal"><i class="fa fa-eye"></i> ' . __("messages.view") . '</button>';
     
-    $html .= '&nbsp;<a href="' . $edit_url . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-info"><i class="fa fa-edit"></i> ' . __("messages.edit") . '</a>';
+           $html .= '&nbsp;<a href="' . $edit_url . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-info"><i class="fa fa-edit"></i> ' . __("messages.edit") . '</a>';
     
-    $html .= '&nbsp;<button type="button" data-href="' . $delete_url . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-error delete_stock_adjustment ' . $hide . '"><i class="fa fa-trash"></i> ' . __("messages.delete") . '</button>';
+           $html .= '&nbsp;<button type="button" data-href="' . $delete_url . '" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline tw-dw-btn-error delete_stock_adjustment ' . $hide . '"><i class="fa fa-trash"></i> ' . __("messages.delete") . '</button>';
 
-    return $html;
-})
+          return $html;
+           })
                 ->removeColumn('id')
                 ->editColumn(
                     'final_total',

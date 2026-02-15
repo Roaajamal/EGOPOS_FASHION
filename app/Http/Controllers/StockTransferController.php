@@ -91,6 +91,7 @@ class StockTransferController extends Controller
                         '=',
                         'l2.id'
                     )
+                    ->leftJoin('transaction_sell_lines as tsl', 'transactions.id', '=', 'tsl.transaction_id')
                     ->where('transactions.business_id', $business_id)
                     ->where('transactions.type', 'sell_transfer');
 
@@ -104,12 +105,13 @@ class StockTransferController extends Controller
                         'transactions.ref_no',
                         'l1.name as location_from',
                         'l2.name as location_to',
+                         DB::raw('SUM(tsl.quantity) as added_qty'),
                         'transactions.final_total',
                         'transactions.shipping_charges',
                         'transactions.additional_notes',
                         'transactions.id as DT_RowId',
                         'transactions.status'
-                    );
+                    )->groupBy('transactions.id');
 
 
 
@@ -134,6 +136,9 @@ class StockTransferController extends Controller
                     }
 
                     return $html;
+                })
+                 ->editColumn('added_qty', function ($row) {
+                 return $this->productUtil->num_f($row->added_qty, false);
                 })
                 ->editColumn(
                     'final_total',
@@ -453,7 +458,7 @@ class StockTransferController extends Controller
                     'p.unit_id', // هام جداً لجلب الوحدات الفرعية
                     'u.short_name as unit',
                     'u.allow_decimal as unit_allow_decimal',
-                    'variations.default_purchase_price as last_purchased_price',
+                    'variations.dpp_inc_tax as last_purchased_price',
                     \DB::raw('COALESCE(vld.qty_available, 0) as qty_available')
                 ])->first();
 

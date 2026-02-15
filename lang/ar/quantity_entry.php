@@ -3,6 +3,7 @@
 return [
 
     'quantity_entry' => 'إدخال كميات',
+    'quantity_entry_list' =>  'قائمة ادخال الكميات', 
     'quantity_date' => 'تاريخ الأدخال',
     'product_name' => 'المنتج',
     'attach_document' => 'إرفاق وثيقة',
@@ -34,5 +35,6 @@ return [
     'total_quantity' => 'اجمالي الكمية', 
     'total_price' => 'اجمالي السعر' ,
     'submit' => 'حفظ' ,
+    'quantity_entry_details' => 'تفاصيل ادخال الكميات', 
 
 ];
