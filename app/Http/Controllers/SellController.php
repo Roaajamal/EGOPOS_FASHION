@@ -73,7 +73,7 @@ class SellController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+   public function index()
     {
         $is_admin = $this->businessUtil->is_admin(auth()->user());
 
@@ -111,12 +111,9 @@ class SellController extends Controller
                 $sells->whereIn('transactions.location_id', $permitted_locations);
             }
 
-            //Add condition for created_by,used in sales representative sales report
-            if (request()->has('created_by')) {
-                $created_by = request()->get('created_by');
-                if (! empty($created_by)) {
-                    $sells->where('transactions.created_by', $created_by);
-                }
+            //Add condition for created_by,used in sales representative sales report    
+           if (!empty(request()->input('created_by'))) {
+               $sells->where('transactions.created_by', request()->input('created_by'));
             }
 
             $partial_permissions = ['view_own_sell_only', 'view_commission_agent_sell', 'access_own_shipping', 'access_commission_agent_shipping'];
@@ -157,7 +154,7 @@ if (!empty(request()->input('fatora_status'))) {
     }
 }
 
-            $only_shipments = request()->only_shipments == 'true' ? true : false;
+            $only_shipments = request()->only_shipments == 'true' ? true : false;      
             if ($only_shipments) {
                 $sells->whereNotNull('transactions.shipping_status');
 
@@ -226,12 +223,16 @@ if (!empty(request()->input('fatora_status'))) {
                 $customer_id = request()->customer_id;
                 $sells->where('contacts.id', $customer_id);
             }
-            if (! empty(request()->start_date) && ! empty(request()->end_date)) {
-                $start = request()->start_date;
-                $end = request()->end_date;
-                $sells->whereDate('transactions.transaction_date', '>=', $start)
-                            ->whereDate('transactions.transaction_date', '<=', $end);
-            }
+            if (!empty(request()->start_date) && !empty(request()->end_date)) {
+    $start = request()->start_date; // المتوقع YYYY-MM-DD
+    $end = request()->end_date;     // المتوقع YYYY-MM-DD
+    
+    // استخدام whereBetween مع إضافة الوقت يدوياً لضمان الدقة
+    $sells->whereBetween('transactions.transaction_date', [
+        $start . ' 00:00:00', 
+        $end . ' 23:59:59'
+    ]);
+}
 
             //Check is_direct sell
             if (request()->has('is_direct_sale')) {
@@ -294,9 +295,9 @@ if (!empty(request()->input('fatora_status'))) {
                 $sells->where('transactions.status', request()->input('status'));
             }
 
-            if (! empty(request()->input('sales_cmsn_agnt'))) {
-                $sells->where('transactions.commission_agent', request()->input('sales_cmsn_agnt'));
-            }
+            if (!empty(request()->input('commission_agent'))) {
+               $sells->where('transactions.commission_agent', request()->input('commission_agent'));
+                }
 
             if (! empty(request()->input('service_staffs'))) {
                 $sells->where('transactions.res_waiter_id', request()->input('service_staffs'));
@@ -608,14 +609,22 @@ if (!empty(request()->input('fatora_status'))) {
                     return $total_remaining_html;
                 })
                 ->addColumn('return_due', function ($row) {
-                    $return_due_html = '';
-                    if (!empty($row->return_exists)) {
-                        $return_due = $row->amount_return - $row->return_paid;
-                        $return_due_html .= '<a href="' . action([\App\Http\Controllers\TransactionPaymentController::class, 'show'], [$row->return_transaction_id]) . '" class="view_purchase_return_payment_modal"><span class="sell_return_due" data-orig-value="' . $return_due . '">' . $this->transactionUtil->num_f($return_due, true) . '</span></a>';
-                    }
+                 $return_due_html = '';
+                 if (!empty($row->return_exists)) {
+                 $return_due = $row->amount_return - $row->return_paid;
+                 $symbol = $row->currency_symbol; // استخدام رمز العملة الذي جلبناه من الـ Util  002
 
-                    return $return_due_html;
-                })
+                 // التعديل: المعامل الرابع هو false لإخفاء عملة النظام، ثم أضفنا $symbol يدوياً
+                $formatted_return_due = $this->transactionUtil->num_f($return_due, false, null, false) . ' ' . $symbol;
+
+                  $return_due_html .= '<a href="' . action([\App\Http\Controllers\TransactionPaymentController::class, 'show'], [$row->return_transaction_id]) . '" class="view_purchase_return_payment_modal">
+                 <span class="sell_return_due" data-orig-value="' . $return_due . '">' . 
+                 $formatted_return_due . 
+                '</span></a>';
+                  }   
+
+                     return $return_due_html;
+                 })
                 ->editColumn('invoice_no', function ($row) use ($is_crm) {
                     $invoice_no = $row->invoice_no;
                     

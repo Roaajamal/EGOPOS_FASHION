@@ -63,7 +63,7 @@
             <table class="table table-bordered table-striped ajax_view" id="sell_table">
                <thead>
             <tr>
-                <th>@lang('messages.action')</th>
+                
                 <th>@lang('messages.date')</th>
                 <th>@lang('purchase.ref_no')</th>
                 <th>@lang('sale.customer_name')</th>
@@ -85,6 +85,7 @@
                 
                 <th>@lang('lang_v1.added_by')</th>
                 <th>الحالة</th>
+                <th>@lang('messages.action')</th>
             </tr>
         </thead>
             </table>
@@ -140,53 +141,49 @@ $(document).ready( function(){
             "searchable": false
         } ],
        columns: [
-    { data: 'action', name: 'action', orderable: false, searchable: false},
-    { data: 'transaction_date', name: 'transaction_date' },
-    { data: 'invoice_no', name: 'invoice_no'},
-    { data: 'conatct_name', name: 'conatct_name'},
-    { data: 'business_location', name: 'bl.name'},
-    
-    // إضافة defaultContent تمنع ظهور رسالة التنبيه (Alert) إذا كانت القيمة مفقودة
-    { data: 'product_name', name: 'p.name', visible: false, defaultContent: ''},
-    { data: 'sku', name: 'v.sub_sku', visible: false, defaultContent: ''},
-    { data: 'quantity', name: 'tsl.quantity', visible: false, defaultContent: ''},
-    { data: 'unit_price', name: 'tsl.unit_price', visible: false, defaultContent: ''},
-    { data: 'line_discount', name: 'tsl.line_discount_amount', visible: false, defaultContent: ''},
-    { data: 'tax', name: 'tsl.item_tax', visible: false, defaultContent: ''},
-    { data: 'unit_price_inc_tax', name: 'tsl.unit_price_inc_tax', visible: false, defaultContent: ''},
-    { data: 'subtotal', name: 'subtotal', visible: false, defaultContent: ''},
-    
-    { data: 'total_items', name: 'total_items', searchable: false, defaultContent: ''},
-    { data: 'total_quantity', name: 'total_quantity', searchable: false, defaultContent: ''},
-    
-    { data: 'added_by', name: 'added_by'},
-    { data: 'draft_status', name: 'draft_status', searchable: false, defaultContent: ''}
+   { data: 'transaction_date', name: 'transaction_date' },
+        { data: 'invoice_no', name: 'invoice_no'},
+        { data: 'conatct_name', name: 'conatct_name'},
+        { data: 'business_location', name: 'bl.name'},
+        
+        // تفصيلي (Index 4-11)
+        { data: 'product_name', name: 'p.name', visible: false, defaultContent: '-'},
+        { data: 'sku', name: 'v.sub_sku', visible: false, defaultContent: '-'},
+        { data: 'quantity', name: 'tsl.quantity', visible: false, defaultContent: '0'},
+        { data: 'unit_price', name: 'tsl.unit_price', visible: false, defaultContent: '0'},
+        { data: 'line_discount', name: 'tsl.line_discount_amount', visible: false, defaultContent: '0'},
+        { data: 'tax', name: 'tsl.item_tax', visible: false, defaultContent: '0'},
+        { data: 'unit_price_inc_tax', name: 'tsl.unit_price_inc_tax', visible: false, defaultContent: '0'},
+        { data: 'subtotal', name: 'subtotal', visible: false, searchable: false, defaultContent: '0'},
+        
+        // مجمل (Index 12-13)
+        { data: 'total_items', name: 'total_items', searchable: false, defaultContent: '0'},
+        { data: 'total_quantity', name: 'total_quantity', searchable: false, defaultContent: '0'},
+        
+        { data: 'added_by', name: 'added_by'},
+        { data: 'draft_status', name: 'draft_status', searchable: false, defaultContent: ''},
+        // الخيارات في النهاية (Index 16)
+        { data: 'action', name: 'action', orderable: false, searchable: false}
 ],
    "fnDrawCallback": function (oSettings) {
-    __currency_convert_recursively($('#sell_table'));
-    
-    var view_type = $('#view_type').val();
-    var api = this.api();
-    
-    if (view_type == 'detailed') {
-        // 1. إظهار أعمدة المنتج (من 5 إلى 12)
-        api.columns([5, 6, 7, 8, 9, 10, 11, 12]).visible(true); 
+        __currency_convert_recursively($('#sell_table'));
         
-        // 2. إخفاء أعمدة المجمل (13 و 14)
-        api.columns([13, 14]).visible(false); 
+        var view_type = $('#view_type').val();
+        var api = this.api();
         
-        // 3. إخفاء عمود الخيارات (0) وعمود الحالة (16) في العرض التفصيلي
-        api.columns([0, 16]).visible(false); 
-    } else {
-        // عند العودة للعرض المجمل:
-        // إخفاء أعمدة المنتج وإظهار أعمدة المجمل
-        api.columns([5, 6, 7, 8, 9, 10, 11, 12]).visible(false);
-        api.columns([13, 14]).visible(true);
-        
-        // إعادة إظهار عمود الخيارات وعمود الحالة
-        api.columns([0, 16]).visible(true);
+        if (view_type == 'detailed') {
+            // إظهار أعمدة المنتج (4-11)
+            api.columns([4, 5, 6, 7, 8, 9, 10, 11]).visible(true); 
+            // إخفاء أعمدة المجمل (12-13)
+            api.columns([12, 13]).visible(false); 
+            // إخفاء عمود الحالة (15) وعمود الخيارات الجديد (16) في التفصيلي كما طلبت سابقاً
+            api.columns([15, 16]).visible(false); 
+        } else {
+            api.columns([4, 5, 6, 7, 8, 9, 10, 11]).visible(false);
+            api.columns([12, 13]).visible(true);
+            api.columns([15, 16]).visible(true);
+        }
     }
-}
     });
    $(document).on('change', '#sell_list_filter_location_id, #sell_list_filter_customer_id, #created_by, #view_type', function() {
     sell_table.ajax.reload();

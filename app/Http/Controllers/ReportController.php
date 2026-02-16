@@ -815,7 +815,7 @@ if (!empty($full_start) && !empty($full_end)) {
     ////////////////// 001
     public function quantityEntryReport(Request $request)
 {
-    if (!auth()->user()->can('purchase_n_sell_report.view')) {
+    if (!auth()->user()->can('report.quantity_entry_report')) {
         abort(403, 'Unauthorized action.');
     }
 
