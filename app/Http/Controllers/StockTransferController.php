@@ -563,8 +563,10 @@ class StockTransferController extends Controller
            ->latest()
            ->get();
 
+         $total_transfer_qty = $sell_transfer->sell_lines->sum('quantity');
+
         return view('stock_transfer.show')
-                ->with(compact('sell_transfer', 'location_details', 'lot_n_exp_enabled', 'statuses', 'activities'));
+                ->with(compact('sell_transfer', 'location_details', 'lot_n_exp_enabled', 'statuses', 'activities','total_transfer_qty'));
     }
 
     /**

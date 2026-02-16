@@ -37,7 +37,7 @@
                        <th>@lang('messages.date')</th>
                       <th>@lang('purchase.ref_no')</th>
                       <th>@lang('business.location')</th>
-                      <th>{{__('quantity_entry.new_quantity')}}</th>
+                      <th>{{__('quantity_entry.total_of_quantity')}}</th>
                       <th>@lang('stock_adjustment.total_amount')</th>
                       <th>@lang('purchase.additional_notes')</th> <th>@lang('lang_v1.added_by')</th>
     </tr>
@@ -59,6 +59,7 @@ $(document).ready(function () {
         processing: true,
         serverSide: true,
         ajax: '/quantity-entry',
+        order: [[1, 'desc']],
         columns: [
             { data: 'action', name: 'action', orderable: false, searchable: false },
             { data: 'transaction_date', name: 'transaction_date' },
@@ -130,24 +131,35 @@ $(document).ready(function () {
 @endsection
 
 <style>
-    @media print {
-        /* إخفاء كل شيء في الصفحة عند الطباعة */
-        body * {
-            visibility: hidden;
-        }
-        /* إظهار منطقة الفاتورة فقط */
-        #receipt_section, #receipt_section * {
-            visibility: visible;
-        }
-        #receipt_section {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-        }
-        .no-print {
-            display: none !important;
-        }
+    /* تصغير الخط في رأس الجدول وجعله غامقاً */
+    #quantity_entry_table thead th {
+        padding: 8px 4px !important;
+        font-size: 16px;
+        background-color: #f8f9fa;
+        color: #333;
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    /* تصغير الخط والمساحات داخل خلايا الجدول */
+    #quantity_entry_table tbody td {
+        padding: 4px 6px !important; /* تقليل الارتفاع */
+        font-size: 14px;
+        vertical-align: middle;
+        text-align: center;
+    }
+
+    /* تصغير حجم الأزرار داخل الجدول */
+    #quantity_entry_table .tw-dw-btn {
+        padding: 2px 8px !important;
+        min-height: 24px !important;
+        height: 24px !important;
+        font-size: 11px !important;
+    }
+
+    /* جعل الجدول يبدو مضغوطاً أكثر */
+    .table-responsive {
+        overflow-x: auto;
     }
 </style>
 

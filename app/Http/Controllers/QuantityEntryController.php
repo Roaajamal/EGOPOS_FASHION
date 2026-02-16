@@ -63,7 +63,8 @@ class QuantityEntryController extends Controller
             'transactions.id as DT_RowId',
             DB::raw("CONCAT(COALESCE(u.surname, ''),' ',COALESCE(u.first_name, ''),' ',COALESCE(u.last_name,'')) as added_by")
         )
-        ->groupBy('transactions.id');
+        ->groupBy('transactions.id')
+        ->orderBy('transactions.transaction_date', 'desc');
 
         // فلترة المواقع المسموحة
         $permitted_locations = auth()->user()->permitted_locations();
@@ -146,10 +147,10 @@ class QuantityEntryController extends Controller
                 ])
                 ->firstOrFail();
 
-    
+        $total_quantity = $quantity_entry->purchase_lines->sum('quantity');
 
           return view('quantity_entry.show') // مسار الملف الجديد
-            ->with(compact('quantity_entry',));
+            ->with(compact('quantity_entry', 'total_quantity'));
 }
 
 

@@ -120,6 +120,11 @@
 				  <div class="col-xs-12 col-md-6 col-md-offset-6">
 				    <div class="table-responsive">
 				      <table class="table">
+						<tr class="@cannot('view_purchase_price') show_price_with_permission no-print @endcan">
+				          <th >@lang('lang_v1.total_of_quantity'): </th>
+				          <td></td>
+				          <td><span class="display_currency pull-right" data-currency_symbol="true">{{ @format_quantity($total_transfer_qty) }}</span></td>
+				        </tr>
 				        <tr class="@cannot('view_purchase_price') show_price_with_permission no-print @endcan">
 				          <th >@lang('purchase.net_total_amount'): </th>
 				          <td></td>

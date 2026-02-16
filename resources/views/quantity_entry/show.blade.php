@@ -76,6 +76,14 @@
             <div class="row">
                 <div class="col-md-6 col-md-offset-6 col-sm-12">
                     <table class="table no-border">
+                       <tr>
+                           <th>@lang('quantity_entry.total_of_quantity'): </th>
+                            <td>
+                              <span class="pull-right">
+                                {{ @format_quantity($total_quantity) }}
+                              </span>
+                            </td>
+                        </tr>
                         <tr>
                             <th>@lang('quantity_entry.total'): </th>
                             <td><span class="display_currency pull-right" data-currency_symbol="true">{{ $quantity_entry->final_total }}</span></td>

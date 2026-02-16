@@ -36,5 +36,6 @@ return [
     'total_price' => 'اجمالي السعر' ,
     'submit' => 'حفظ' ,
     'quantity_entry_details' => 'تفاصيل ادخال الكميات', 
+    'total_of_quantity' => 'اجمالي الكمية المدخلة', 
 
 ];
