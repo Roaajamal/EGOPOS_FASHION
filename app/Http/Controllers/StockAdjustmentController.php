@@ -335,6 +335,7 @@ public function import(Request $request)
         $html = '';
         $imported_count = 0;
         $skipped_products = [];
+        $temp_stock_tracker = [];
 
         foreach ($imported_data as $value) {
             if (empty($value[0])) continue;
@@ -342,48 +343,63 @@ public function import(Request $request)
             $sku = trim(strval($value[0]));
             if (strpos($sku, '.') !== false) { $sku = explode('.', $sku)[0]; }
 
-            $product = \App\Variation::where('variations.sub_sku', $sku)
+            // 1. جلب بيانات المنتج
+            $variation = \App\Variation::where('variations.sub_sku', $sku)
                 ->join('products as p', 'p.id', '=', 'variations.product_id')
                 ->join('units as u', 'u.id', '=', 'p.unit_id')
-                ->leftJoin('variation_location_details as vld', function ($join) use ($location_id) {
-                    $join->on('variations.id', '=', 'vld.variation_id')
-                         ->where('vld.location_id', '=', $location_id);
-                })
                 ->where('p.business_id', $business_id)
                 ->select([
                     'variations.id as variation_id',
                     'p.id as product_id',
                     'p.name as product_name',
-                    'p.image as image', // أضفنا الصورة هنا
-                    'variations.sub_sku',
                     'p.enable_stock',
+                    'p.image as image',
                     'u.short_name as unit',
-                    // جلب الحقول المخصصة من جدول المنتجات
-                    'p.product_custom_field1',
                     'p.product_custom_field2',
-                    'p.product_custom_field3',
-                    'variations.default_purchase_price as last_purchased_price',
-                    \DB::raw('COALESCE(vld.qty_available, 0) as qty_available')
+                    'variations.default_purchase_price as last_purchased_price'
                 ])->first();
 
-            $quantity_requested = isset($value[1]) && is_numeric($value[1]) ? (float)$value[1] : 0;
-
-            if (!$product || ($product->enable_stock == 1 && $quantity_requested > $product->qty_available)) {
-                $skipped_products[] = [
-                    'SKU' => $sku,
-                    'Quantity' => $quantity_requested,
-                    'Reason' => !$product ? 'المنتج غير موجود' : 'الكمية المطلوبة أكبر من المتوفر (' . $product->qty_available . ')'
-                ];
+            if (!$variation) {
+                $skipped_products[] = ['SKU' => $sku, 'Quantity' => $value[1] ?? 0, 'Reason' => 'المنتج غير موجود'];
                 continue;
             }
 
-            $price = isset($value[2]) && is_numeric($value[2]) ? (float)$value[2] : $product->last_purchased_price;
-            
-            // تمرير البيانات لملف الـ partial الذي قمنا بتعديله سابقاً
+            // 2. التعديل الجوهري: استخدام SUM لجمع كافة السجلات (1 + 0 + -1...) 
+            // هذا سيضمن الحصول على المخزن الصافي الذي تراه في شاشات النظام
+            $qty_available = \DB::table('variation_location_details')
+                ->where('variation_id', $variation->variation_id)
+                ->where('location_id', $location_id)
+                ->sum('qty_available'); 
+
+            $qty_requested = isset($value[1]) && is_numeric($value[1]) ? (float)$value[1] : 0;
+
+            // 3. الفحص التراكمي داخل ملف الإكسل
+            $already_taken = $temp_stock_tracker[$variation->variation_id] ?? 0;
+            $effective_stock = $qty_available - $already_taken;
+
+            // تسجيل البيانات للمراقبة (Log)
+            \Log::info("فحص استيراد (منطق SUM): SKU: $sku, المنتج: {$variation->product_name}, إجمالي المخزن في DB: $qty_available, المتاح بعد خصم الأسطر السابقة: $effective_stock, المطلوب: $qty_requested");
+
+            if ($variation->enable_stock == 1) {
+                // إذا كان الإجمالي الصافي 0 أو أقل من المطلوب، نرفض السطر
+                if ($qty_requested <= 0 || $qty_requested > $effective_stock) {
+                    $skipped_products[] = [
+                        'SKU' => $sku,
+                        'Quantity' => $qty_requested,
+                        'Reason' => "رصيد غير كافٍ. المخزن الصافي المتوفر: ($effective_stock)"
+                    ];
+                    continue;
+                }
+            }
+
+            $temp_stock_tracker[$variation->variation_id] = ($temp_stock_tracker[$variation->variation_id] ?? 0) + $qty_requested;
+
+            // 4. بناء السطر للجدول
+            $price = isset($value[2]) && is_numeric($value[2]) ? (float)$value[2] : $variation->last_purchased_price;
             $html .= view('stock_adjustment.partials.product_table_row', [
-                'product' => $product,
+                'product' => $variation,
                 'row_index' => $row_index,
-                'quantity' => $quantity_requested,
+                'quantity' => $qty_requested,
                 'purchase_price' => $price
             ])->render();
 
@@ -391,32 +407,23 @@ public function import(Request $request)
             $imported_count++;
         }
 
-        $response = [
-            'success' => true,
-            'html' => $html,
-            'imported_count' => $imported_count,
-            'skipped_count' => count($skipped_products),
-            'download_url' => null
-        ];
-
+        // إرجاع النتيجة كما هي في منطقك السابق
+        $response = ['success' => true, 'html' => $html, 'imported_count' => $imported_count, 'skipped_count' => count($skipped_products), 'download_url' => null];
         if (count($skipped_products) > 0) {
             $file_name = 'skipped_products_' . time() . '.xlsx';
             $folder_path = 'temp_excel/';
-            if (!\Storage::disk('public')->exists($folder_path)) {
-                \Storage::disk('public')->makeDirectory($folder_path);
-            }
-            
+            if (!\Storage::disk('public')->exists($folder_path)) { \Storage::disk('public')->makeDirectory($folder_path); }
             \Excel::store(new \App\Exports\DataExport($skipped_products), $folder_path . $file_name, 'public');
             $response['download_url'] = asset('storage/' . $folder_path . $file_name);
         }
-
         return response()->json($response);
 
     } catch (\Exception $e) {
+        \Log::error("خطأ في الاستيراد: " . $e->getMessage());
         return response()->json(['success' => false, 'msg' => $e->getMessage()]);
     }
 }
-    /**
+     /*
      * Display the specified resource.
      *
      * @param  int  $id
@@ -665,7 +672,7 @@ public function import(Request $request)
                 'p.id as product_id',
                 'p.name as product_name',
                 'p.image',
-                'p.enable_stock',
+                'vld.qty_available',
                 // جلب الحقول المخصصة الثلاثة المطلوبة في نهاية الجدول
                 'p.product_custom_field1',
                 'p.product_custom_field2',

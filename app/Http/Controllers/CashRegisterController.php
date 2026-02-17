@@ -232,13 +232,31 @@ class CashRegisterController extends Controller
             $business = \App\Business::find($business_id);
             $pos_settings = json_decode($business->pos_settings, true);
             
-           if (isset($pos_settings['delete_draft_on_close']) && $pos_settings['delete_draft_on_close'] == 1) {
-    \App\Transaction::where('business_id', $business_id)
-        ->where('location_id', $register->location_id)
-        ->where('status', 'draft')
-        ->delete();
+          if (isset($pos_settings['delete_draft_on_close']) && $pos_settings['delete_draft_on_close'] == 1) {
+    
+    // 1. جلب معرفات المسودات لحذفها مع تفاصيلها
+    $draft_ids = \App\Transaction::where('business_id', $business_id)
+                ->where('location_id', $register->location_id)
+                ->where('status', 'draft')
+                ->pluck('id');
+
+    if ($draft_ids->count() > 0) {
+        // حذف التفاصيل أولاً
+        \App\TransactionSellLine::whereIn('transaction_id', $draft_ids)->delete();
+        // ثم حذف المسودات
+        \App\Transaction::whereIn('id', $draft_ids)->delete();
+    }
+
+    // 2. تصفير العداد (لاحظ أسماء الأعمدة الصحيحة من صورتك)
+   \DB::table('reference_counts')
+        ->where('business_id', $business_id)
+        ->where('ref_type', 'draft')
+        ->update(['ref_count' => 0]);// نحدث عمود العدّاد إلى صفر
+
+    \Log::info("Drafts deleted and reference count reset to 0 for business: $business_id");
 }
-        }
+
+                  }
 
         $output = ['success' => 1,
             'msg' => __('cash_register.close_success'),

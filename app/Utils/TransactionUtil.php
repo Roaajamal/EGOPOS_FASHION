@@ -2417,7 +2417,7 @@ if ($fatora_invoice && !empty($fatora_invoice->qr_code)) {
 
             return $invoice_no;
         } elseif ($status == 'draft') {
-            $ref_count = $this->setAndGetReferenceCount('draft', $business_id);
+            $ref_count = $this->setAndGetReferenceCount('draft', $business_id, ); 
             $invoice_no = $this->generateReferenceNumber('draft', $ref_count, $business_id);
 
             return $invoice_no;

@@ -67,24 +67,25 @@
                 <th>@lang('messages.date')</th>
                 <th>@lang('purchase.ref_no')</th>
                 <th>@lang('sale.customer_name')</th>
+                <th>@lang('contact.mobile')</th>
                 <th>@lang('sale.location')</th>
                 
                 {{-- أعمدة العرض التفصيلي --}}
-                <th>اسم المنتج</th>
+                <th> {{__('product.product')}}</th>
                 <th>SKU</th>
-                <th>الكمية</th>
-                <th>سعر الوحدة</th>
-                <th>الخصم</th>
-                <th>الضريبة</th>
-                <th>السعر (شامل الضريبة)</th>
-                <th>المجموع</th>
+                <th>{{__('lang_v1.quantity')}}</th>
+                <th> {{__('lang_v1.cost')}}</th>
+                <th>{{__('product.discount')}}</th>
+                <th>{{__('product.tax')}}</th> 
+                <th> {{__('product.price_inc_tax')}}</th>
+                <th>{{__('lang_v1.total')}}</th>
                 
                 {{-- أعمدة العرض المجمل --}}
                 <th>@lang('lang_v1.total_items')</th>
-                <th>إجمالي الكمية</th>
+                <th>{{__('product.total_of_quantity')}} </th>
                 
                 <th>@lang('lang_v1.added_by')</th>
-                <th>الحالة</th>
+                <th>@lang('lang_v1.status')</th>
                 <th>@lang('messages.action')</th>
             </tr>
         </thead>
@@ -144,6 +145,7 @@ $(document).ready( function(){
    { data: 'transaction_date', name: 'transaction_date' },
         { data: 'invoice_no', name: 'invoice_no'},
         { data: 'conatct_name', name: 'conatct_name'},
+        { data: 'mobile', name: 'conatct.mobile'},
         { data: 'business_location', name: 'bl.name'},
         
         // تفصيلي (Index 4-11)
@@ -165,25 +167,27 @@ $(document).ready( function(){
         // الخيارات في النهاية (Index 16)
         { data: 'action', name: 'action', orderable: false, searchable: false}
 ],
-   "fnDrawCallback": function (oSettings) {
-        __currency_convert_recursively($('#sell_table'));
-        
-        var view_type = $('#view_type').val();
-        var api = this.api();
-        
-        if (view_type == 'detailed') {
-            // إظهار أعمدة المنتج (4-11)
-            api.columns([4, 5, 6, 7, 8, 9, 10, 11]).visible(true); 
-            // إخفاء أعمدة المجمل (12-13)
-            api.columns([12, 13]).visible(false); 
-            // إخفاء عمود الحالة (15) وعمود الخيارات الجديد (16) في التفصيلي كما طلبت سابقاً
-            api.columns([15, 16]).visible(false); 
-        } else {
-            api.columns([4, 5, 6, 7, 8, 9, 10, 11]).visible(false);
-            api.columns([12, 13]).visible(true);
-            api.columns([15, 16]).visible(true);
-        }
+  "fnDrawCallback": function (oSettings) {
+    __currency_convert_recursively($('#sell_table'));
+    
+    var view_type = $('#view_type').val();
+    var api = this.api();
+    
+    if (view_type == 'detailed') {
+        // إظهار أعمدة المنتج (من 5 إلى 12)
+        api.columns([5, 6, 7, 8, 9, 10, 11, 12]).visible(true); 
+        // إخفاء أعمدة المجمل (13 و 14)
+        api.columns([13, 14]).visible(false); 
+        // إخفاء عمود الحالة (16) وعمود الخيارات (17) في التفصيلي
+        api.columns([16, 17]).visible(false); 
+    } else {
+        // إخفاء أعمدة المنتج وإظهار المجمل
+        api.columns([5, 6, 7, 8, 9, 10, 11, 12]).visible(false);
+        api.columns([13, 14]).visible(true);
+        // إعادة إظهار الحالة والخيارات
+        api.columns([16, 17]).visible(true);
     }
+}
     });
    $(document).on('change', '#sell_list_filter_location_id, #sell_list_filter_customer_id, #created_by, #view_type', function() {
     sell_table.ajax.reload();

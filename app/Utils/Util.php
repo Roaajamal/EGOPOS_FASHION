@@ -306,12 +306,12 @@ class Util
      * @param  int  $business_id
      * @return int
      */
-    public function setAndGetReferenceCount($type, $business_id = null)
+    public function setAndGetReferenceCount($type, $business_id = null, $location_id = null)
     {
         if (empty($business_id)) {
             $business_id = request()->session()->get('user.business_id');
         }
-
+        
         $ref = ReferenceCount::where('ref_type', $type)
             ->where('business_id', $business_id)
             ->first();
@@ -324,6 +324,7 @@ class Util
             $new_ref = ReferenceCount::create([
                 'ref_type' => $type,
                 'business_id' => $business_id,
+                'location_id' => $location_id, // حفظ الفرع هنا 007 
                 'ref_count' => 1,
             ]);
 
