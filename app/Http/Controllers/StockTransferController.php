@@ -215,9 +215,9 @@ class StockTransferController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function store(Request $request)
+   public function store(Request $request)
     {
-        if (! auth()->user()->can('stock_transfer.create') && ! $this->userCanAccessStockTransfer()) {
+        if (! auth()->user()->can('stock_transfer.create')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -228,17 +228,6 @@ class StockTransferController extends Controller
             if (! $this->moduleUtil->isSubscribed($business_id)) {
                 return $this->moduleUtil->expiredResponse(action([\App\Http\Controllers\StockTransferController::class, 'index']));
             }
-            $products = $request->input('products');
-            $expected_count = $request->input('expected_row_count');
-
-            // إذا كان هناك عدد متوقع (قادم من الإكسل) ولم يطابق الواقع في المصفوفة
-           if (!empty($expected_count) && count($products) != $expected_count) {
-           $output = [
-           'success' => 0,
-           'msg' => "فشل الحفظ: تم استيراد " . $expected_count . " منتج ولكن الجدول يحتوي على " . count($products) . " منتج. يرجى إعادة الرفع."
-              ];
-            return redirect()->back()->with('status', $output);
-           }
 
             DB::beginTransaction();
 
@@ -405,6 +394,7 @@ class StockTransferController extends Controller
 
         return redirect('stock-transfers')->with('status', $output);
     }
+
 
       public function import(Request $request)
 {
