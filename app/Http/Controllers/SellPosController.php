@@ -27,7 +27,7 @@
  
 /////////////////////  after 
 namespace App\Http\Controllers;
-
+use GuzzleHttp\Client;
 use App\Account;
 use App\Brands;
 use App\Business;
@@ -304,6 +304,15 @@ class SellPosController extends Controller
         //Added check because $users is of no use if enable_contact_assign if false
         $users = config('constants.enable_contact_assign') ? User::forDropdown($business_id, false, false, false, true) : [];
 
+        //   $location_printer_name = '';
+        //   if (!empty($default_location) && !empty($default_location->printer_id)) {
+        //     // جلب الطابعة مباشرة باستخدام المعرف (ID)
+        //     $printer = \App\Printer::find($default_location->printer_id);
+        //     if (!empty($printer)) {
+        //       $location_printer_name = $printer->name;
+        //      }
+        //     } 
+
         return view('sale_pos.create')
             ->with(compact(
                 'edit_discount',
@@ -338,7 +347,8 @@ class SellPosController extends Controller
                 'default_invoice_schemes',
                 'invoice_layouts',
                 'users',
-                'next_invoice_no',
+                'next_invoice_no'
+             //   'location_printer_name'
             ));
     }
 
@@ -353,7 +363,162 @@ class SellPosController extends Controller
         $pos_settings = empty($business_details->pos_settings) ? $this->businessUtil->defaultPosSettings() : json_decode($business_details->pos_settings, true);
         return view('sale_pos.display', compact('pos_settings'));
     }
+    /**
+ * إرسال إشعار إلى Webhook WhatAPI إذا كان الرقم أردنياً
+ *
+ * @param object $transaction
+ * @param object $contact
+ * @return void
+ */
 
+
+private function sendWhatsAppNotificationIfJordanian($transaction, $contact)
+{
+    \Log::info('✅ Respond.io: بدء الإرسال', ['invoice' => $transaction->invoice_no]);
+    
+    if (empty($contact->mobile)) {
+        \Log::warning('Respond.io: لا يوجد رقم هاتف للعميل');
+        return;
+    }
+
+    // تنسيق الرقم الأردني
+    $mobile = $contact->mobile;
+    $cleanedMobile = preg_replace('/[^0-9]/', '', $mobile);
+    
+    if (substr($cleanedMobile, 0, 1) == '0') {
+        $cleanedMobile = substr($cleanedMobile, 1);
+    }
+    if (substr($cleanedMobile, 0, 2) == '962') {
+        $cleanedMobile = substr($cleanedMobile, 3);
+    }
+    $numberForRespondIO = '+962' . $cleanedMobile;
+    
+    \Log::info('Respond.io: الرقم بعد التنسيق', ['number' => $numberForRespondIO]);
+    
+    $apiToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MjcwNTUsInNwYWNlSWQiOjMzNjkyMiwib3JnSWQiOjMzMjM3MSwidHlwZSI6ImFwaSIsImlhdCI6MTc3Nzg3OTk2OH0.PrTjfDzQfqGRo0HmnbMOJPcPqJogknyl6uDSgxoCKaA';
+    $channelId = '794433969861956';
+    
+    try {
+        $client = new \GuzzleHttp\Client();
+        
+        // ========== المحاولة الأولى: باستخدام /messages ==========
+        $url = "https://api.respond.io/v2/messages";
+        
+        $postData = [
+            'channelId' => $channelId,
+            'recipient' => [
+                'type' => 'phone',
+                'phone' => $numberForRespondIO,
+            ],
+            'message' => [
+                'type' => 'text',
+                'text' => "🛍️ شكراً لزيارتكم EGO POS\n\n"
+                        . "✅ تم استلام طلبكم بنجاح\n"
+                        . "📄 رقم الفاتورة: {$transaction->invoice_no}\n"
+                        . "💰 المبلغ الإجمالي: " . number_format($transaction->final_total, 2) . " دينار\n\n"
+                        . "❤️ نشكركم لثقتكم بنا",
+            ]
+        ];
+        
+        $response = $client->post($url, [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $apiToken,
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ],
+            'json' => $postData,
+            'timeout' => 15,
+        ]);
+        
+        if (in_array($response->getStatusCode(), [200, 201])) {
+            \Log::info('✅ Respond.io: تم الإرسال بنجاح عبر /messages', [
+                'number' => $numberForRespondIO,
+                'status' => $response->getStatusCode()
+            ]);
+            return true;
+        }
+        
+        \Log::warning('Respond.io: فشل الإرسال عبر /messages', [
+            'status' => $response->getStatusCode(),
+            'body' => $response->getBody()
+        ]);
+        
+    } catch (\GuzzleHttp\Exception\RequestException $e) {
+        \Log::error('Respond.io: استثناء في المحاولة الأولى', [
+            'message' => $e->getMessage(),
+            'response' => $e->hasResponse() ? $e->getResponse()->getBody()->getContents() : null
+        ]);
+        
+        // ========== المحاولة الثانية: البحث عن contactId ==========
+        try {
+            $client = new \GuzzleHttp\Client();
+            
+            // 1. البحث عن الـ contactId باستخدام رقم الهاتف
+            $searchUrl = "https://api.respond.io/v2/contacts?phone=" . urlencode($numberForRespondIO);
+            
+            $searchResponse = $client->get($searchUrl, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'Accept' => 'application/json',
+                ],
+            ]);
+            
+            $contactsData = json_decode($searchResponse->getBody(), true);
+            \Log::info('Respond.io: نتيجة البحث عن contact', ['data' => $contactsData]);
+            
+            if (!empty($contactsData['data'][0]['id'])) {
+                $contactId = $contactsData['data'][0]['id'];
+                \Log::info('Respond.io: تم العثور على contactId', ['contactId' => $contactId]);
+                
+                // 2. إرسال الرسالة باستخدام contactId
+                $sendUrl = "https://api.respond.io/v2/messages";
+                $sendData = [
+                    'channelId' => $channelId,
+                    'contactId' => $contactId,
+                    'message' => [
+                        'type' => 'text',
+                        'text' => "🛍️ شكراً لزيارتكم EGO POS\n\n"
+                                . "✅ تم استلام طلبكم بنجاح\n"
+                                . "📄 رقم الفاتورة: {$transaction->invoice_no}\n"
+                                . "💰 المبلغ الإجمالي: " . number_format($transaction->final_total, 2) . " دينار\n\n"
+                                . "❤️ نشكركم لثقتكم بنا",
+                    ]
+                ];
+                
+                $sendResponse = $client->post($sendUrl, [
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $apiToken,
+                        'Content-Type' => 'application/json',
+                    ],
+                    'json' => $sendData,
+                ]);
+                
+                if (in_array($sendResponse->getStatusCode(), [200, 201])) {
+                    \Log::info('✅ Respond.io: تم الإرسال بنجاح عبر contactId', [
+                        'contactId' => $contactId,
+                        'number' => $numberForRespondIO
+                    ]);
+                    return true;
+                }
+            } else {
+                \Log::warning('Respond.io: لم يتم العثور على contactId', [
+                    'number' => $numberForRespondIO,
+                    'response' => $contactsData
+                ]);
+            }
+            
+        } catch (\Exception $e2) {
+            \Log::error('Respond.io: فشلت المحاولة الثانية بالكامل', [
+                'error' => $e2->getMessage()
+            ]);
+        }
+    }
+    
+    \Log::error('Respond.io: جميع محاولات الإرسال فشلت', [
+        'transaction_id' => $transaction->id,
+        'number' => $numberForRespondIO
+    ]);
+}
     /**
      * Store a newly created resource in storage.
      *
@@ -434,11 +599,49 @@ class SellPosController extends Controller
             }
 
             $user_id = $request->session()->get('user.id');
-            $discount = ['discount_type' => $input['discount_type'],
-                'discount_amount' => $input['discount_amount'],
-            ];
-            $invoice_total = $this->productUtil->calculateInvoiceTotal($input['products'], $input['tax_rate_id'], $discount);
+            ///////////// discount change
+            // 1. احتفظ بالقيمة الأصلية للخصم قبل أي تعديل
+$original_discount_amount = $this->productUtil->num_uf($input['discount_amount']);
+$total_discount_to_distribute = $original_discount_amount;
 
+if ($input['discount_type'] == 'fixed' && $total_discount_to_distribute > 0) {
+    
+    $total_line_items_amount = 0;
+    foreach ($input['products'] as $product) {
+        $unit_price = $this->productUtil->num_uf($product['unit_price_inc_tax']);
+        $quantity = $this->productUtil->num_uf($product['quantity']);
+        $total_line_items_amount += ($unit_price * $quantity);
+    }
+
+    if ($total_line_items_amount > 0) {
+        foreach ($input['products'] as $key => $product) {
+            $unit_price = $this->productUtil->num_uf($product['unit_price_inc_tax']);
+            $quantity = $this->productUtil->num_uf($product['quantity']);
+            $line_total = $unit_price * $quantity;
+
+            $line_discount = ($line_total / $total_line_items_amount) * $total_discount_to_distribute;
+            $discount_per_unit = $line_discount / $quantity;
+
+            $input['products'][$key]['line_discount_amount'] = $discount_per_unit;
+            $input['products'][$key]['line_discount_type'] = 'fixed';
+        }
+    }
+
+    // --- التعديل هنا ---
+    // لا تقم بتصفير $input['discount_amount'] لكي تُحفظ في قاعدة البيانات
+    // $input['discount_amount'] = 0; // حذفنا هذا السطر أو عملنا له Comment
+}
+
+// 2. التعديل الثاني: حماية الإجمالي النهائي من الخصم المزدوج
+$discount = [
+    'discount_type' => $input['discount_type'],
+    // إذا كان النوع ثابت، نرسل 0 للدالة الحسابية لأن الخصم خُصم فعلياً من سعر القطع
+    // أما إذا كان نسبة، نرسل القيمة الأصلية (لأنك ذكرت أنك تريدها أن تظهر وتُحسب)
+    'discount_amount' => ($input['discount_type'] == 'fixed') ? 0 : $input['discount_amount'], 
+];
+
+$invoice_total = $this->productUtil->calculateInvoiceTotal($input['products'], $input['tax_rate_id'], $discount);
+            ////////////////////// 
             DB::beginTransaction();
 
             if (empty($request->input('transaction_date'))) {
@@ -605,6 +808,12 @@ class SellPosController extends Controller
             $this->transactionUtil->activityLog($transaction, 'added');
 
             DB::commit();
+                  if ($transaction->status == 'final') { 
+                $contact = \App\Contact::find($transaction->contact_id); // جلب بيانات العميل
+                if ($contact) {
+                    $this->sendWhatsAppNotificationIfJordanian($transaction, $contact);
+                }
+            }
 try {
     // تأكد من وجود transaction و business_id
     if (!$transaction || !$business_id) {
@@ -929,6 +1138,7 @@ private function receiptContent(
         // إعدادات مخرجات الطباعة
         $output['print_title'] = $receipt_details->invoice_no;
         $output['print_type'] = 'browser'; 
+        $output['document_title'] = 'Receipt_' . $transaction->invoice_no;
         $output['printer_config'] = $this->businessUtil->printerConfig($business_id, $location_details->printer_id);
         $output['data'] = $receipt_details;
 
@@ -960,7 +1170,73 @@ private function receiptContent(
     {
         //
     }
+ 
+    /////////// search for stock in branches 009
+   public function getProductStockDetails($sku)
+{
+    $business_id = request()->session()->get('user.business_id');
+    
+    $search_term = urldecode($sku);   // فك تشفير النص الممرر (لأن الأسماء العربية قد تحتوي على مسافات أو رموز في الرابط)
+    $location_id = request()->get('location_id');
 
+    // 1. جلب البيانات من قاعدة البيانات
+    $stocks = Variation::join('products as p', 'variations.product_id', '=', 'p.id')
+        ->join('variation_location_details as vld', 'variations.id', '=', 'vld.variation_id')
+        ->join('business_locations as bl', 'vld.location_id', '=', 'bl.id')
+        ->where('p.business_id', $business_id)
+        // ✅ فلتر الفرع - يطبق فقط إذا اختار فرع معين
+        ->when(!empty($location_id), function($q) use ($location_id) {
+            $q->where('vld.location_id', $location_id);
+        })
+        ->where(function($q) use ($search_term) {
+            $q->where('variations.sub_sku', '=', $search_term)
+              ->orWhere('p.product_custom_field3', '=', $search_term)
+              ->orWhere('p.name', 'like', '%' . $search_term . '%');
+        })
+        ->select(
+            'bl.name as location_name',
+            'p.name as product_name',
+            'variations.name as variation_name',
+            'variations.sub_sku as sku',
+            'vld.qty_available as available_qty',
+            'p.product_custom_field3 as model',
+            'p.product_custom_field1 as size',
+            'p.product_custom_field2 as color',
+        )
+        ->orderBy('bl.name')
+        ->get();
+
+    // 2. التحقق مما إذا كانت هناك نتائج أصلاً
+    if ($stocks->isEmpty()) {
+        return response()->json([
+            'success' => false,
+            'msg' => 'المنتج غير موجود أو لا يوجد له مخزون في أي فرع'
+        ]);
+    }
+
+    // 3. تنسيق النتائج للعرض
+    $results = [];
+    foreach($stocks as $stock) {
+        // تحسين: إذا كان الاسم DUMMY لا تعرضه، وإذا كان هناك تنويع أضفه بين قوسين
+        $variation_name = ($stock->variation_name == 'DUMMY') ? '' : ' (' . $stock->variation_name . ')';
+        
+        $results[] = [
+            'location_name' => $stock->location_name,
+            'product_full_name' => $stock->product_name . $variation_name,
+            'sku' => $stock->sku,
+            'model' => $stock->model,
+            'size' => $stock->size,
+            'color' => $stock->color,
+            'available_qty' => number_format($stock->available_qty, 2) // عرض رقمين بعد الفاصلة
+        ];
+    }
+
+    return response()->json([
+        'success' => true,
+        'stocks' => $results
+    ]);
+}
+ 
     /**
      * Show the form for editing the specified resource.
      *
@@ -1004,6 +1280,7 @@ private function receiptContent(
         $walk_in_customer = $this->contactUtil->getWalkInCustomer($business_id);
 
         $business_details = $this->businessUtil->getDetails($business_id);
+        
 
         $taxes = TaxRate::forBusinessDropdown($business_id, true, true);
 
@@ -1023,6 +1300,11 @@ private function receiptContent(
 
         $location_id = $transaction->location_id;
         $business_location = BusinessLocation::find($location_id);
+      
+        $business_locations = BusinessLocation::forDropdown($business_id, false, true);
+        $bl_attributes = [];
+        $business_locations = $business_locations['locations'];
+        
         $payment_types = $this->productUtil->payment_types($business_location, true);
         $location_printer_type = $business_location->receipt_printer_type;
         $sell_details = TransactionSellLine::join(
@@ -1268,6 +1550,24 @@ private function receiptContent(
         //Added check because $users is of no use if enable_contact_assign if false
         $users = config('constants.enable_contact_assign') ? User::forDropdown($business_id, false, false, false, true) : [];
         $only_payment = request()->segment(2) == 'payment';
+        
+          // --- جلب رقم الفاتورة المتوقع القادم ---   008
+        $next_invoice_no = null;
+        if (!empty($default_location))
+        {
+           $scheme = \App\InvoiceScheme::find($default_location->invoice_scheme_id);
+           if ($scheme) {
+          // الحساب: رقم البداية + عدد الفواتير المصدرة حالياً
+          $actual_next_no = $scheme->start_number + $scheme->invoice_count;
+        
+          // ضبط عدد الأصفار (Padding) إذا كان محدداً في النظام
+          $number = str_pad($actual_next_no, $scheme->total_digits, '0', STR_PAD_LEFT);
+        
+          // تجميع الرقم مع البادئة (Prefix)
+          $next_invoice_no = $scheme->prefix . $number;
+                   }
+        }
+        //////////////////  008  
 
         return view('sale_pos.edit')
             ->with(compact('business_details', 'taxes', 'payment_types', 'walk_in_customer',
@@ -1276,7 +1576,7 @@ private function receiptContent(
                 'brands', 'accounts', 'waiters', 'redeem_details', 'edit_price', 'edit_discount',
                 'shipping_statuses', 'warranties', 'sub_type', 'pos_module_data', 'invoice_schemes',
                 'default_invoice_schemes', 'invoice_layouts', 'featured_products', 'customer_due',
-                'users', 'only_payment'));
+                'users', 'only_payment','next_invoice_no','business_locations'));
     }
 
     /**

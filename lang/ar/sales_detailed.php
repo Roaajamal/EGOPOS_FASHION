@@ -23,6 +23,7 @@ return[
 'total'=> 'الاجمالي',
 'total_before_tax'=> 'الاجمالي قبل الضريبة',
 'total_after_tax'=>'الاجمالي بعد الضريبة',
+'total_all_taxes' => 'مجموع الضرائب',
 'tax'=>'الضريبة',
 'discount'=>'الخصومات', 
 'paid'=> 'الدفع',

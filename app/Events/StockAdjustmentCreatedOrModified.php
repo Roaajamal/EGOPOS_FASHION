@@ -13,6 +13,7 @@ use Illuminate\Queue\SerializesModels;
 class StockAdjustmentCreatedOrModified
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
+    public $transaction;
     public $stockAdjustment;
     public $action;
     /**

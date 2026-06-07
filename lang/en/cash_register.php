@@ -40,9 +40,10 @@ return [
      'total_final_visa' => 'Total Final Card ' , 
      'total_due' => ' Total Due ',
      'total_return' => ' Total Return (paid)  ' ,
-     'total_expense' => 'Total Expense ' ,
+      'total_paid_expense' => 'Total Paid Expense ' ,
      'net_total_sales' => ' Net Sale ' ,
      'net_total_cash' => ' Net Cash  ',
      'show_product_details_on_close_register' => 'Show Product Details On Close Register',
+     'total_expense'=>'total expense'
 
 ];

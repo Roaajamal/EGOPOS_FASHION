@@ -155,7 +155,7 @@ class WoocommerceController extends Controller
             'product_tax_type' => 'inc',
             'default_selling_price_group' => '',
             'product_fields_for_create' => ['category', 'quantity'],
-            'product_fields_for_update' => ['name', 'price', 'category', 'quantity'],
+            'product_fields_for_update' => ['name', 'price', 'category', 'quantity', 'product_custom_field1', 'product_custom_field2'], 
         ];
 
         $price_groups = SellingPriceGroup::where('business_id', $business_id)

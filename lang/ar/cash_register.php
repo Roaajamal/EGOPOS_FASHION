@@ -30,8 +30,9 @@
      'total_final_visa' => 'صافي الفيزا' , 
      'total_due' => 'اجمالي الذمم (الغير مدفوعة)',
      'total_return' => 'اجمالي المرتجعات المدفوعة ' ,
-     'total_expense' => 'اجمالي المصاريف' ,
+     'total_paid_expense' => 'اجمالي المصاريف المدفوعة' ,
      'net_total_sales' => 'صافي البيع ' ,
      'net_total_cash' => 'صافي النقد بالدرج',
      'show_product_details_on_close_register' => 'اظهار تفاصيل المنتجات في صفحة اغلاق الكاش',
+     'total_expense'=>'اجمالي المصاريف',
  ];

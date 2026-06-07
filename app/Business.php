@@ -38,6 +38,7 @@ class Business extends Model
         'email_settings' => 'array',
         'sms_settings' => 'array',
         'common_settings' => 'array',
+        'custom_product_settings' => 'array',
         'weighing_scale_setting' => 'array',
     ];
 

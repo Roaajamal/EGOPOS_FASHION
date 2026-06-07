@@ -38,14 +38,33 @@
 		@else
 			{!! $product_name !!}
 		@endif
-		<img src="@if(count($product->media) > 0)
+
+{{-- ✅ تعريف المتغيرات وجلب القيم من قاعدة البيانات --}}
+@php
+    $custom_labels = json_decode(session('business.custom_labels'), true);
+    
+    $cf1_label = !empty($custom_labels['product']['custom_field_1']) 
+        ? $custom_labels['product']['custom_field_1'] 
+        : 'الحقل المخصص 1';
+        
+    $cf2_label = !empty($custom_labels['product']['custom_field_2']) 
+        ? $custom_labels['product']['custom_field_2'] 
+        : 'الحقل المخصص 2';
+    
+    $cf1_value = $product->product_custom_field1 ?? '';
+    $cf2_value = $product->product_custom_field2 ?? '';
+@endphp
+
+@if(!empty($pos_settings['show_image'])) 
+{{-- <img src="..."> --}}
+ <img src="@if(count($product->media) > 0)
 						{{$product->media->first()->display_url}}
 					@elseif(!empty($product->product_image))
 						{{asset('/uploads/img/' . rawurlencode($product->product_image))}}
 					@else
 						{{asset('/img/default.png')}}
-					@endif" alt="product-img" loading="lazy"style="height:50px;display: inline;margin-left: 3px; border: black;border-radius: 5px; margin-top: 5px; width: 50px;object-fit: cover;">
-
+					@endif" alt="product-img" loading="lazy"style="height:50px;display: inline;margin-left: 3px; border: black;border-radius: 5px; margin-top: 5px; width: 50px;object-fit: cover;"> 
+					@endif
 
 		<input type="hidden" class="enable_sr_no" value="{{$product->enable_sr_no}}">
 		<input type="hidden" 
@@ -114,6 +133,7 @@
 		</div> 
 		@endif
 <br>
+        @if(!empty($pos_settings['show_quantity']))
 		<small class="text-muted p-1">
 			@if($product->enable_stock)
 			{{ @num_format($product->qty_available) }} {{$product->unit}} @lang('lang_v1.in_stock')
@@ -121,7 +141,7 @@
 				--
 			@endif
 		</small>
-
+        @endif
 		<!-- Description modal end -->
 		@if(in_array('modifiers' , $enabled_modules))
 			<div class="modifiers_html">
@@ -201,8 +221,15 @@
   		<p class="help-block"><small>@lang('lang_v1.sell_line_description_help')</small></p>
 	@endif
 	</td>
+	@if(!empty($custom_labels['product']['custom_field_1']))
+    <td class="text-center">{{ $cf1_value ?? '-' }}</td>
+@endif
 
-	<td>
+@if(!empty($custom_labels['product']['custom_field_2']))
+    <td class="text-center">{{ $cf2_value ?? '-' }}</td>
+@endif
+
+<td style="padding: 4px !important;">
 		{{-- If edit then transaction sell lines will be present --}}
 		@if(!empty($product->transaction_sell_lines_id))
 			<input type="hidden" name="products[{{$row_count}}][transaction_sell_lines_id]" class="form-control" value="{{$product->transaction_sell_lines_id}}">
@@ -268,6 +295,8 @@
 		</div>
 		
 		<input type="hidden" name="products[{{$row_count}}][product_unit_id]" value="{{$product->unit_id}}">
+
+		@if(!empty($pos_settings['show_unit']))
 		@if(count($sub_units) > 0)
 			<br>
 			<select name="products[{{$row_count}}][sub_unit_id]" class="form-control input-sm sub_unit">
@@ -280,6 +309,9 @@
 		@else
 			{{$product->unit}}
 		@endif
+
+		@endif 
+		 
 
 		@if(!empty($product->second_unit))
             <br>

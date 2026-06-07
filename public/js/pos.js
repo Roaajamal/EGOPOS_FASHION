@@ -3,57 +3,12 @@ var global_p_category_id = null;
 var global_is_clear_local_storage = false;
 $(document).ready(function() {
     customer_set = false;
-    //Prevent enter key function except textarea (في حقل البحث نعالج Enter في keydown أدناه لتفعيل السكان)
+    //Prevent enter key function except texarea
     $('form').on('keyup keypress', function(e) {
         var keyCode = e.keyCode || e.which;
         if (keyCode === 13 && e.target.tagName != 'TEXTAREA') {
             e.preventDefault();
             return false;
-        }
-    });
-
-    // مستمع عام لسكان الباركود حتى لو المؤشر ليس على حقل البحث
-    // يجمع الأحرف السريعة ثم عند Enter يطلق بحث المنتج في #search_product
-    var barcodeBuffer = '';
-    var barcodeTimer = null;
-    $(document).on('keydown', function(e) {
-        var tag = (e.target.tagName || '').toUpperCase();
-        // لو المستخدم يكتب داخل input/textarea/select أو contenteditable لا نتدخل
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || $(e.target).is('[contenteditable=true]')) {
-            return;
-        }
-
-        var key = e.key;
-
-        if (key === 'Enter') {
-            if (barcodeBuffer.length >= 2) {
-                e.preventDefault();
-                var code = barcodeBuffer;
-                barcodeBuffer = '';
-
-                var $input = $('#search_product');
-                if ($input.length) {
-                    $input.val(code);
-                    if ($input.data('ui-autocomplete')) {
-                        $input.autocomplete('search', code);
-                    }
-                }
-            } else {
-                barcodeBuffer = '';
-            }
-            return;
-        }
-
-        // الأحرف القابلة للطباعة فقط (حرف واحد)
-        if (typeof key === 'string' && key.length === 1) {
-            barcodeBuffer += key;
-            if (barcodeTimer) {
-                clearTimeout(barcodeTimer);
-            }
-            // إذا توقف الإدخال أكثر من 500ms نعتبر أنه ليس سكان واحد
-            barcodeTimer = setTimeout(function() {
-                barcodeBuffer = '';
-            }, 500);
         }
     });
 
@@ -109,21 +64,6 @@ $(document).ready(function() {
         if ($('#types_of_service_id').length && $('#types_of_service_id').val()) {
             $('#types_of_service_id').change();
         }
-        ////////////  008
-        var selected_location_id = $(this).val();
-
-        if (selected_location_id) {
-        // تحديث الحقل المخفي فوراً
-        $('input#location_id').val(selected_location_id);
-
-        // استدعاء التحديث وتمرير الـ ID الجديد يدوياً لكسر أي تأخير
-        if (typeof update_next_invoice_no === "function") {
-            // نمرر تأخير 0 ليحدث التغيير فوراً عند التنقل بين الفروع
-            update_next_invoice_no(0, selected_location_id);
-          }
-          }
-         
-         /////////////// 008
     });
 
     //get customer
@@ -362,17 +302,6 @@ $(document).ready(function() {
                     .appendTo(ul);
             }
         };
-
-        // عند Enter (أو بعد سكان الباركود) — إطلاق البحث فوراً وإضافة المنتج إن وُجد واحد فقط
-        $('#search_product').on('keydown', function(e) {
-            if (e.which === 13) {
-                e.preventDefault();
-                var val = $(this).val().trim();
-                if (val.length >= 2) {
-                    $(this).autocomplete('search', val);
-                }
-            }
-        });
     }
 
     //Update line total and check for quantity not greater than max quantity
@@ -910,8 +839,7 @@ $(document).on('submit', 'form#add_pos_sell_form', function(e) {
 
         var data = $(form).serialize();
         var is_gift = $('#is_gift_receipt').is(':checked') ? 1 : 0;
-       var is_slip = $('#is_slip_receipt').is(':checked') ? 1 : 0;
-        data = data + '&status=final&is_gift_receipt=' + is_gift + '&is_slip_receipt=' + is_slip;
+        data = data + '&status=final&is_gift_receipt=' + is_gift;
 
         var url = $(form).attr('action');
         $.ajax({
@@ -1044,19 +972,42 @@ $(document).on('submit', 'form#add_pos_sell_form', function(e) {
         pos_total_row();
     });
 
-    $(document).on('click', '.add_new_customer', function() {
-        $('#customer_id').select2('close');
-        var name = $(this).data('name');
-        $('.contact_modal')
-            .find('input#name')
-            .val(name);
-        $('.contact_modal')
-            .find('select#contact_type')
-            .val('customer')
-            .closest('div.contact_type_div')
-            .addClass('hide');
-        $('.contact_modal').modal('show');
-    });
+ $(document).on('click', '.add_new_customer', function() {
+    $('#customer_id').select2('close');
+    
+    var searchVal = '';
+    try {
+        searchVal = $('#customer_id').data('select2')
+            .$dropdown.find('.select2-search__field').val() || '';
+    } catch(e) {}
+
+    if (!searchVal) {
+        searchVal = $(this).data('name') || '';
+    }
+
+
+    searchVal = searchVal.replace(/[-\/\\|]/g, '').trim();
+
+    // إخفاء contact_type_div
+    $('.contact_modal')
+        .find('select#contact_type')
+        .val('customer')
+        .closest('div.contact_type_div')
+        .addClass('hide');
+
+    $('.contact_modal').find('input[name="contact_type_radio"][value="individual"]').prop('checked', true).trigger('change');
+
+    // عبّي الحقل الصح — الـ IDs الصحيحة هي #mobile و #first_name
+    if (/^\d+$/.test(searchVal)) {
+        $('.contact_modal').find('#mobile').val(searchVal);
+        $('.contact_modal').find('#first_name').val('');
+    } else {
+        $('.contact_modal').find('#first_name').val(searchVal);
+        $('.contact_modal').find('#mobile').val('');
+    }
+
+    $('.contact_modal').modal('show');
+});
     $('form#quick_add_contact')
         .submit(function(e) {
             e.preventDefault();
@@ -1175,6 +1126,7 @@ $(document).on('submit', 'form#add_pos_sell_form', function(e) {
         input#rp_redeemed_amount').change(function() {
         pos_total_row();
     });
+    
     $('select#tax_rate_id').change(function() {
         var tax_rate = $(this)
             .find(':selected')
@@ -1800,11 +1752,11 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
 
                     round_row_to_iraqi_dinnar($(this));
 
-                    if (!$('#__is_mobile').length) {
-                        $('input#search_product')
-                            .focus()
-                            .select();
-                    }
+                 //   if (!$('#__is_mobile').length) {
+                  //      $('input#search_product')
+                    //        .focus()
+                      //      .select();
+                    //}
                 }
         });
     }
@@ -1912,11 +1864,11 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
                     round_row_to_iraqi_dinnar(this_row);
                     __currency_convert_recursively(this_row);
 
-                    if (!$('#__is_mobile').length) {
-                        $('input#search_product')
-                            .focus()
-                            .select();
-                    }
+                //    if (!$('#__is_mobile').length) {
+                  //      $('input#search_product')
+                    //        .focus()
+                      //      .select();
+                //    }
 
                     //Used in restaurant module
                     if (result.html_modifier) {
@@ -1931,11 +1883,11 @@ function pos_product_row(variation_id = null, purchase_line_id = null, weighing_
                     $(".pos_product_div").animate({ scrollTop: $('.pos_product_div').prop("scrollHeight")}, 1000);
                 } else {
                     toastr.error(result.msg);
-                    if (!$('#__is_mobile').length) {
-                        $('input#search_product')
-                            .focus()
-                            .select();
-                    }
+                  //  if (!$('#__is_mobile').length) {
+                    //    $('input#search_product')
+                      //      .focus()
+                        //    .select();
+                    //}
                 }
             },
         });
@@ -2320,11 +2272,6 @@ function reset_pos_form(){
     // Set global_is_clear_local_storage to true to clear local storage
     global_is_clear_local_storage = true;
     saveFormDataToLocalStorage();
-
-    ///////////// 008
-    if (typeof update_next_invoice_no === "function") {
-        update_next_invoice_no();
-    }
 }
 
 function set_default_customer() {
@@ -2448,64 +2395,98 @@ function round_row_to_iraqi_dinnar(row) {
     }
 }
 
-/////// 001 تعديل لطباعة فاتورة الهدية
-function pos_print(receipt) {
-    if (receipt.html_content != '') {
-        console.log("جاري طباعة الفاتورة العادية...");
-        
-        // 1. طباعة الفاتورة العادية
-        $('#receipt_section').html(receipt.html_content);
-        __currency_convert_recursively($('#receipt_section'));
-        
-        // ننتظر تحميل الصور في الفاتورة العادية
-        waitForImagesAndPrint($('#receipt_section'), function() {
-            // 2. بعد انتهاء الطباعة الأولى، نتحقق من فاتورة الهدية
-            if (receipt.gift_html && receipt.gift_html != '') {
-                console.log("تم العثور على فاتورة هدية، جاري التحضير...");
-                
-                setTimeout(function() {
-                    $('#receipt_section').html(receipt.gift_html);
-                    __currency_convert_recursively($('#receipt_section'));
-                    
-                    // ننتظر تحميل الصور في فاتورة الهدية أيضاً
-                    waitForImagesAndPrint($('#receipt_section'), function() {
-                        console.log("تمت طباعة فاتورة الهدية.");
-                    });
-                }, 1500); 
+// ضبط خوارزمية التشفير
+qz.security.setSignatureAlgorithm("SHA256");
+
+// ضبط الشهادة من المتغير الذي مررناه من Blade
+qz.security.setCertificatePromise(function(resolve, reject) {
+    resolve(window.QZ_CONFIG.certificate);
+});
+
+// ضبط التوقيع الرقمي
+qz.security.setSignaturePromise(function(toSign) {
+    return function(resolve, reject) {
+        $.ajax({
+            url: window.QZ_CONFIG.signingUrl + "?request=" + toSign,
+            type: 'GET',
+            success: resolve,
+            error: function(xhr, status, error) {
+                console.error("Signature Error:", error);
+                reject(error);
             }
         });
+    };
+});
+
+/////// 001 تعديل لطباعة فاتورة الهدية
+// ✅ دالة الاتصال المشتركة بين الطباعة والدرج
+async function connectQZ() {
+    try {
+        if (qz.websocket.isActive()) return true;
+        await qz.websocket.connect();
+        return true;
+    } catch(err) {
+        console.error("فشل الاتصال بـ QZ Tray:", err);
+        alert("تأكد من تشغيل برنامج QZ Tray.");
+        return false;
     }
 }
-///////////////// 001
-// دالة مساعدة لضمان تحميل الصور قبل الطباعة
-function waitForImagesAndPrint(section, callback) {
-    var images = section.find('img');
-    var totalImages = images.length;
-    var loadedImages = 0;
 
-    if (totalImages === 0) {
-        window.print();
-        if (callback) callback();
-        return;
-    }
+function pos_print(receipt) {
+    if (!receipt.html_content || receipt.html_content == '') return;
 
-    images.on('load error', function() {
-        loadedImages++;
-        if (loadedImages === totalImages) {
-            // إضافة تأخير بسيط جداً (250ms) للتأكد من الرندر
+    sendToDirectPrinter(receipt.html_content, function() {
+        if (receipt.gift_html && receipt.gift_html != '') {
             setTimeout(function() {
-                window.print();
-                if (callback) callback();
-            }, 250);
+                sendToDirectPrinter(receipt.gift_html, function() {
+                    console.log("✅ تمت طباعة فاتورة الهدية.");
+                });
+            }, 1500);
         }
     });
-    
-    // لضمان عدم تعليق النظام إذا كانت الصورة مخزنة في الكاش أصلاً
-    images.each(function() {
-        if (this.complete) $(this).load();
-    });
 }
-///////////// 001
+
+async function sendToDirectPrinter(htmlContent, callback) {
+    const connected = await connectQZ(); // ✅ نفس اسم الدالة
+    if (!connected) return;
+
+    try {
+        const printerName ='POS-80C'; // ✅ من الإعدادات
+
+        if (!printerName) {
+            alert("لم يتم تحديد طابعة لهذا الفرع!");
+            return;
+        }
+
+        const config = qz.configs.create(printerName, {
+    margins: { top: 0, right: 0, bottom: 0, left: 0 },
+    colorType: 'blackwhite',
+    duplex: false,
+    density: 203,    // ✅ DPI الطابعة (203 أو 300)
+    units: 'mm',
+    size: { width: 80, height: null }  // ✅ عرض الورقة 80mm
+});
+
+       const data = [{
+    type: 'pixel',
+    format: 'html',
+    flavor: 'base64',
+    data: btoa(unescape(encodeURIComponent(
+        htmlContent.replace('<body', '<body class="qz-print"')
+    )))
+}];
+
+        await qz.print(config, data);
+        console.log("✅ تمت الطباعة بنجاح");
+
+        if (typeof callback === 'function') callback();
+
+    } catch (err) {
+        console.error("❌ خطأ في الطباعة:", err);
+        fallbackPrint(htmlContent);
+    }
+}
+
 
 function calculate_discounted_unit_price(row) {
     var this_unit_price = __read_number(row.find('input.pos_unit_price'));

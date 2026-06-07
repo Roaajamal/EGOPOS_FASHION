@@ -28,4 +28,6 @@
      'discount' => 'الخصم', 
      'total_stock_adjustment' => 'اجمالي المخزون المخرج ',
      'edit' => 'تعديل',
+     'inventory' => 'جرد', 
+     'total_of_quantity' => 'اجمالي الكمية', 
  ];

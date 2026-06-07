@@ -328,6 +328,34 @@ class WoocommerceUtil extends Util
                 'sku' => $product->sku,
             ];
 
+            // --- الكود الجديد يبدأ هنا ---
+
+// مصفوفة لتخزين الحقول المخصصة
+$meta_data = [];
+
+for ($i = 1; $i <= 2; $i++) {
+    $field_name = 'product_custom_field' . $i;
+    
+    // فحص إذا كان الحقل مفعل في إعدادات الووكومرس (للإنشاء أو التحديث)
+    if (in_array($field_name, $woocommerce_api_settings->product_fields_for_create) || 
+        in_array($field_name, $woocommerce_api_settings->product_fields_for_update)) {
+        
+        if (!empty($product->$field_name)) {
+            $meta_data[] = [
+                'key' => 'product_custom_field_' . $i, // الكي اللي رح يظهر في WordPress
+                'value' => $product->$field_name
+            ];
+        }
+    }
+}
+
+// إذا وجدنا بيانات مخصصة، نضيفها للمصفوفة الأساسية
+if (!empty($meta_data)) {
+    $array['meta_data'] = $meta_data;
+}
+
+// --- الكود الجديد ينتهي هنا ---
+
             $manage_stock = false;
             if ($product->enable_stock == 1 && $product->type == 'single') {
                 $manage_stock = true;

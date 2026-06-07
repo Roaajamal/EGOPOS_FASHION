@@ -69,11 +69,31 @@ class ProductController extends Controller
         $business_id = request()->session()->get('user.business_id');
         $selling_price_group_count = SellingPriceGroup::countSellingPriceGroups($business_id);
         $is_woocommerce = $this->moduleUtil->isModuleInstalled('Woocommerce');
+        
+        $stock_locations = BusinessLocation::where('business_id', $business_id)
+        ->whereNotNull('name')
+        ->where('name', '!=', '')
+        ->pluck('name', 'id'); 
 
         if (request()->ajax()) {
             //Filter by location
             $location_id = request()->get('location_id', null);
             $permitted_locations = auth()->user()->permitted_locations();
+              try {
+            if (!empty($location_id) && $location_id != 'none') {
+                // تحديث المخزون لموقع محدد
+                $this->updateStockForLocation($business_id, $location_id);
+                     $this->calculateStockValueForLocation($business_id, $loc_id);
+            } elseif ($permitted_locations != 'all' && !empty($permitted_locations)) {
+                // تحديث المخزون لكل المواقع المسموحة
+                foreach ($permitted_locations as $loc_id) {
+                    $this->updateStockForLocation($business_id, $loc_id);
+                         $this->calculateStockValueForLocation($business_id, $loc_id);
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::error('خطأ في تحديث المخزون: ' . $e->getMessage());
+        }
 
             $query = Product::with(['media', 'product_locations'])
                 ->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
@@ -210,6 +230,21 @@ class ProductController extends Controller
             if (! empty(request()->get('repair_model_id'))) {
                 $products->where('products.repair_model_id', request()->get('repair_model_id'));
             }
+            
+              $custom_field1 = request()->get('custom_field1', null);
+if (!empty($custom_field1)) {
+    $products->where('products.product_custom_field1', $custom_field1);
+}
+
+$custom_field2 = request()->get('custom_field2', null);
+if (!empty($custom_field2)) {
+    $products->where('products.product_custom_field2', $custom_field2);
+}
+
+$custom_field3 = request()->get('custom_field3', null);
+if (!empty($custom_field3)) {
+    $products->where('products.product_custom_field3', $custom_field3);
+}  
 
             return Datatables::of($products)
                 ->addColumn(
@@ -290,9 +325,9 @@ class ProductController extends Controller
                         '</span>' : $product;
 
                     // عرض الصنف الفرعي (لون - مقاس) تحت اسم المنتج عند وجود تباين
-                    if (! empty($row->variation_name)) {
-                        $product .= '<br><small class="text-muted" style="font-weight: normal;">‹ ' . e($row->variation_name) . '</small>';
-                    }
+                    if (! empty($row->variation_name) && strtoupper($row->variation_name) !== 'DUMMY') {
+                       $product .= '<br><small class="text-muted" style="font-weight: normal;">‹ ' . e($row->variation_name) . '</small>';
+                       }
 
                     if ($is_woocommerce && empty($row->woocommerce_disable_sync)) {
                         $product = $product.'<br><i class="fab fa-wordpress"></i>';
@@ -404,6 +439,29 @@ class ProductController extends Controller
         $pos_module_data = $this->moduleUtil->getModuleData('get_filters_for_list_product_screen');
 
         $is_admin = $this->productUtil->is_admin(auth()->user());
+        
+        // جلب القيم المميزة للحقول المخصصة للفلاتر
+$custom_field1_values = Product::where('business_id', $business_id)
+    ->whereNotNull('product_custom_field1')
+    ->where('product_custom_field1', '!=', '')
+    ->distinct()
+    ->orderBy('product_custom_field1')
+    ->pluck('product_custom_field1', 'product_custom_field1');
+
+$custom_field2_values = Product::where('business_id', $business_id)
+    ->whereNotNull('product_custom_field2')
+    ->where('product_custom_field2', '!=', '')
+    ->distinct()
+    ->orderBy('product_custom_field2')
+    ->pluck('product_custom_field2', 'product_custom_field2');
+
+$custom_field3_values = Product::where('business_id', $business_id)
+    ->whereNotNull('product_custom_field3')
+    ->where('product_custom_field3', '!=', '')
+    ->distinct()
+    ->orderBy('product_custom_field3')
+    ->pluck('product_custom_field3', 'product_custom_field3');
+      
 
         return view('product.index')
             ->with(compact(
@@ -415,8 +473,12 @@ class ProductController extends Controller
                 'business_locations',
                 'show_manufacturing_data',
                 'pos_module_data',
-                'is_woocommerce',
-                'is_admin'
+                'is_woocommerce', 
+                'is_admin',
+                'stock_locations',
+                 'custom_field1_values',   // ← جديد
+                'custom_field2_values',   // ← جديد
+                'custom_field3_values' 
             ));
     }
 
@@ -2623,6 +2685,415 @@ class ProductController extends Controller
         return view('product.stock_history')
                 ->with(compact('product', 'business_locations'));
     }
+    
+     ////////  current stock 
+    public function currentStockReport()
+{
+    if (! auth()->user()->can('current_stock_tab.view')) {
+        abort(403, 'Unauthorized action.'); 
+    }
+
+    $business_id = request()->session()->get('user.business_id');
+
+    $stock_locations = BusinessLocation::where('business_id', $business_id)
+        ->whereNotNull('name')
+        ->where('name', '!=', '')
+        ->pluck('name', 'id');
+
+    $custom_labels = json_decode(session('business.custom_labels'), true);
+    $active_custom_fields = [];
+    for ($i = 1; $i <= 10; $i++) {
+        $label = $custom_labels['product']['custom_field_' . $i] ?? '';
+        if (!empty($label)) {
+            $active_custom_fields['product_custom_field' . $i] = $label;
+        }
+    }
+
+    if (request()->ajax()) {
+        $selected_location_ids = request()->input('location_ids', []);
+        $search_value          = request()->input('search.value', '');
+        $order_col             = intval(request()->input('order.0.column', 1));
+        $order_dir             = request()->input('order.0.dir', 'asc');
+        $start                 = intval(request()->input('start', 0));
+        $length                = intval(request()->input('length', 25));
+        $stock_filter          = request()->input('stock_filter', '');
+
+        if (empty($selected_location_ids)) {
+            $locations = $stock_locations;
+        } else {
+            $locations = BusinessLocation::where('business_id', $business_id)
+                ->whereIn('id', $selected_location_ids)
+                ->pluck('name', 'id');
+        }
+
+
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $locations = $locations->filter(
+                fn($name, $id) => in_array($id, $permitted_locations)
+            );
+        }
+
+        $category_id  = request()->input('category_id');
+        $brand_id     = request()->input('brand_id');
+        $unit_id      = request()->input('unit_id');
+        $tax_id       = request()->input('tax_id');
+        $type         = request()->input('type');
+        $active_state = request()->input('active_state'); 
+        $custom_field1 = request()->input('custom_field1');
+$custom_field2 = request()->input('custom_field2');
+$custom_field3 = request()->input('custom_field3'); 
+
+        // استخدم VariationLocationDetails مباشرة
+        $snapshots = \App\VariationLocationDetails::
+            whereIn('variation_location_details.location_id', $locations->keys())
+            ->join('variations as v', 'v.id', '=', 'variation_location_details.variation_id')
+            ->join('products as p', 'p.id', '=', 'v.product_id')
+            ->join('units', 'p.unit_id', '=', 'units.id')
+            ->leftJoin('brands', 'p.brand_id', '=', 'brands.id')
+            ->leftJoin('categories as c1', 'p.category_id', '=', 'c1.id')
+            ->leftJoin('categories as c2', 'p.sub_category_id', '=', 'c2.id')
+            ->leftJoin('tax_rates', 'p.tax', '=', 'tax_rates.id')
+            ->where('p.business_id', $business_id)
+           // ->where('p.status', 'active')
+            ->select(
+                'p.id as product_id',
+                'v.id as variation_id',
+                'p.name as product_name',
+                'v.sub_sku as sku',
+                'variation_location_details.location_id',
+                'variation_location_details.qty_available',
+                'c1.name as category',
+                'c2.name as sub_category',
+                'units.actual_name as unit',
+                'brands.name as brand',
+                'tax_rates.name as tax',
+                'p.type as product_type',
+                'v.sell_price_inc_tax as selling_price',
+                'v.dpp_inc_tax as purchase_price',
+                'p.product_custom_field1',
+                'p.product_custom_field2',
+                'p.product_custom_field3',
+                'p.product_custom_field4',
+                'p.product_custom_field5',
+                'p.product_custom_field6',
+                'p.product_custom_field7',
+                'p.product_custom_field8',
+                'p.product_custom_field9',
+                'p.product_custom_field10',
+            )
+             ->when(!empty($category_id), fn($q) => $q->where('p.category_id', $category_id))
+            ->when(!empty($brand_id),    fn($q) => $q->where('p.brand_id', $brand_id))
+            ->when(!empty($unit_id),     fn($q) => $q->where('p.unit_id', $unit_id))
+            ->when(!empty($tax_id),      fn($q) => $q->where('p.tax', $tax_id))
+            ->when(!empty($type),        fn($q) => $q->where('p.type', $type))
+            ->when($active_state === 'active',   fn($q) => $q->where('p.is_inactive', 0))
+            ->when($active_state === 'inactive', fn($q) => $q->where('p.is_inactive', 1))
+            ->when(!empty($custom_field1), fn($q) => $q->where('p.product_custom_field1', $custom_field1))
+->when(!empty($custom_field2), fn($q) => $q->where('p.product_custom_field2', $custom_field2))
+->when(!empty($custom_field3), fn($q) => $q->where('p.product_custom_field3', $custom_field3)) 
+            ->get();
+
+        $products = [];
+        foreach ($snapshots as $row) {
+            $key = $row->product_id . '_' . $row->variation_id;
+            $products[$key]['product_name']   = $row->product_name;
+            $products[$key]['sku']            = $row->sku;
+            $products[$key]['category']       = $row->category;
+            $products[$key]['sub_category']   = $row->sub_category;
+            $products[$key]['brand']          = $row->brand;
+            $products[$key]['unit']           = $row->unit;
+            $products[$key]['tax']            = $row->tax;
+            $products[$key]['product_type']   = $row->product_type;
+            $products[$key]['selling_price']  = $row->selling_price;
+            $products[$key]['purchase_price'] = $row->purchase_price;
+            foreach (array_keys($active_custom_fields) as $field) {
+                $products[$key][$field] = $row->$field;
+            }
+            $products[$key]['locations'][$row->location_id] = $row->qty_available;
+        }
+
+        $rows = [];
+        foreach ($products as $product) {
+            $row   = [];
+            $row[] = $product['sku'];
+            $row[] = $product['product_name'];
+            $row[] = $product['category']      ?? '';
+            $row[] = $product['sub_category']  ?? '';
+            $row[] = $product['brand']         ?? '';
+            $row[] = $product['unit']          ?? '';
+            $row[] = $product['tax']           ?? '';
+            $row[] = $product['product_type']  ?? '';
+            $row[] = $product['selling_price'] ?? 0;
+            $row[] = $product['purchase_price']?? 0;
+
+            foreach (array_keys($active_custom_fields) as $field) {
+                $row[] = $product[$field] ?? '';
+            }
+
+            $total = 0;
+            foreach ($locations as $loc_id => $loc_name) {
+                $qty    = $product['locations'][$loc_id] ?? 0;
+                $total += $qty;
+                $row[]  = $qty;
+            }
+
+            if (!empty($stock_filter)) {
+                switch ($stock_filter) {
+                    case 'gt':  if ($total <= 0) continue 2; break;
+                    case 'lt':  if ($total >= 0) continue 2; break;
+                    case 'gte': if ($total < 0)  continue 2; break;
+                    case 'lte': if ($total > 0)  continue 2; break;
+                    case 'eq':  if ($total != 0) continue 2; break;
+                }
+            } else {
+                if ($total == 0) continue;
+            }
+
+            $row[]  = $total;
+            $rows[] = $row;
+        }
+
+        if (!empty($search_value)) {
+            $rows = array_values(array_filter($rows, function($row) use ($search_value) {
+                return stripos($row[0], $search_value) !== false
+                    || stripos($row[1], $search_value) !== false
+                    || stripos($row[2], $search_value) !== false
+                    || stripos($row[4], $search_value) !== false;
+            }));
+        }
+
+        $total_records = count($rows);
+
+        usort($rows, function($a, $b) use ($order_col, $order_dir) {
+            $val_a = $a[$order_col] ?? '';
+            $val_b = $b[$order_col] ?? '';
+            $result = is_numeric($val_a) && is_numeric($val_b)
+                ? $val_a <=> $val_b
+                : strcmp($val_a, $val_b);
+            return $order_dir === 'desc' ? -$result : $result;
+        });
+
+        $rows = array_values(
+            array_slice($rows, $start, $length === -1 ? count($rows) : $length)
+        );
+
+        return response()->json([
+            'draw'            => intval(request()->input('draw')),
+            'recordsTotal'    => $total_records,
+            'recordsFiltered' => $total_records,
+            'data'            => $rows,
+        ]);
+    }
+
+    return view('product.current_stock_details')
+        ->with(compact('stock_locations', 'active_custom_fields'));
+}
+
+    /////////////// for daily stock
+ public function dailyStockHistory()
+{
+    if (! auth()->user()->can('daily_stock_tab.view')) {
+        abort(403, 'Unauthorized action.');
+    }
+
+    $business_id = request()->session()->get('user.business_id');
+
+    $stock_locations = BusinessLocation::where('business_id', $business_id)
+        ->whereNotNull('name')
+        ->where('name', '!=', '')
+        ->pluck('name', 'id');
+
+    // جيب الـ custom labels وحدد المفعلة
+    $custom_labels = json_decode(session('business.custom_labels'), true);
+    $active_custom_fields = [];
+    for ($i = 1; $i <= 10; $i++) {
+        $label = $custom_labels['product']['custom_field_' . $i] ?? '';
+        if (!empty($label)) {
+            $active_custom_fields['product_custom_field' . $i] = $label;
+        }
+    }
+
+    if (request()->ajax()) {
+        $snapshot_date         = request()->input('snapshot_date', now()->toDateString());
+        $selected_location_ids = request()->input('location_ids', []);
+        $search_value          = request()->input('search.value', '');
+        $order_col             = intval(request()->input('order.0.column', 1));
+        $order_dir             = request()->input('order.0.dir', 'asc');
+        $start                 = intval(request()->input('start', 0));
+        $length                = intval(request()->input('length', 25));
+        $stock_filter          = request()->input('stock_filter', '');
+
+        if (empty($selected_location_ids)) {
+            $locations = $stock_locations;
+        } else {
+            $locations = BusinessLocation::where('business_id', $business_id)
+                ->whereIn('id', $selected_location_ids)
+                ->pluck('name', 'id');
+        }
+
+        $permitted_locations = auth()->user()->permitted_locations();
+        if ($permitted_locations != 'all') {
+            $locations = $locations->filter(
+                fn($name, $id) => in_array($id, $permitted_locations)
+            );
+        }
+
+         $category_id  = request()->input('category_id');
+        $brand_id     = request()->input('brand_id');
+        $unit_id      = request()->input('unit_id');
+        $tax_id       = request()->input('tax_id');
+        $type         = request()->input('type');
+        $active_state = request()->input('active_state'); 
+        $custom_field1 = request()->input('custom_field1');
+$custom_field2 = request()->input('custom_field2');
+$custom_field3 = request()->input('custom_field3');
+
+        $snapshots = \App\Models\DailyInventorySnapshot::where('snapshot_date', $snapshot_date)
+            ->whereIn('daily_inventory_snapshots.location_id', $locations->keys())
+            ->join('variations as v', 'v.id', '=', 'daily_inventory_snapshots.variation_id')
+            ->join('products as p', 'p.id', '=', 'daily_inventory_snapshots.product_id')
+            ->join('units', 'p.unit_id', '=', 'units.id')
+            ->leftJoin('brands', 'p.brand_id', '=', 'brands.id')
+            ->leftJoin('categories as c1', 'p.category_id', '=', 'c1.id')
+            ->leftJoin('categories as c2', 'p.sub_category_id', '=', 'c2.id')
+            ->leftJoin('tax_rates', 'p.tax', '=', 'tax_rates.id')
+            ->select(
+                'daily_inventory_snapshots.product_id',
+                'daily_inventory_snapshots.variation_id',
+                'daily_inventory_snapshots.product_name',
+                'daily_inventory_snapshots.sku',
+                'daily_inventory_snapshots.location_id',
+                'daily_inventory_snapshots.qty_available',
+                'c1.name as category',
+                'c2.name as sub_category',
+                'units.actual_name as unit',
+                'brands.name as brand',
+                'tax_rates.name as tax',
+                'p.type as product_type',
+                'v.sell_price_inc_tax as selling_price',
+                'v.dpp_inc_tax as purchase_price',
+                'p.product_custom_field1',
+                'p.product_custom_field2',
+                'p.product_custom_field3',
+                'p.product_custom_field4',
+                'p.product_custom_field5',
+                'p.product_custom_field6',
+                'p.product_custom_field7',
+                'p.product_custom_field8',
+                'p.product_custom_field9',
+                'p.product_custom_field10',
+            )
+            ->when(!empty($category_id), fn($q) => $q->where('p.category_id', $category_id))
+            ->when(!empty($brand_id),    fn($q) => $q->where('p.brand_id', $brand_id))
+            ->when(!empty($unit_id),     fn($q) => $q->where('p.unit_id', $unit_id))
+            ->when(!empty($tax_id),      fn($q) => $q->where('p.tax', $tax_id))
+            ->when(!empty($type),        fn($q) => $q->where('p.type', $type))
+            ->when($active_state === 'active',   fn($q) => $q->where('p.is_inactive', 0))
+            ->when($active_state === 'inactive', fn($q) => $q->where('p.is_inactive', 1))
+            ->when(!empty($custom_field1), fn($q) => $q->where('p.product_custom_field1', $custom_field1))
+->when(!empty($custom_field2), fn($q) => $q->where('p.product_custom_field2', $custom_field2))
+->when(!empty($custom_field3), fn($q) => $q->where('p.product_custom_field3', $custom_field3))
+            ->get();
+
+        $products = [];
+        foreach ($snapshots as $row) {
+            $key = $row->product_id . '_' . $row->variation_id;
+            $products[$key]['product_name']   = $row->product_name;
+            $products[$key]['sku']            = $row->sku;
+            $products[$key]['category']       = $row->category;
+            $products[$key]['sub_category']   = $row->sub_category;
+            $products[$key]['brand']          = $row->brand;
+            $products[$key]['unit']           = $row->unit;
+            $products[$key]['tax']            = $row->tax;
+            $products[$key]['product_type']   = $row->product_type;
+            $products[$key]['selling_price']  = $row->selling_price;
+            $products[$key]['purchase_price'] = $row->purchase_price;
+            foreach (array_keys($active_custom_fields) as $field) {
+                $products[$key][$field] = $row->$field;
+            }
+            $products[$key]['locations'][$row->location_id] = $row->qty_available;
+        }
+
+        $rows = [];
+        foreach ($products as $product) {
+            $row   = [];
+            $row[] = $product['sku'];
+            $row[] = $product['product_name'];
+            $row[] = $product['category']      ?? '';
+            $row[] = $product['sub_category']  ?? '';
+            $row[] = $product['brand']         ?? '';
+            $row[] = $product['unit']          ?? '';
+            $row[] = $product['tax']           ?? '';
+            $row[] = $product['product_type']  ?? '';
+            $row[] = $product['selling_price'] ?? 0;
+            $row[] = $product['purchase_price']?? 0;
+
+            // أضف الـ custom fields المفعلة فقط
+            foreach (array_keys($active_custom_fields) as $field) {
+                $row[] = $product[$field] ?? '';
+            }
+
+            $total = 0;
+            foreach ($locations as $loc_id => $loc_name) {
+                $qty    = $product['locations'][$loc_id] ?? 0;
+                $total += $qty;
+                $row[]  = $qty;
+            }
+
+            if (!empty($stock_filter)) {
+                switch ($stock_filter) {
+                    case 'gt':  if ($total <= 0) continue 2; break;
+                    case 'lt':  if ($total >= 0) continue 2; break;
+                    case 'gte': if ($total < 0)  continue 2; break;
+                    case 'lte': if ($total > 0)  continue 2; break;
+                    case 'eq':  if ($total != 0) continue 2; break;
+                }
+            } else {
+                if ($total == 0) continue;
+            }
+
+            $row[]  = $total;
+            $rows[] = $row;
+        }
+
+        // search
+        if (!empty($search_value)) {
+            $rows = array_values(array_filter($rows, function($row) use ($search_value) {
+                return stripos($row[0], $search_value) !== false
+                    || stripos($row[1], $search_value) !== false
+                    || stripos($row[2], $search_value) !== false
+                    || stripos($row[4], $search_value) !== false;
+            }));
+        }
+
+        $total_records = count($rows);
+
+        usort($rows, function($a, $b) use ($order_col, $order_dir) {
+            $val_a = $a[$order_col] ?? '';
+            $val_b = $b[$order_col] ?? '';
+            $result = is_numeric($val_a) && is_numeric($val_b)
+                ? $val_a <=> $val_b
+                : strcmp($val_a, $val_b);
+            return $order_dir === 'desc' ? -$result : $result;
+        });
+
+        $rows = array_values(
+            array_slice($rows, $start, $length === -1 ? count($rows) : $length)
+        );
+
+        return response()->json([
+            'draw'            => intval(request()->input('draw')),
+            'recordsTotal'    => $total_records,
+            'recordsFiltered' => $total_records,
+            'data'            => $rows,
+            'snapshot_date'   => $snapshot_date,
+        ]);
+    }
+
+    return view('product.daily_stock_details')
+        ->with(compact('stock_locations', 'active_custom_fields'));
+} 
     /**
      * Toggle WooComerce sync
      *

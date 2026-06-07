@@ -26,6 +26,8 @@ return [
     'sell_minus_purchase' => 'Sale - Purchase',
     'difference_due' => 'Due amount',
     'customer' => 'Customers',
+    'current_stock_report' => 'Current Stock', 
+    'daily_stock_report' => 'Daily Stock Report',   
     'supplier' => 'Suppliers',
     'total_due' => 'Due',
     'contacts' => 'Supplier & Customer Report',

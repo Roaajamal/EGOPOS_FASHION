@@ -22,13 +22,17 @@ class PrintBarcodeController extends Controller
             $business_id = Auth::check() ? Auth::user()->business_id : 1;
             
             // جلب المنتجات للعرض (أحدث المنتجات أولاً، ومن لديه تباين واحد على الأقل للباركود)
-            $products = Product::where('business_id', $business_id)
-                ->with(['brand', 'category', 'variations'])
-                ->where('type', '!=', 'modifier')
-                ->whereHas('variations')
-                ->orderBy('created_at', 'desc')
-                ->take(50)
-                ->get();
+$products = Product::where('business_id', $business_id)
+    ->select('*') // هكذا نضمن جلب كل الأعمدة بما فيها الحقول المخصصة
+    ->with(['brand', 'category', 'variations' => function($query) {
+        // نضمن أيضاً جلب الحقول المخصصة إذا كانت موجودة على مستوى التباين (Variation)
+        $query->select('*'); 
+    }])
+    ->where('type', '!=', 'modifier')
+    ->whereHas('variations')
+    ->orderBy('created_at', 'desc')
+    ->take(50)
+    ->get();
             
             $designData = PrintService::forBusiness($business_id)->getBarcodeDesign();
             
@@ -293,42 +297,52 @@ class PrintBarcodeController extends Controller
     /**
      * الحصول على محتوى العنصر مع استبدال المتغيرات بالقيم الفعلية
      */
-    private function getElementContent($elementKey, $element, $productData)
-    {
-        $text = $element['text'] ?? '';
-        
-        // إذا كان العنصر باركود، نعيد الباركود الفعلي مباشرة
-        if ($elementKey === 'barcode-container' || strpos($elementKey, 'barcode') !== false) {
-            return $productData['barcode'] ?? $productData['sku'] ?? '123456789';
-        }
-        
-        // استبدال المتغيرات بالقيم الفعلية
-        $replacements = [
-            '{{ product_name }}' => $productData['name'] ?? 'منتج',
-            '{{ sku }}' => $productData['barcode'] ?? $productData['sku'] ?? '123456789',
-            '{{ price }}' => $productData['price'] ?? '0.00',
-            '{{ brand }}' => $productData['brand'] ?? 'علامة',
-            '{{ shop_name }}' => Auth::check() ? (Auth::user()->business->name ?? 'المحل') : 'المحل',
-        ];
-        
-        // استبدال جميع المتغيرات
-        $text = str_replace(array_keys($replacements), array_values($replacements), $text);
-        
-        // إذا كان النص لا يزال يحتوي على متغيرات، نعيد القيمة الافتراضية بناءً على نوع العنصر
-        if (empty($text) || preg_match('/\{\{.*\}\}/', $text)) {
-            if (strpos($elementKey, 'Name') !== false || strpos($elementKey, 'name') !== false) {
-                return $productData['name'] ?? 'اسم المنتج';
-            } elseif (strpos($elementKey, 'Price') !== false || strpos($elementKey, 'price') !== false) {
-                return $productData['price'] ?? '0.00';
-            } elseif (strpos($elementKey, 'Brand') !== false || strpos($elementKey, 'brand') !== false) {
-                return $productData['brand'] ?? 'العلامة التجارية';
-            } elseif (strpos($elementKey, 'extra') !== false) {
-                return $element['text'] ?? ''; // نعيد النص الأصلي للعناصر الإضافية
-            }
-        }
-        
-        return $text;
+ private function getElementContent($elementKey, $element, $productData)
+{
+    $text = $element['text'] ?? '';
+    
+    // 1. إذا كان العنصر باركود
+    if ($elementKey === 'barcode-container' || strpos($elementKey, 'barcode') !== false) {
+        return $productData['barcode'] ?? $productData['sku'] ?? '123456789';
     }
+    
+    // 2. تجهيز القيم الفعلية (أضفنا الحقل الثالث والموديل هنا)
+    $replacements = [
+        '{{ product_name }}' => $productData['name'] ?? 'منتج',
+        '{{ name }}'         => $productData['name'] ?? 'منتج',
+        '{{ sku }}'          => $productData['barcode'] ?? $productData['sku'] ?? '123456789',
+        '{{ price }}'        => $productData['price'] ?? '0.00',
+        '{{ brand }}'        => $productData['brand'] ?? 'علامة',
+        '{{ custom_field_1 }}' => $productData['custom_field_1'] ?? $productData['color'] ?? '',
+        '{{ custom_field_2 }}' => $productData['custom_field_2'] ?? $productData['size'] ?? '',
+        '{{ custom_field_3 }}' => $productData['custom_field_3'] ?? '', // الحقل الجديد
+        '{{ shop_name }}'    => Auth::check() ? (Auth::user()->business->name ?? 'المحل') : 'المحل',
+    ];
+    
+    // 3. استبدال الأكواد {{ }}
+    $text = str_replace(array_keys($replacements), array_values($replacements), $text);
+
+    // 4. معالجة ذكية: إذا كان النص يحتوي على كلمة "موديل" أو "Model"
+    // نقوم باستبدال الكلمة نفسها بقيمة الحقل الثالث إذا وجدت
+    if (!empty($productData['custom_field_3'])) {
+        $text = str_replace(['موديل', 'Model'], $productData['custom_field_3'], $text);
+    }
+    
+    // 5. التحقق من الحقول الفارغة أو العناصر الإضافية
+    if (empty($text) || preg_match('/\{\{.*\}\}/', $text)) {
+        if (strpos($elementKey, 'Name') !== false || strpos($elementKey, 'name') !== false) {
+            return $productData['name'] ?? 'اسم المنتج';
+        } elseif (strpos($elementKey, 'Price') !== false || strpos($elementKey, 'price') !== false) {
+            return $productData['price'] ?? '0.';
+        } elseif (strpos($elementKey, 'custom_field_3') !== false) {
+            return $productData['custom_field_3'] ?? '';
+        } elseif (strpos($elementKey, 'extra') !== false) {
+            return $text; 
+        }
+    }
+    
+    return $text;
+}
     
     /**
      * تحويل mm إلى dots (افتراضي 203 DPI)
@@ -443,6 +457,12 @@ class PrintBarcodeController extends Controller
         if (! is_array($productData)) {
             return response()->json(['success' => false, 'message' => 'product_data مطلوب'], 400);
         }
+        
+        
+    // تنسيق السعر
+    if (isset($productData['price'])) {
+        $productData['price'] = number_format((float)$productData['price'], 2, '.', '');
+    }
         $business_id = Auth::check() ? Auth::user()->business_id : 1;
         $designData = PrintService::forBusiness($business_id)->getBarcodeDesign();
         $zpl = $this->generateZPLContent($productData, $designData);
@@ -515,85 +535,101 @@ class PrintBarcodeController extends Controller
      * جلب توليفات اللون/المقاس لمنتج (لصفحة طباعة الباركود — اختيار ما يطبع).
      * للمنتج الفردي يُرجع توليفة واحدة حتى تعمل الطباعة التلقائية بعد «حفظ وطباعة» من صفحة الكميات.
      */
-    public function getProductVariations($product_id)
-    {
-        try {
-            $business_id = Auth::check() ? Auth::user()->business_id : 1;
-            $product = Product::where('business_id', $business_id)->where('id', $product_id)->with(['variations'])->first();
+  public function getProductVariations($product_id)
+{
+    try {
+        $business_id = Auth::check() ? Auth::user()->business_id : 1;
+        $product = Product::where('business_id', $business_id)->where('id', $product_id)->with(['variations'])->first();
 
-            if (! $product) {
-                return response()->json(['success' => false, 'message' => 'المنتج غير موجود'], 404);
+        if (! $product) {
+            return response()->json(['success' => false, 'message' => 'المنتج غير موجود'], 404);
+        }
+
+        $combinations = $product->size_color_combinations;
+        $by_color = null;
+
+        if (is_array($combinations) && ! empty($combinations['by_color'])) {
+            $by_color = $combinations['by_color'];
+            // ملاحظة: إذا كانت التوليفات موجودة، تأكد أن نظام الـ combinations نفسه يدعم الحقل الثالث
+        }
+
+        if (empty($by_color) && $product->type == 'variable') {
+            $variations = $product->variations()->with('product_variation')->get();
+            $flat = [];
+            foreach ($variations as $v) {
+                $flat[] = [
+                    'variation_id' => $v->id,
+                    'sub_sku' => $v->sub_sku,
+                    'value' => $v->name,
+                    'sell_price_inc_tax' => $v->sell_price_inc_tax,
+                    'label' => $v->name,
+                    'size' => $v->name,
+                    // أضفنا الحقل الثالث هنا للنوع المتغير
+                    'custom_field_3' => (string) ($product->product_custom_field3 ?? ''),
+                ];
             }
-
-            $combinations = $product->size_color_combinations;
-            $by_color = null;
-
-            if (is_array($combinations) && ! empty($combinations['by_color'])) {
-                $by_color = $combinations['by_color'];
-            }
-
-            if (empty($by_color) && $product->type == 'variable') {
-                $variations = $product->variations()->with('product_variation')->get();
-                $flat = [];
-                foreach ($variations as $v) {
-                    $flat[] = [
-                        'variation_id' => $v->id,
-                        'sub_sku' => $v->sub_sku,
-                        'value' => $v->name,
-                        'sell_price_inc_tax' => $v->sell_price_inc_tax,
-                        'label' => $v->name,
-                        'size' => $v->name,
-                    ];
-                }
-                return response()->json([
-                    'success' => true,
-                    'product' => ['id' => $product->id, 'name' => $product->name, 'sku' => $product->sku],
-                    'by_color' => null,
-                    'combinations' => $flat,
-                ]);
-            }
-
-            // منتج فردي: إرجاع توليفة واحدة من التباين الأول مع اللون والمقاس (من product_custom_field1/2) لمعاينة الملصق
-            if (empty($by_color) && $product->type == 'single') {
-                $first = $product->variations->first();
-                $flat = [];
-                if ($first) {
-                    $flat[] = [
-                        'variation_id' => $first->id,
-                        'sub_sku' => $first->sub_sku ?: $product->sku,
-                        'value' => $product->name,
-                        'sell_price_inc_tax' => $first->sell_price_inc_tax ?? $first->default_sell_price ?? 0,
-                        'label' => $product->name,
-                        'size' => (string) ($product->product_custom_field2 ?? ''),
-                        'custom_field_1' => (string) ($product->product_custom_field1 ?? ''),
-                        'custom_field_2' => (string) ($product->product_custom_field2 ?? ''),
-                    ];
-                }
-                return response()->json([
-                    'success' => true,
-                    'product' => [
-                        'id' => $product->id,
-                        'name' => $product->name,
-                        'sku' => $product->sku,
-                        'custom_field_1' => (string) ($product->product_custom_field1 ?? ''),
-                        'custom_field_2' => (string) ($product->product_custom_field2 ?? ''),
-                    ],
-                    'by_color' => null,
-                    'combinations' => $flat,
-                ]);
-            }
-
             return response()->json([
                 'success' => true,
-                'product' => ['id' => $product->id, 'name' => $product->name, 'sku' => $product->sku],
-                'by_color' => $by_color,
-                'combinations' => null,
+                'product' => [
+                    'id' => $product->id, 
+                    'name' => $product->name, 
+                    'sku' => $product->sku,
+                    'custom_field_3' => (string) ($product->product_custom_field3 ?? '') // أضفناه هنا أيضاً
+                ],
+                'by_color' => null,
+                'combinations' => $flat,
             ]);
-        } catch (\Exception $e) {
-            Log::error('PrintBarcodeController@getProductVariations: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
+
+        // منتج فردي: تعديل هام هنا
+        if (empty($by_color) && $product->type == 'single') {
+            $first = $product->variations->first();
+            $flat = [];
+            if ($first) {
+                $flat[] = [
+                    'variation_id' => $first->id,
+                    'sub_sku' => $first->sub_sku ?: $product->sku,
+                    'value' => $product->name,
+                    'sell_price_inc_tax' => $first->sell_price_inc_tax ?? $first->default_sell_price ?? 0,
+                    'label' => $product->name,
+                    'size' => (string) ($product->product_custom_field2 ?? ''),
+                    'custom_field_1' => (string) ($product->product_custom_field1 ?? ''),
+                    'custom_field_2' => (string) ($product->product_custom_field2 ?? ''),
+                    'custom_field_3' => (string) ($product->product_custom_field3 ?? ''), // السطر الذهبي المفقود
+                ];
+            }
+            return response()->json([
+                'success' => true,
+                'product' => [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'custom_field_1' => (string) ($product->product_custom_field1 ?? ''),
+                    'custom_field_2' => (string) ($product->product_custom_field2 ?? ''),
+                    'custom_field_3' => (string) ($product->product_custom_field3 ?? ''), // السطر الذهبي المفقود هنا أيضاً
+                ],
+                'by_color' => null,
+                'combinations' => $flat,
+            ]);
+        }
+
+        // إرجاع افتراضي في حال وجود combinations
+        return response()->json([
+            'success' => true,
+            'product' => [
+                'id' => $product->id, 
+                'name' => $product->name, 
+                'sku' => $product->sku,
+                'custom_field_3' => (string) ($product->product_custom_field3 ?? '')
+            ],
+            'by_color' => $by_color,
+            'combinations' => null,
+        ]);
+    } catch (\Exception $e) {
+        Log::error('PrintBarcodeController@getProductVariations: ' . $e->getMessage());
+        return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
     }
+}
 
     /**
      * حفظ الطابعة الافتراضية للباركود (تُستخدم عند «حفظ وطباعة»).

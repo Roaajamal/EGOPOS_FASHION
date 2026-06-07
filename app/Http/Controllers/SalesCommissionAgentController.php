@@ -28,7 +28,7 @@ class SalesCommissionAgentController extends Controller
      */
     public function index()
     {
-        if (! auth()->user()->can('user.view') && ! auth()->user()->can('user.create')) {
+        if (! auth()->user()->can('sales.view') && ! auth()->user()->can('sales.create')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -44,11 +44,11 @@ class SalesCommissionAgentController extends Controller
             return Datatables::of($users)
                 ->addColumn(
                     'action',
-                    '@can("user.update")
+                    '@can("sales.update")
                     <button type="button" data-href="{{action(\'App\Http\Controllers\SalesCommissionAgentController@edit\', [$id])}}" data-container=".commission_agent_modal" class="tw-dw-btn tw-dw-btn-xs tw-dw-btn-outline  btn-modal tw-dw-btn-primary"><i class="glyphicon glyphicon-edit"></i> @lang("messages.edit")</button>
                         &nbsp;
                         @endcan
-                        @can("user.delete")
+                        @can("sales.delete")
                         <button data-href="{{action(\'App\Http\Controllers\SalesCommissionAgentController@destroy\', [$id])}}" class="tw-dw-btn tw-dw-btn-outline tw-dw-btn-xs tw-dw-btn-error delete_commsn_agnt_button"><i class="glyphicon glyphicon-trash"></i> @lang("messages.delete")</button>
                         @endcan'
                 )
@@ -70,7 +70,7 @@ class SalesCommissionAgentController extends Controller
      */
     public function create()
     {
-        if (! auth()->user()->can('user.create')) {
+        if (! auth()->user()->can('sales.create')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -85,7 +85,7 @@ class SalesCommissionAgentController extends Controller
      */
     public function store(Request $request)
     {
-        if (! auth()->user()->can('user.create')) {
+        if (! auth()->user()->can('sales.create')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -121,7 +121,7 @@ class SalesCommissionAgentController extends Controller
      */
     public function edit($id)
     {
-        if (! auth()->user()->can('user.update')) {
+        if (! auth()->user()->can('sales.update')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -140,7 +140,7 @@ class SalesCommissionAgentController extends Controller
      */
     public function update(Request $request, $id)
     {
-        if (! auth()->user()->can('user.update')) {
+        if (! auth()->user()->can('sales.update')) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -179,7 +179,7 @@ class SalesCommissionAgentController extends Controller
      */
     public function destroy($id)
     {
-        if (! auth()->user()->can('user.delete')) {
+        if (! auth()->user()->can('sales.delete')) {
             abort(403, 'Unauthorized action.');
         }
 

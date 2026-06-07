@@ -27,6 +27,7 @@ return [
     'paid' => 'Paid',
     'card' => 'Card',
     'cash' => 'Cash',
+    'total_all_taxes' => 'Total All Taxes',
     'due' => 'Due',
     'location' => 'Location',
     'total_net' => 'Total Net',

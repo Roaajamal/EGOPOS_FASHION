@@ -368,184 +368,163 @@ class BusinessController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-    public function postBusinessSettings(Request $request)
-    {
-        if (! auth()->user()->can('business_settings.access')) {
-            abort(403, 'Unauthorized action.');
-        }
-
-        try {
-            $notAllowed = $this->businessUtil->notAllowedInDemo();
-            if (! empty($notAllowed)) {
-                return $notAllowed;
-            }
-
-            $business_details = $request->only(['name', 'start_date', 'currency_id', 'tax_label_1', 'tax_number_1', 'tax_label_2', 'tax_number_2', 'default_profit_percent', 'default_sales_tax', 'default_sales_discount', 'sell_price_tax', 'sku_prefix', 'time_zone', 'fy_start_month', 'accounting_method', 'transaction_edit_days', 'sales_cmsn_agnt', 'item_addition_method', 'currency_symbol_placement', 'on_product_expiry',
-                'stop_selling_before', 'default_unit', 'expiry_type', 'date_format',
-                'time_format', 'ref_no_prefixes', 'theme_color', 'email_settings',
-                'sms_settings', 'rp_name', 'amount_for_unit_rp',
-                'min_order_total_for_rp', 'max_rp_per_order',
-                'redeem_amount_per_unit_rp', 'min_order_total_for_redeem',
-                'min_redeem_point', 'max_redeem_point', 'rp_expiry_period',
-                'rp_expiry_type', 'custom_labels', 'weighing_scale_setting',
-                'code_label_1', 'code_1', 'code_label_2', 'code_2', 'currency_precision', 'quantity_precision', ]);
-
-            if (! empty($request->input('enable_rp')) && $request->input('enable_rp') == 1) {
-                $business_details['enable_rp'] = 1;
-            } else {
-                $business_details['enable_rp'] = 0;
-            }
-
-            $business_details['amount_for_unit_rp'] = ! empty($business_details['amount_for_unit_rp']) ? $this->businessUtil->num_uf($business_details['amount_for_unit_rp']) : 1;
-            $business_details['min_order_total_for_rp'] = ! empty($business_details['min_order_total_for_rp']) ? $this->businessUtil->num_uf($business_details['min_order_total_for_rp']) : 1;
-            $business_details['redeem_amount_per_unit_rp'] = ! empty($business_details['redeem_amount_per_unit_rp']) ? $this->businessUtil->num_uf($business_details['redeem_amount_per_unit_rp']) : 1;
-            $business_details['min_order_total_for_redeem'] = ! empty($business_details['min_order_total_for_redeem']) ? $this->businessUtil->num_uf($business_details['min_order_total_for_redeem']) : 1;
-
-            $business_details['default_profit_percent'] = ! empty($business_details['default_profit_percent']) ? $this->businessUtil->num_uf($business_details['default_profit_percent']) : 0;
-
-            $business_details['default_sales_discount'] = ! empty($business_details['default_sales_discount']) ? $this->businessUtil->num_uf($business_details['default_sales_discount']) : 0;
-
-            if (! empty($business_details['start_date'])) {
-                $business_details['start_date'] = $this->businessUtil->uf_date($business_details['start_date']);
-            }
-
-            if (! empty($request->input('enable_tooltip')) && $request->input('enable_tooltip') == 1) {
-                $business_details['enable_tooltip'] = 1;
-            } else {
-                $business_details['enable_tooltip'] = 0;
-            }
-
-            $business_details['enable_product_expiry'] = ! empty($request->input('enable_product_expiry')) && $request->input('enable_product_expiry') == 1 ? 1 : 0;
-            if ($business_details['on_product_expiry'] == 'keep_selling') {
-                $business_details['stop_selling_before'] = null;
-            }
-
-            $business_details['stock_expiry_alert_days'] = ! empty($request->input('stock_expiry_alert_days')) ? $request->input('stock_expiry_alert_days') : 30;
-
-            //Check for Purchase currency
-            if (! empty($request->input('purchase_in_diff_currency')) && $request->input('purchase_in_diff_currency') == 1) {
-                $business_details['purchase_in_diff_currency'] = 1;
-                $business_details['purchase_currency_id'] = $request->input('purchase_currency_id');
-                $business_details['p_exchange_rate'] = $request->input('p_exchange_rate');
-            } else {
-                $business_details['purchase_in_diff_currency'] = 0;
-                $business_details['purchase_currency_id'] = null;
-                $business_details['p_exchange_rate'] = 1;
-            }
-
-            //upload logo
-            $logo_name = $this->businessUtil->uploadFile($request, 'business_logo', 'business_logos', 'image');
-            if (! empty($logo_name)) {
-                $business_details['logo'] = $logo_name;
-            }
-
-            $checkboxes = ['enable_editing_product_from_purchase',
-                'enable_inline_tax',
-                'enable_brand', 'enable_category', 'enable_sub_category', 'enable_price_tax', 'enable_purchase_status',
-                'enable_lot_number', 'enable_racks', 'enable_row', 'enable_position', 'enable_sub_units', ];
-            foreach ($checkboxes as $value) {
-                $business_details[$value] = ! empty($request->input($value)) && $request->input($value) == 1 ? 1 : 0;
-            }
-
-            $business_id = request()->session()->get('user.business_id');
-            $business = Business::where('id', $business_id)->first();
-
-            //Update business settings
-            if (! empty($business_details['logo'])) {
-                $business->logo = $business_details['logo'];
-            } else {
-                unset($business_details['logo']);
-            }
-
-            //System settings
-            $shortcuts = $request->input('shortcuts');
-            $business_details['keyboard_shortcuts'] = json_encode($shortcuts);
-
-           // Get existing pos_settings
-            $pos_settings = $request->input('pos_settings', []);
-
-            //////////// التحقق اليدوي من الـ Checkbox الخاص بتفاصيل المنتجات 
-            if (isset($request->input('pos_settings')['show_product_details_on_close_register'])) {
-            $pos_settings['show_product_details_on_close_register'] = 1;
-            }  else {
-            $pos_settings['show_product_details_on_close_register'] = 0;
-            }
-            /////// --------------------------------- 001
-
-            //////////////// التحقق من خيار تفعيل الفوترة
-           if (isset($request->input('pos_settings')['enable_fatora'])) {
-           $pos_settings['enable_fatora'] = 1;
-           } else {
-           $pos_settings['enable_fatora'] = 0;
-           }
-           //////////////////// 001
-           
-            $pre_busines_detail = $this->businessUtil->getDetails($business_id);
-            $pre_pos_setting = json_decode($pre_busines_detail->pos_settings, true) ?? [];
-            for ($i = 1; $i <= 10; $i++) {
-                $inputName = "carousel_image_$i"; // Image field names should be like carousel_image_1, carousel_image_2, etc.
-
-                if ($request->hasFile($inputName)) {
-                    $image_name = $this->businessUtil->uploadFile($request, $inputName, 'carousel_images', 'image');
-                    $pos_settings[$inputName] = $image_name; // Store image URL inside pos_settings
-                }else if (isset($pre_pos_setting[$inputName])){
-                    $pos_settings[$inputName] = $pre_pos_setting[$inputName] ?? null;
-                }
-            }
-            $default_pos_settings = $this->businessUtil->defaultPosSettings();
-            foreach ($default_pos_settings as $key => $value) {
-                if (! isset($pos_settings[$key])) {
-                    $pos_settings[$key] = $value;
-                }
-            }
-             //////// التأكد من حفظ قيمة الـ checkbox حتى لو كانت غير محددة (0) 
-            $pos_settings['show_product_details_on_close_register'] = !empty($request->input('pos_settings')['show_product_details_on_close_register']) ? 1 : 0;
-            $business_details['pos_settings'] = json_encode($pos_settings);
-            //////////////////// 001
-
-            // Save pos_settings as JSON
-            $business_details['pos_settings'] = json_encode($pos_settings);
-
-            $business_details['custom_labels'] = json_encode($business_details['custom_labels']);
-
-            $business_details['common_settings'] = ! empty($request->input('common_settings')) ? $request->input('common_settings') : [];
-
-            //Enabled modules
-            $enabled_modules = $request->input('enabled_modules');
-            $business_details['enabled_modules'] = ! empty($enabled_modules) ? $enabled_modules : null;
-            $business->fill($business_details);
-            $business->save();
-
-            //update session data
-            $request->session()->put('business', $business);
-
-            //Update Currency details
-            $currency = Currency::find($business->currency_id);
-            $request->session()->put('currency', [
-                'id' => $currency->id,
-                'code' => $currency->code,
-                'symbol' => $currency->symbol,
-                'thousand_separator' => $currency->thousand_separator,
-                'decimal_separator' => $currency->decimal_separator,
-            ]);
-
-            //update current financial year to session
-            $financial_year = $this->businessUtil->getCurrentFinancialYear($business->id);
-            $request->session()->put('financial_year', $financial_year);
-
-            $output = ['success' => 1,
-                'msg' => __('business.settings_updated_success'),
-            ];
-        } catch (\Exception $e) {
-            \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
-
-            $output = ['success' => 0,
-                'msg' => __('messages.something_went_wrong'),
-            ];
-        }
-
-        return redirect('business/settings')->with('status', $output);
+     public function postBusinessSettings(Request $request)
+{
+    if (! auth()->user()->can('business_settings.access')) {
+        abort(403, 'Unauthorized action.');
     }
+
+    try {
+        $notAllowed = $this->businessUtil->notAllowedInDemo();
+        if (! empty($notAllowed)) {
+            return $notAllowed;
+        }
+
+        // أضفنا 'custom_product_settings' و 'common_settings' إلى قائمة الحقول المسموحة
+        $business_details = $request->only(['name', 'start_date', 'currency_id', 'tax_label_1', 'tax_number_1', 'tax_label_2', 'tax_number_2', 'default_profit_percent', 'default_sales_tax', 'default_sales_discount', 'sell_price_tax', 'sku_prefix', 'time_zone', 'fy_start_month', 'accounting_method', 'transaction_edit_days', 'sales_cmsn_agnt', 'item_addition_method', 'currency_symbol_placement', 'on_product_expiry',
+            'stop_selling_before', 'default_unit', 'expiry_type', 'date_format',
+            'time_format', 'ref_no_prefixes', 'theme_color', 'email_settings',
+            'sms_settings', 'rp_name', 'amount_for_unit_rp',
+            'min_order_total_for_rp', 'max_rp_per_order',
+            'redeem_amount_per_unit_rp', 'min_order_total_for_redeem',
+            'min_redeem_point', 'max_redeem_point', 'rp_expiry_period',
+            'rp_expiry_type', 'custom_labels', 'weighing_scale_setting',
+            'code_label_1', 'code_1', 'code_label_2', 'code_2', 'currency_precision', 'quantity_precision', 
+            'custom_product_settings', 'common_settings' // تم إضافة العمود الجديد هنا
+        ]);
+
+        if (! empty($request->input('enable_rp')) && $request->input('enable_rp') == 1) {
+            $business_details['enable_rp'] = 1;
+        } else {
+            $business_details['enable_rp'] = 0;
+        }
+
+        $business_details['amount_for_unit_rp'] = ! empty($business_details['amount_for_unit_rp']) ? $this->businessUtil->num_uf($business_details['amount_for_unit_rp']) : 1;
+        $business_details['min_order_total_for_rp'] = ! empty($business_details['min_order_total_for_rp']) ? $this->businessUtil->num_uf($business_details['min_order_total_for_rp']) : 1;
+        $business_details['redeem_amount_per_unit_rp'] = ! empty($business_details['redeem_amount_per_unit_rp']) ? $this->businessUtil->num_uf($business_details['redeem_amount_per_unit_rp']) : 1;
+        $business_details['min_order_total_for_redeem'] = ! empty($business_details['min_order_total_for_redeem']) ? $this->businessUtil->num_uf($business_details['min_order_total_for_redeem']) : 1;
+
+        $business_details['default_profit_percent'] = ! empty($business_details['default_profit_percent']) ? $this->businessUtil->num_uf($business_details['default_profit_percent']) : 0;
+        $business_details['default_sales_discount'] = ! empty($business_details['default_sales_discount']) ? $this->businessUtil->num_uf($business_details['default_sales_discount']) : 0;
+
+        if (! empty($business_details['start_date'])) {
+            $business_details['start_date'] = $this->businessUtil->uf_date($business_details['start_date']);
+        }
+
+        $business_details['enable_tooltip'] = ! empty($request->input('enable_tooltip')) && $request->input('enable_tooltip') == 1 ? 1 : 0;
+        $business_details['enable_product_expiry'] = ! empty($request->input('enable_product_expiry')) && $request->input('enable_product_expiry') == 1 ? 1 : 0;
+        
+        if ($business_details['on_product_expiry'] == 'keep_selling') {
+            $business_details['stop_selling_before'] = null;
+        }
+
+        $business_details['stock_expiry_alert_days'] = ! empty($request->input('stock_expiry_alert_days')) ? $request->input('stock_expiry_alert_days') : 30;
+
+        //Check for Purchase currency
+        if (! empty($request->input('purchase_in_diff_currency')) && $request->input('purchase_in_diff_currency') == 1) {
+            $business_details['purchase_in_diff_currency'] = 1;
+            $business_details['purchase_currency_id'] = $request->input('purchase_currency_id');
+            $business_details['p_exchange_rate'] = $request->input('p_exchange_rate');
+        } else {
+            $business_details['purchase_in_diff_currency'] = 0;
+            $business_details['purchase_currency_id'] = null;
+            $business_details['p_exchange_rate'] = 1;
+        }
+
+        //upload logo
+        $logo_name = $this->businessUtil->uploadFile($request, 'business_logo', 'business_logos', 'image');
+        if (! empty($logo_name)) {
+            $business_details['logo'] = $logo_name;
+        }
+
+        $checkboxes = ['enable_editing_product_from_purchase',
+            'enable_inline_tax',
+            'enable_brand', 'enable_category', 'enable_sub_category', 'enable_price_tax', 'enable_purchase_status',
+            'enable_lot_number', 'enable_racks', 'enable_row', 'enable_position', 'enable_sub_units', ];
+        foreach ($checkboxes as $value) {
+            $business_details[$value] = ! empty($request->input($value)) && $request->input($value) == 1 ? 1 : 0;
+        }
+
+        $business_id = request()->session()->get('user.business_id');
+        $business = Business::where('id', $business_id)->first();
+
+        //Update business settings
+        if (! empty($business_details['logo'])) {
+            $business->logo = $business_details['logo'];
+        } else {
+            unset($business_details['logo']);
+        }
+
+        //System settings
+        $shortcuts = $request->input('shortcuts');
+        $business_details['keyboard_shortcuts'] = json_encode($shortcuts);
+
+        // POS settings logic
+        $pos_settings = $request->input('pos_settings', []);
+        $pos_settings['show_product_details_on_close_register'] = !empty($pos_settings['show_product_details_on_close_register']) ? 1 : 0;
+        $pos_settings['enable_fatora'] = !empty($pos_settings['enable_fatora']) ? 1 : 0;
+
+        $pre_busines_detail = $this->businessUtil->getDetails($business_id);
+        $pre_pos_setting = json_decode($pre_busines_detail->pos_settings, true) ?? [];
+        
+        for ($i = 1; $i <= 10; $i++) {
+            $inputName = "carousel_image_$i";
+            if ($request->hasFile($inputName)) {
+                $image_name = $this->businessUtil->uploadFile($request, $inputName, 'carousel_images', 'image');
+                $pos_settings[$inputName] = $image_name;
+            } else if (isset($pre_pos_setting[$inputName])) {
+                $pos_settings[$inputName] = $pre_pos_setting[$inputName];
+            }
+        }
+        
+        $default_pos_settings = $this->businessUtil->defaultPosSettings();
+        foreach ($default_pos_settings as $key => $value) {
+            if (! isset($pos_settings[$key])) {
+                $pos_settings[$key] = $value;
+            }
+        }
+        $business_details['pos_settings'] = json_encode($pos_settings);
+
+        $business_details['custom_labels'] = json_encode($business_details['custom_labels']);
+        $business_details['common_settings'] = ! empty($request->input('common_settings')) ? $request->input('common_settings') : [];
+
+        // معالجة العمود الجديد: التأكد من أنه JSON إذا كان الموديل لا يقوم بذلك تلقائياً
+        if (isset($business_details['custom_product_settings'])) {
+            $business->custom_product_settings = $business_details['custom_product_settings'];
+        }
+
+        // Enabled modules
+        $enabled_modules = $request->input('enabled_modules');
+        $business_details['enabled_modules'] = ! empty($enabled_modules) ? $enabled_modules : null;
+
+        $business->fill($business_details);
+        $business->save();
+
+        // update session data
+        $request->session()->put('business', $business);
+
+        // Update Currency details
+        $currency = Currency::find($business->currency_id);
+        $request->session()->put('currency', [
+            'id' => $currency->id,
+            'code' => $currency->code,
+            'symbol' => $currency->symbol,
+            'thousand_separator' => $currency->thousand_separator,
+            'decimal_separator' => $currency->decimal_separator,
+        ]);
+
+        $financial_year = $this->businessUtil->getCurrentFinancialYear($business->id);
+        $request->session()->put('financial_year', $financial_year);
+
+        $output = ['success' => 1, 'msg' => __('business.settings_updated_success')];
+
+    } catch (\Exception $e) {
+        \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
+        $output = ['success' => 0, 'msg' => "Error: " . $e->getMessage()];
+    }
+
+    return redirect('business/settings')->with('status', $output);
+}
 
     /**
      * Handles the validation email

@@ -49,7 +49,7 @@ class AdminSidebarMenu
           </svg>', 'active' => request()->segment(1) == 'home'])->order(5);
 
             //User management dropdown
-            if (auth()->user()->can('user.view') || auth()->user()->can('user.create') || auth()->user()->can('roles.view')) {
+            if (auth()->user()->can('user.view') || auth()->user()->can('user.create') || auth()->user()->can('roles.view') || auth()->user()->can('sales.view')) {
                 $menu->dropdown(
                     __('user.user_management'),
                     function ($sub) {
@@ -67,7 +67,7 @@ class AdminSidebarMenu
                                 ['icon' => '', 'active' => request()->segment(1) == 'roles']
                             );
                         }
-                        if (auth()->user()->can('user.create')) {
+                        if (auth()->user()->can('sales.view')) {
                             $sub->url(
                                 action([\App\Http\Controllers\SalesCommissionAgentController::class, 'index']),
                                 __('lang_v1.sales_commission_agents'),
@@ -162,6 +162,21 @@ class AdminSidebarMenu
                                 ['icon' => '', 'active' => request()->segment(1) == 'products' && request()->segment(2) == 'create']
                             );
                         }
+
+                        //new import product
+                        if (auth()->user()->can('new_product.create')) {
+                           $sub->url(
+                           action([\App\Http\Controllers\NewProductController::class, 'create']),
+                         'إضافة منتج جديد',
+                          [
+                         'icon' => 'fa fa-plus-circle', 
+                          'active' => request()->path() == 'products/new'
+                           ]
+                             );
+                              }
+
+
+
                         if (auth()->user()->can('product.create')) {
                             $sub->url(
                                 action([\App\Http\Controllers\SellingPriceGroupController::class, 'updateProductPrice']),
@@ -178,7 +193,7 @@ class AdminSidebarMenu
             'active' => request()->segment(1) == 'product-offers'
         ]
     );
-    if (auth()->user()->can('product.view')) {
+    if (auth()->user()->can('print_barcode.view')) {
     $sub->url(
         action([\App\Http\Controllers\PrintBarcodeController::class, 'index']),
         __('طباعة الباركود'),
@@ -262,6 +277,42 @@ class AdminSidebarMenu
                   </svg>', 'id' => 'tour_step5']
                 )->order(20);
 
+                 ////////////////////// add product 
+                  if (auth()->user()->can('add_product.view') || auth()->user()->can('add_product.create')) {
+            $menu->dropdown(
+             __('product.import_products'),
+             function ($sub) {
+                if (auth()->user()->can('add_product.view')) {
+                $sub->url(
+                    action([\App\Http\Controllers\AddProductController::class, 'index']),
+                    __('product.list_of_import_product'),
+                    ['icon' => '', 'active' => request()->segment(1) == 'add-products' && request()->segment(2) == null]
+                );
+            }
+            if (auth()->user()->can('add_product.create')) {
+                $sub->url(
+                    action([\App\Http\Controllers\AddProductController::class, 'create']),
+                    __('product.import_products'),
+                    ['icon' => '', 'active' => request()->segment(1) == 'add-products' && request()->segment(2) == 'create']
+                );
+            }
+        },
+        [
+            'icon' => '<svg aria-hidden="true" class="tw-size-5 tw-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path stroke="none" d="M0 0h24v24H0z" fill="none"/>
+  <path d="M12 3l8 4.5v9l-8 4.5l-8 -4.5v-9l8 -4.5" />
+  <path d="M12 12l8 -4.5" />
+  <path d="M12 12v9" />
+  <path d="M12 12l-8 -4.5" />
+  <path d="M15 18h6" />
+  <path d="M18 15v6" />
+</svg>',
+            'style' => ''
+        ]
+    )->order(35);
+}
+///////////////////////////////// add product
+
                  // Entry Quantity Button In SideBar
                         // Entry Quantity Menu
            if (auth()->user()->can('quantity_entry.view') || auth()->user()->can('quantity_entry.create')) {
@@ -298,6 +349,40 @@ class AdminSidebarMenu
     )->order(35);
 }
             /////////////////// quantity entry
+             /////////////// 005 inventory
+            // الجرد (Inventory)
+// قمنا بإزالة شرط in_array لضمان ظهور الكبسة بما أنها مبرمجة يدوياً
+if (auth()->user()->can('inventory.view') || auth()->user()->can('inventory.create')) {
+    $menu->dropdown(
+        __('inventory.inventory'),
+        function ($sub) {
+            // كبسة قائمة الجرد
+            if (auth()->user()->can('inventory.view')) {
+                $sub->url(
+                    action([\App\Http\Controllers\InventoryController::class, 'index']),
+                    __('inventory.inventory_list'), // يمكنك تغييرها لـ 'قائمة الجرد'
+                    ['icon' => '', 'active' => request()->segment(1) == 'inventory' && request()->segment(2) == null]
+                );
+            }
+            // كبسة إضافة جرد جديد
+            if (auth()->user()->can('inventory.create')) {
+                $sub->url(
+                    action([\App\Http\Controllers\InventoryController::class, 'create']),
+                    __('inventory.inventory_create'), // تأكدي من وجود الترجمة أو اكتبي نصاً مباشراً
+                    ['icon' => '', 'active' => request()->segment(1) == 'inventory' && request()->segment(2) == 'create']
+                );
+            }
+        },
+        [
+            'icon' => '<svg aria-hidden="true" class="tw-size-5 tw-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
+                <path d="M9 5h10l2 2l-2 2h-10a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1z"></path>
+                <path d="M13 13h7l2 2l-2 2h-7a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1z"></path>
+                <path d="M7 21h10l2 2l-2 2h-10a1 1 0 0 1 -1 -1v-2a1 1 0 0 1 1 -1z"></path>
+            </svg>',
+        ]
+    )->order(36); // قمت بتغيير الترتيب ليكون بعد 'إدخال الكميات' مباشرة
+}   ////////////////// 005
             }
 
             //Purchase dropdown
@@ -736,15 +821,30 @@ class AdminSidebarMenu
                                 __('missing_product.missing_product_report'),
                                 [
                                     'icon' => 'fa fa-exchange', 
-                                    'active' => request()->segment(1) == 'missing-products'
+                                    'active' => request()->routeIs('missing-products.index')
                                 ] 
                             );
                         }
                         ////////////////////////////////////////////// missing product report 001
+                        
+                         // missing product with sales  report In SideBar
+                        if (auth()->user()->can('report.missing_product_with_sales')) {
+                            $sub->url(
+                                // Route in controller 
+                                action([\App\Http\Controllers\MissingProductController::class, 'getMissingProductsWithSales']),
+                                // For translate 
+                                __('missing_product.missing_product_with_sales'),
+                                [
+                                    'icon' => 'fa fa-exchange', 
+                                    'active' => request()->routeIs('reports.missing_products_sales')
+                                ] 
+                            );
+                        }
+                        ////////////////////////////////////////////// missing product with sales report 001
 
                          //////////////////////////// product_sales_detailed_report 001
                         
-                        if (auth()->user()->can('report.product_sales_detailed_report')) {
+                        if (auth()->user()->can('product_sales_report.view')) {
                             $sub->url(
                                 // Route in controller 
                                 action([\App\Http\Controllers\ReportController::class, 'productSalesIndex']),
@@ -757,8 +857,23 @@ class AdminSidebarMenu
                         }
                         ////////////////////////////////////////////// product_sales_detailed_report 001
 
+                         //////////////////////////// product_sales_detailed_report 001
+                        
+                        if (auth()->user()->can('cash_drawer.view')) {
+                            $sub->url(
+                                // Route in controller 
+                                action([\App\Http\Controllers\CashDrawerLogController::class, 'index']),
+                                // For translate 
+                                __('lang_v1.cash_drawer_report'), 
+                                [
+                                    'icon' => '','active' => request()->segment(2) == 'cash-drawer-logs'
+                                ] 
+                            );
+                        }
+                        ////////////////////////////////////////////// product_sales_detailed_report 001 
+
                          ////////////////////008
-                        if ($is_admin) {
+                        if (auth()->user()->can('payment_method_report.view')) {
                             $sub->url(
                                 action([\App\Http\Controllers\ReportController::class, 'getPaymentMethodReport']),
                                 __('report.payment_method_report'),
@@ -773,13 +888,16 @@ class AdminSidebarMenu
                                 ['icon' => '', 'active' => request()->segment(2) == 'trending-products']
                             );
                         }
-
-                        if (auth()->user()->can('purchase_n_sell_report.view')) {
+                        if (auth()->user()->can('items_report.view')) {
                             $sub->url(
                                 action([\App\Http\Controllers\ReportController::class, 'itemsReport']),
                                 __('lang_v1.items_report'),
                                 ['icon' => '', 'active' => request()->segment(2) == 'items-report']
                             );
+                        }
+
+                        if (auth()->user()->can('purchase_n_sell_report.view')) {
+                            
 
                             $sub->url(
                                 action([\App\Http\Controllers\ReportController::class, 'getproductPurchaseReport']),
@@ -1038,7 +1156,23 @@ if (auth()->user()->can('daily_sales_report.view')) {  //001
                                 ['icon' => '', 'active' => request()->segment(1) == 'types-of-service']
                             );
                         }
+
+                        
+
+                                    if (auth()->user()->can('business_settings.access')) {
+                                   $sub->url(
+                                    action([\App\Http\Controllers\ResetSystemController::class, 'index']),
+                                   'تصفير بيانات النظام',
+                                    ['icon' => '', 'active' => request()->segment(2) == 'reset-system']
+                                     );
+}
+
+
                     },
+
+
+
+                    
                     ['icon' => '<svg aria-hidden="true" class="tw-size-5 tw-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round" stroke-linejoin="round">
                     <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>
                     <path stroke="none" d="M0 0h24v24H0z" fill="none"></path>

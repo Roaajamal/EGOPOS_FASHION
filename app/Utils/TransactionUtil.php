@@ -52,7 +52,8 @@ class TransactionUtil extends Util
         $pay_term_type = isset($input['pay_term_type']) ? $input['pay_term_type'] : null;
 
         //if pay term empty set contact pay term
-        if (empty($pay_term_number) || empty($pay_term_type)) {
+        //if pay term empty set contact pay term
+if (empty($pay_term_number) || empty($pay_term_type)) {
             $contact = Contact::find($input['contact_id']);
             $pay_term_number = $contact->pay_term_number;
             $pay_term_type = $contact->pay_term_type;
@@ -969,6 +970,8 @@ class TransactionUtil extends Util
             'header_text' => isset($il->header_text) ? $il->header_text : '',
             'business_name' => ($il->show_business_name == 1) ? $business_details->name : '',
             'location_name' => ($il->show_location_name == 1) ? $location_details->name : '',
+             'show_price' => !empty($il->common_settings['show_price']) ? true : false,
+             'show_unit' => !empty($il->common_settings['show_unit']) ? true : false, 
             'sub_heading_line1' => trim($il->sub_heading_line1),
             'sub_heading_line2' => trim($il->sub_heading_line2),
             'sub_heading_line3' => trim($il->sub_heading_line3),
@@ -3429,53 +3432,89 @@ if ($fatora_invoice && !empty($fatora_invoice->qr_code)) {
                 }
             }
 
-            if (! ($qty_selling == 0 || is_null($qty_selling))) {
-                //If overselling not allowed through exception else create mapping with blank purchase_line_id
-                if (! $allow_overselling) {
-                    $variation = Variation::find($line->variation_id);
-                    $mismatch_name = $product->name;
-                    if (! empty($variation->sub_sku)) {
-                        $mismatch_name .= ' '.'SKU: '.$variation->sub_sku;
-                    }
-                    if (! empty($qty_selling)) {
-                        $mismatch_name .= ' '.'Quantity: '.abs($qty_selling);
-                    }
+          // بعد ما تجيب $rows وتعمل mapping...
+if (! ($qty_selling == 0 || is_null($qty_selling))) {
+    
+    // 🔥 إذا كان المنتج من add_quantity وما لقينا كمية كافية
+    $is_from_add_quantity = false;
+    
+    // تحقق إذا كان هذا السطر من add_quantity
+    if ($line->transaction && $line->transaction->type == 'add_quantity') {
+        $is_from_add_quantity = true;
+    }
+    
+    // تحقق إذا كان في purchase_lines من نوع add_quantity
+    if (!$is_from_add_quantity) {
+        $add_quantity_exists = PurchaseLine::join('transactions as t', 
+            'purchase_lines.transaction_id', '=', 't.id')
+            ->where('purchase_lines.variation_id', $line->variation_id)
+            ->where('t.location_id', $business['location_id'])
+            ->where('t.type', 'add_quantity')
+            ->exists();
+        
+        $is_from_add_quantity = $add_quantity_exists;
+    }
+    
+    if ($is_from_add_quantity) {
+        // ✅ سامح الـ add_quantity: ضيف mapping مع purchase_line_id = 0
+        $purchase_sell_map[] = [
+            'sell_line_id' => $line->id,
+            'purchase_line_id' => 0,
+            'quantity' => $qty_selling,
+            'created_at' => \Carbon::now(),
+            'updated_at' => \Carbon::now(),
+        ];
+        
+        // سجل في اللوق عشان تتابع
+        \Log::info("Add_quantity product matched with zero line: Variation ID {$line->variation_id}, Qty: {$qty_selling}");
+        
+    } elseif (! $allow_overselling) {
+        // ❌ للأنواع التانية، اعطي خطأ
+        $variation = Variation::find($line->variation_id);
+        $mismatch_name = $product->name;
+        if (! empty($variation->sub_sku)) {
+            $mismatch_name .= ' '.'SKU: '.$variation->sub_sku;
+        }
+        if (! empty($qty_selling)) {
+            $mismatch_name .= ' '.'Quantity: '.abs($qty_selling);
+        }
 
-                    if ($mapping_type == 'purchase') {
-                        $mismatch_error = trans(
-                            'messages.purchase_sell_mismatch_exception',
-                            ['product' => $mismatch_name]
-                        );
+        if ($mapping_type == 'purchase') {
+            $mismatch_error = trans(
+                'messages.purchase_sell_mismatch_exception',
+                ['product' => $mismatch_name]
+            );
 
-                        if ($stop_selling_expired) {
-                            $mismatch_error .= __('lang_v1.available_stock_expired');
-                        }
-                    } elseif ($mapping_type == 'stock_adjustment') {
-                        $mismatch_error = trans(
-                            'messages.purchase_stock_adjustment_mismatch_exception',
-                            ['product' => $mismatch_name]
-                        );
-                    } else {
-                        $mismatch_error = trans(
-                            'lang_v1.quantity_mismatch_exception',
-                            ['product' => $mismatch_name]
-                        );
-                    }
-
-                    $business_name = optional(Business::find($business['id']))->name;
-                    $location_name = optional(BusinessLocation::find($business['location_id']))->name;
-                    \Log::emergency($mismatch_error.' Business: '.$business_name.' Location: '.$location_name);
-                    throw new PurchaseSellMismatch($mismatch_error);
-                } else {
-                    //Mapping with no purchase line
-                    $purchase_sell_map[] = ['sell_line_id' => $line->id,
-                        'purchase_line_id' => 0,
-                        'quantity' => $qty_selling,
-                        'created_at' => \Carbon::now(),
-                        'updated_at' => \Carbon::now(),
-                    ];
-                }
+            if ($stop_selling_expired) {
+                $mismatch_error .= __('lang_v1.available_stock_expired');
             }
+        } elseif ($mapping_type == 'stock_adjustment') {
+            $mismatch_error = trans(
+                'messages.purchase_stock_adjustment_mismatch_exception',
+                ['product' => $mismatch_name]
+            );
+        } else {
+            $mismatch_error = trans(
+                'lang_v1.quantity_mismatch_exception',
+                ['product' => $mismatch_name]
+            );
+        }
+
+        $business_name = optional(Business::find($business['id']))->name;
+        $location_name = optional(BusinessLocation::find($business['location_id']))->name;
+        \Log::emergency($mismatch_error.' Business: '.$business_name.' Location: '.$location_name);
+        throw new \App\Exceptions\PurchaseSellMismatch($mismatch_error);
+    } else {
+        // ✅ للأنواع التانية مع allow_overselling
+        $purchase_sell_map[] = [
+            'sell_line_id' => $line->id,
+            'purchase_line_id' => 0,
+            'quantity' => $qty_selling,
+            'created_at' => \Carbon::now(),
+            'updated_at' => \Carbon::now(),
+        ];
+    }
+}
 
             //Insert the mapping
             if (! empty($purchase_adjustment_map)) {
@@ -6558,4 +6597,6 @@ if ($fatora_invoice && !empty($fatora_invoice->qr_code)) {
 
         return $discount_amount;
     }
+
+  
 }

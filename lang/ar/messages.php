@@ -26,6 +26,7 @@
      'no' => 'لا',
      'all' => 'كل',
      'settings' => 'إعدادات',
+     'status' => 'الحالة', 
      'business_location_settings' => 'إعدادات موقع الشركة',
      'print' => 'طباعة',
      'submit' => 'إرسال',

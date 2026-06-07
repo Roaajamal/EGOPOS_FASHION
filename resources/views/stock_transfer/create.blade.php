@@ -1,7 +1,15 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script> 
+
 @extends('layouts.app')
 @section('title', __('lang_v1.add_stock_transfer'))
 
 @section('content')
+
+@php
+$custom_labels = json_decode(session('business.custom_labels'), true);
+$p_labels = $custom_labels['product'] ?? [];
+@endphp
+ 
 
     <!-- Content Header (Page header) -->
     <section class="content-header">
@@ -30,7 +38,7 @@
                     </div>
                 </div>
                 <div class="col-sm-4">
-                    <div class="form-group">
+                   <div class="form-group">
                         {!! Form::label('ref_no', __('purchase.ref_no') . ':') !!}
                         {!! Form::text('ref_no', null, ['class' => 'form-control']) !!}
                     </div>
@@ -109,33 +117,47 @@
                     <div class="table-responsive">
                         <table class="table table-bordered table-striped table-condensed" id="stock_adjustment_product_table">
                             <thead>
-                                <tr>
-                                    <th class="col-sm-4 text-center">
-                                        @lang('sale.product')
-                                    </th>
-                                    <th class="col-sm-2 text-center">
-                                        @lang('sale.qty')
-                                    </th>
-                                    <th class="col-sm-2 text-center show_price_with_permission">
-                                        @lang('sale.unit_price')
-                                    </th>
-                                    <th class="col-sm-2 text-center show_price_with_permission">
-                                        @lang('sale.subtotal')
-                                    </th>
-                                    <th class="col-sm-2 text-center"><i class="fa fa-trash" aria-hidden="true"></i></th>
-                                </tr>
-                            </thead>
+    <tr class="active">
+        {{-- عمود الوصف (يحتوي على اسم المنتج والـ SKU) --}}
+        <th class="text-center">@lang('sale.product')</th>
+
+        @if(!empty($p_labels['custom_field_3']))
+            <th class="text-center custom-field-3">{{ $p_labels['custom_field_3'] }}</th>
+        @endif
+        @if(!empty($p_labels['custom_field_1']))
+            <th class="text-center custom-field-1">{{ $p_labels['custom_field_1'] }}</th>
+        @endif
+        @if(!empty($p_labels['custom_field_2']))
+            <th class="text-center custom-field-2">{{ $p_labels['custom_field_2'] }}</th>
+        @endif
+
+        {{-- عمود الكمية --}}
+        <th class="text-center">@lang('sale.qty')</th>
+        {{-- عمود السعر --}}
+        <th class="text-center show_price_with_permission">@lang('sale.unit_price')</th>
+        {{-- عمود الإجمالي --}}
+        <th class="text-center show_price_with_permission">@lang('sale.subtotal')</th>
+        {{-- حذف --}}
+        <th class="text-center"><i class="fa fa-trash"></i></th>
+    </tr>
+</thead>
                             <tbody>
-                            </tbody>
-                            <tfoot>
-                                <tr class="text-center show_price_with_permission">
-                                    <td colspan="3"></td>
-                                    <td>
-                                        <div class="pull-right"><b>@lang('sale.total'): </b> <span
-                                                id="total_adjustment">0.00</span></div>
-                                    </td>
-                                </tr>
-                            </tfoot>
+                           <tfoot>
+    <tr class="text-center show_price_with_permission">
+        @php
+            $tfoot_colspan = 1; // عمود الوصف
+            if (!empty($p_labels['custom_field_1'])) $tfoot_colspan++;
+            if (!empty($p_labels['custom_field_2'])) $tfoot_colspan++;
+            if (!empty($p_labels['custom_field_3'])) $tfoot_colspan++;
+            $tfoot_colspan++; // عمود الكمية
+        @endphp
+        <td colspan="{{ $tfoot_colspan }}"></td>
+        <td>
+            <div class="pull-right"><b>@lang('sale.total'): </b> <span id="total_adjustment">0.00</span></div>
+        </td>
+        <td></td>
+    </tr>
+</tfoot>
                         </table>
                     </div>
                 </div>

@@ -1,3 +1,7 @@
+@php
+    $custom_labels = json_decode(session('business.custom_labels'), true);
+@endphp 
+
 <div class="row">
 	<div class="col-md-4">
 		<div class="form-group">
@@ -221,6 +225,18 @@
 					<th class="tex-center tw-text-sm md:!tw-text-base tw-font-bold @if(!empty($pos_settings['inline_service_staff'])) col-md-3 @else col-md-4 @endif">	
 						@lang('sale.product') @show_tooltip(__('lang_v1.tooltip_sell_product_column'))
 					</th>
+					{{-- ✅ عمود الحجم --}}
+      @if(!empty($custom_labels['product']['custom_field_1']))
+<th class="text-center tw-text-sm md:!tw-text-base tw-font-bold">
+    {{ $custom_labels['product']['custom_field_1'] }}
+</th>
+@endif
+
+@if(!empty($custom_labels['product']['custom_field_2']))
+<th class="text-center tw-text-sm md:!tw-text-base tw-font-bold">
+    {{ $custom_labels['product']['custom_field_2'] }}
+</th>
+@endif
 					<th class="text-center tw-text-sm md:!tw-text-base tw-font-bold col-md-3">
 						@lang('sale.qty')
 					</th>

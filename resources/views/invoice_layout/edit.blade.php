@@ -660,6 +660,32 @@
               </div>
           </div>
         </div>
+         <!--     show unit    --> 
+        <div class="col-sm-3">
+    <div class="form-group">
+        <div class="checkbox">
+            <label>
+                {!! Form::checkbox('common_settings[show_unit]', 1, !empty($invoice_layout->common_settings['show_unit']), ['class' => 'input-icheck']); !!} 
+                @lang('lang_v1.show_unit_in_invoice')
+            </label>
+        </div>
+    </div>
+</div>
+        <!--     show unit    -->
+         
+          <!--     show price    --> 
+        <div class="col-sm-3">
+    <div class="form-group">
+        <div class="checkbox">
+            <label>
+                {!! Form::checkbox('common_settings[show_price]', 1, !empty($invoice_layout->common_settings['show_price']), ['class' => 'input-icheck']); !!} 
+                @lang('lang_v1.show_price')
+            </label>
+        </div>
+    </div>
+</div>
+        <!--     show price    -->
+        
         <div class="col-sm-3">
           <div class="form-group">
             <div class="checkbox">

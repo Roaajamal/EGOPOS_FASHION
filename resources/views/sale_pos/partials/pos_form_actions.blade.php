@@ -2,6 +2,18 @@
     $is_mobile = isMobile();
 @endphp
 
+    <!-- 1. استدعاء المكتبات -->
+    <script src="{{ asset('js/qz/qz-tray.js') }}"></script>
+    <script src="{{ asset('js/qz/rsvp.min.js') }}"></script>
+     <script src="{{ asset('js/qz/sha256.min.js') }}"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<!-- SweetAlert2 CSS & JS -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <div class="row">
     <div
         class="pos-form-actions tw-rounded-tr-xl tw-rounded-tl-xl tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-bg-white tw-cursor-pointer">
@@ -21,11 +33,19 @@
 
 <!-- الزر الظاهر -->
 @can('open_cash_drawer')
-<button id="open_cash_drawer"
-        style="padding:10px 20px; background:#4CAF50; color:#fff; border:0; border-radius:5px; cursor:pointer;">
+<button type="button" id="open_cash_drawer_btn" class="btn btn-success">
     فتح درج الكاش
 </button>
 @endcan
+
+@if(!empty($default_location->rewards_token))
+<button type="button" id="open_rewards_btn" class="btn btn-warning btn-sm">
+    <i class="fas fa-gift"></i> تسجيل نقاط العميل
+</button>
+@endif 
+
+
+
 <button id="pay_card_full" 
         class="tw-font-bold tw-text-white tw-bg-blue-600 tw-p-2 tw-rounded-md tw-cursor-pointer tw-flex tw-items-center tw-gap-1"
         title="@lang('business.pay_by_card_tooltip')"
@@ -296,41 +316,23 @@
             </div>
         </div>
     </div>
-</div><script>
+</div>
 
-
-
-
-
+<script>
 
 document.addEventListener('keydown', function (e) {
 
 
 
 
-if (e.key === 'F1') {
-    e.preventDefault();
-    
-    const DRAFT_LOCATION_ID = '32'; // فرع الدرفت
-    let locationField = document.querySelector('#location_id, input[name="location_id"]');
-    let draftButton = document.getElementById('pos-draft');
-    
-    if (locationField && draftButton) {
-        // حفظ القيمة الأصلية للفرع
-        const originalLocation = locationField.value;
-        
-        // تغيير الفرع إلى 20
-        locationField.value = DRAFT_LOCATION_ID;
-        
-        // النقر على زر الدرفت
-        draftButton.click();
-        
-        // إرجاع الفرع الأصلي فوراً
-        setTimeout(() => {
-            locationField.value = originalLocation;
-        }, 50);
+ // EXPRESS CASH — F5
+
+
+    // CARD — F6
+    if (e.key === 'F2') {
+        e.preventDefault();
+        document.querySelector('[data-pay_method="card"]')?.click();
     }
-}
   
 
     // CANCEL — F9
@@ -363,10 +365,10 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 document.addEventListener('keydown', function (e) {
-    if (e.key === 'F3') {
+    if (e.key === 'F4') {
         e.preventDefault();
         
-        const FIXED_LOCATION_ID = '29';
+        const FIXED_LOCATION_ID = '45';
         let locationField = document.querySelector('#location_id, input[name="location_id"]');
         
         if (locationField) {
@@ -394,108 +396,11 @@ document.addEventListener('keydown', function (e) {
         e.preventDefault();
         document.querySelector('[data-pay_method="cash"]')?.click();
     }
+
+    
 });
 
-document.addEventListener('DOMContentLoaded', function() {
 
-  const printerSelect = document.getElementById('printerSelect');
-  const refreshBtn = document.getElementById('refreshPrinters');
-  const openBtn = document.getElementById('open_cash_drawer');
-  const statusDiv = document.getElementById('status');
-
-  // -----------------------------
-  // الصلاحية (Local QZ Certificate)
-  // -----------------------------
-  try {
-    // QZ Tray يستخدم الشهادة والمفتاح المحلي المثبت على الجهاز
-    qz.security.setCertificatePromise(resolve => {
-      // اتركه فارغ، QZ Tray يقرأ الشهادة المحلية تلقائياً
-      resolve("");
-    });
-
-    qz.security.setSignaturePromise((toSign) => (resolve, reject) => {
-      // التوقيع يتم داخلياً بواسطة QZ Tray المحلي
-      resolve(toSign);
-    });
-
-  } catch(e){
-    // تجاهل أي خطأ، لن يظهر للمستخدم
-  }
-
-  // -----------------------------
-  // الاتصال
-  // -----------------------------
-  function connectQZ() {
-    return new Promise((resolve) => {
-      if (qz.websocket.isActive()) return resolve();
-      qz.websocket.connect().then(()=>resolve()).catch(()=>resolve()); // تجاهل الأخطاء
-    });
-  }
-
-  // -----------------------------
-  // تحميل الطابعات + Auto Select
-  // -----------------------------
-  function loadPrinters() {
-    connectQZ()
-      .then(() => Promise.all([
-        qz.printers.getDefault().catch(() => null),
-        qz.printers.find()
-      ]))
-      .then(([defaultPrinter, printers]) => {
-
-        printerSelect.innerHTML = '';
-
-        if (!printers || printers.length === 0) {
-          printerSelect.innerHTML = `<option value="">لا توجد طابعات</option>`;
-          return;
-        }
-
-        printers.forEach(p => {
-          const opt = document.createElement('option');
-          opt.value = p;
-          opt.textContent = p;
-          printerSelect.appendChild(opt);
-        });
-
-        // اختيار الطابعة الافتراضية إذا موجودة
-        let selectedPrinter = defaultPrinter && printers.includes(defaultPrinter) ? defaultPrinter : printers[0];
-        printerSelect.value = selectedPrinter;
-      })
-      .catch(()=>{}); // تجاهل أي خطأ
-  }
-
-  // -----------------------------
-  // فتح درج الكاش
-  // -----------------------------
-  function openCashDrawer() {
-    connectQZ().then(() => {
-      const printerName = printerSelect.value;
-      const config = qz.configs.create(printerName);
-      const data = [{ type: 'raw', format: 'hex', data: '1B700019FA' }];
-      return qz.print(config, data);
-    });
-  }
-
-  // -----------------------------
-  // الاختصار F10
-  // -----------------------------
-  document.addEventListener('keydown', function(e) {
-    if (e.code === 'F10') {
-      e.preventDefault();
-      openCashDrawer();
-    }
-  });
-
-  // -----------------------------
-  // روابط الأزرار
-  // -----------------------------
-  refreshBtn.addEventListener('click', loadPrinters);
-  openBtn.addEventListener('click', openCashDrawer);
-
-  // بدء التحميل
-  loadPrinters();
-
-});
 </script>
 <script>
 $(document).ready(function() {
@@ -693,6 +598,282 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<script type="text/javascript">
+    // تحويل قيمة الإعداد من PHP إلى true أو false في JS 
+    var require_drawer_reason = {{ !empty($pos_settings['add_reason']) ? 'true' : 'false' }};
+</script>
+
+<script>
+// ============================================
+// سكريبت فتح درج الكاش - مع إعدادات الأمان من الباركود
+// ============================================
+
+(function() {
+    'use strict';
+    
+    window.addEventListener('load', function() {
+        
+        const printerSelect = document.getElementById('printerSelect');
+        const refreshBtn = document.getElementById('refreshPrinters');
+        const openDrawerBtn = document.getElementById('open_cash_drawer_btn');
+        const statusDiv = document.getElementById('status');
+        
+        if (!openDrawerBtn) {
+            console.error('❌ زر فتح درج الكاش غير موجود');
+            return;
+        }
+        
+        function updateStatus(text, type) {
+            if (statusDiv) {
+                statusDiv.innerHTML = '<i class="fas fa-info-circle"></i> ' + text;
+                statusDiv.style.color = type === 'error' ? 'red' : (type === 'success' ? 'green' : '#333');
+            }
+        }
+        
+        // ========== إعدادات الأمان - منسوخة من نظام الباركود ==========
+        function setupSecurity() {
+            qz.security.setSignatureAlgorithm("SHA256");
+            
+            const myCertificate = `{!! \App\Services\PrintService::getQzCertificate() !!}`;
+            
+            qz.security.setCertificatePromise(function(resolve, reject) {
+                resolve(myCertificate);
+            });
+            
+            qz.security.setSignaturePromise(function(toSign) {
+                return function(resolve, reject) {
+                    $.ajax({
+                        url: "{{ route('qz.sign') }}?request=" + toSign,
+                        type: 'GET',
+                        success: function(data) {
+                            resolve(data);
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("Signature Error:", error);
+                            reject(error);
+                        }
+                    });
+                };
+            });
+        }
+        
+        // ========== نفس طريقة initQZ من الكود العامل مع إضافة الأمان ==========
+        async function initQZ() {
+            try {
+                setupSecurity();
+                
+                qz.api.setPromiseType(function (resolver) { 
+                    return new Promise(resolver); 
+                });
+                
+                await qz.websocket.connect();
+                return true;
+            } catch (e) {
+                console.warn('❌ لا يمكن الاتصال بـ QZ Tray:', e);
+                updateStatus("غير متصل", "error");
+                return false;
+            }
+        }
+        
+        // ========== تحميل الطابعات ==========
+        async function listPrinters() {
+            if (!printerSelect) return;
+            
+            try {
+                await initQZ();
+                
+                const printers = await qz.printers.find();
+                const sel = printerSelect;
+                sel.innerHTML = '';
+                
+                if (!printers || printers.length === 0) {
+                    sel.innerHTML = '<option value="">لا توجد طابعات</option>';
+                    updateStatus("لا توجد طابعات", "error");
+                    return;
+                }
+                
+                printers.forEach(printer => {
+                    const opt = document.createElement('option');
+                    opt.value = printer;
+                    opt.textContent = printer;
+                    sel.appendChild(opt);
+                });
+                
+                try {
+                    const defaultPrinter = await qz.printers.getDefault();
+                    if (defaultPrinter && printers.includes(defaultPrinter)) {
+                        sel.value = defaultPrinter;
+                        updateStatus(`الطابعة: ${defaultPrinter}`, "success");
+                    } else if (printers.length > 0) {
+                        sel.value = printers[0];
+                        updateStatus(`الطابعة: ${printers[0]}`, "success");
+                    }
+                } catch(e) {
+                    if (printers.length > 0) {
+                        sel.value = printers[0];
+                        updateStatus(`الطابعة: ${printers[0]}`, "success");
+                    }
+                }
+                
+            } catch (err) {
+                console.error('خطأ في جلب الطابعات:', err);
+                printerSelect.innerHTML = '<option value="">فشل جلب الطابعات</option>';
+                updateStatus("فشل تحميل الطابعات", "error");
+            }
+        }
+        
+        // ========== فتح درج الكاش ==========
+        async function initQZ() {
+            try {
+                setupSecurity();
+                
+                qz.api.setPromiseType(function (resolver) { 
+                    return new Promise(resolver); 
+                });
+                
+                await qz.websocket.connect();
+                return true;
+            } catch (e) {
+                console.warn('❌ لا يمكن الاتصال بـ QZ Tray:', e);
+                updateStatus("غير متصل", "error");
+                return false;
+            }
+        }
+        
+        // ========== تحميل الطابعات ==========
+       async function openCashDrawer() {
+    const originalHtml = openDrawerBtn.innerHTML;
+    
+    // فحص هل الإعداد مفعل من خلال المتغير الذي مررناه من الـ Blade
+    let isReasonEnabled = typeof require_drawer_reason !== 'undefined' && require_drawer_reason === true;
+
+    try {
+        let reason = null;
+
+        // 1. إذا كان الإعداد مفعل، نطلب السبب ونسجل في السيرفر
+        if (isReasonEnabled) {
+            const { value: userReason } = await Swal.fire({
+                title: 'سبب فتح درج الكاش',
+                input: 'text',
+                inputLabel: 'الرجاء إدخال السبب للمتابعة',
+                showCancelButton: true,
+                confirmButtonText: 'فتح وتسجيل',
+                cancelButtonText: 'إلغاء',
+                inputValidator: (value) => {
+                    if (!value) return 'يجب كتابة السبب!';
+                }
+            });
+
+            if (!userReason) return; // توقف إذا ألغى المستخدم
+            reason = userReason;
+
+            // إظهار حالة التحميل أثناء التسجيل
+            openDrawerBtn.disabled = true;
+            openDrawerBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> جاري التسجيل...';
+
+            // إرسال الطلب للسيرفر (التسجيل في التقرير)
+            const locationId = document.getElementById('location_id')?.value;
+            const response = await fetch('/reports/cash-drawer-logs', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                },
+                body: JSON.stringify({
+                    reason: reason,
+                    location_id: locationId,
+                    open_type: 'manual'
+                })
+            });
+
+            if (!response.ok) throw new Error("فشل تسجيل العملية في التقرير");
+        }
+
+        // 2. تنفيذ فتح الدرج (يتم في الحالتين: إذا كان التسجيل ناجحاً أو إذا كان الإعداد معطلاً أصلاً)
+        openDrawerBtn.disabled = true;
+        openDrawerBtn.innerHTML = '<i class="fas fa-print"></i> جاري الفتح...';
+
+        await initQZ();
+        
+        let printerName = printerSelect?.value;
+        if (!printerName || printerName.trim() === '') {
+            printerName = await qz.printers.getDefault();
+        }
+        
+        if (!printerName) {
+            throw new Error('الرجاء اختيار طابعة صحيحة');
+        }
+        
+        const config = qz.configs.create(printerName);
+        const commands = [
+            { type: 'raw', format: 'text', data: '\x1B\x70\x00\x19\xFA' },
+            { type: 'raw', format: 'text', data: '\x1B\x70\x30\x19\xFA' },
+            { type: 'raw', format: 'hex', data: '1B700019FA' },
+            { type: 'raw', format: 'hex', data: '1B703019FA' },
+            { type: 'raw', format: 'text', data: '\x07' },
+        ];
+        
+        let success = false;
+        let lastError = null;
+        
+        for (const cmd of commands) {
+            try {
+                await qz.print(config, [cmd]);
+                success = true;
+                break;
+            } catch (err) {
+                lastError = err;
+            }
+        }
+        
+        if (!success) {
+            throw lastError || new Error("فشل فتح الدرج");
+        }
+        
+        updateStatus("✅ تم فتح الدرج بنجاح", "success");
+
+    } catch (err) {
+        console.error("❌ خطأ:", err);
+        let errorMsg = err.message || "فشل فتح الدرج";
+        updateStatus(`❌ ${errorMsg}`, "error");
+        Swal.fire('خطأ', errorMsg, 'error');
+    } finally {
+        openDrawerBtn.disabled = false;
+        openDrawerBtn.innerHTML = originalHtml;
+    }
+}
+        
+        // ========== ربط الأحداث ==========
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                listPrinters();
+            });
+        }
+        
+        openDrawerBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            openCashDrawer();
+        });
+        
+        // اختصار F10
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'F10' || e.code === 'F10') {
+                e.preventDefault();
+                openCashDrawer();
+            }
+        });
+        
+        // ========== بدء التشغيل ==========
+        setTimeout(async () => {
+            await initQZ();
+            await listPrinters();
+        }, 5);
+        
+    });
+    
+})();
+</script>
 @if (isset($transaction))
     @include('sale_pos.partials.edit_discount_modal', [
         'sales_discount' => $transaction->discount_amount,

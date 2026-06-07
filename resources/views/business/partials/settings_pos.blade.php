@@ -339,6 +339,7 @@
     </div>
 </div>
          <!-- add product in close register -->
+
      <!-- add fawtara setting -->     
      <div class="col-sm-4">
     <div class="form-group">
@@ -351,13 +352,13 @@
     </div>
 </div>     
 <!-- add fawtara setting -->
+
  <!-- add invoice number setting -->     
     <div class="col-sm-4">
     <div class="form-group">
         <div class="checkbox">
             <br>
           <label>
-            {{-- تأكدنا من مطابقة الاسم enable_invoice_number في كل مكان --}}
             {!! Form::checkbox('pos_settings[enable_invoice_number]', 1, !empty($pos_settings['enable_invoice_number']), ['class' => 'input-icheck']); !!} 
            {{ __( 'lang_v1.show_invoice_number' ) }}
           </label>
@@ -365,7 +366,130 @@
     </div>
 </div>
 <!-- add invoice number setting -->
+
+
+ <div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+            <br>
+          <label> 
+            {!! Form::checkbox('pos_settings[show_image]', 1, !empty($pos_settings['show_image']), ['class' => 'input-icheck', ]); !!} 
+           {{ __( 'lang_v1.show_image' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+            <br>
+          <label> 
+            {!! Form::checkbox('pos_settings[show_unit]', 1, !empty($pos_settings['show_unit']), ['class' => 'input-icheck', ]); !!} 
+           {{ __( 'lang_v1.show_unit' ) }}
+          </label>
+        </div>
+    </div>
+</div> 
+
+<div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+            <br>
+          <label> 
+            {!! Form::checkbox('pos_settings[show_quantity]', 1, !empty($pos_settings['show_quantity']), ['class' => 'input-icheck', ]); !!} 
+           {{ __( 'lang_v1.show_quantity' ) }}
+          </label>
+        </div>
+    </div>
+</div> 
+
+<!-- add condition for reason open cash drawer -->     
+    <div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+            <br>
+          <label>
+            {!! Form::checkbox('pos_settings[add_reason]', 1, !empty($pos_settings['add_reason']), ['class' => 'input-icheck', ]); !!} 
+           {{ __( 'lang_v1.add_reason' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+<!--  add condition for reason open cash drawer -->
+
+    
+    
+<!-- add search quantity setting -->
+
+
+
+<!-- add condition for customer -->     
+    <div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+            <br>
+          <label>
+            {!! Form::checkbox('pos_settings[add_customer]', 1, !empty($pos_settings['add_customer']), ['class' => 'input-icheck', ]); !!} 
+           {{ __( 'lang_v1.add_customer' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+<!-- add condition for customer -->
+
+<!-- add condition for seller -->     
+    <div class="col-sm-4">
+    <div class="form-group">
+        <div class="checkbox">
+            <br>
+          <label>
+            {!! Form::checkbox('pos_settings[add_seller]', 1, !empty($pos_settings['add_seller']), ['class' => 'input-icheck', ]); !!} 
+           {{ __( 'lang_v1.add_seller' ) }}
+          </label>
+        </div>
+    </div>
+</div>
+<!-- add condition for seller -->
+
+
+
+<!-- add condition for skip_invoice_check -->
     </div>    
     <hr>
     @include('business.partials.settings_weighing_scale')
 </div>
+
+
+<script> 
+setTimeout(function() {
+    function checkFatoraConflict() {
+        var $fatora = $('input[name="pos_settings[enable_fatora]"]');
+        var fatora_checked = $fatora.prop('checked');
+        
+        var $exchange_col = $('input[name="pos_settings[enable_exchange_button]"]').closest('.col-sm-4');
+        var $skip_col = $('input[name="pos_settings[skip_invoice_check]"]').closest('.col-sm-4');
+
+        if (fatora_checked) {
+            $exchange_col.hide();
+            $skip_col.hide();
+        } else {
+            $exchange_col.show();
+            $skip_col.show();
+        }
+    }
+
+    checkFatoraConflict();
+
+    // icheck events
+    $('input[name="pos_settings[enable_fatora]"]').on('ifChecked ifUnchecked', function() {
+        checkFatoraConflict();
+    });
+
+    // fallback
+    $('input[name="pos_settings[enable_fatora]"]').on('change', function() {
+        checkFatoraConflict();
+    });
+
+}, 800);
+</script>

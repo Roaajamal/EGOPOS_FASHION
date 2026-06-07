@@ -1,3 +1,14 @@
+@php
+$custom_labels = json_decode(session('business.custom_labels'), true);
+$p_labels = $custom_labels['product'] ?? [];
+@endphp
+  @php
+  $custom_labels = json_decode(session('business.custom_labels'), true);
+  $product_custom_field1 = !empty($custom_labels['product']['custom_field_1']) ? $custom_labels['product']['custom_field_1'] : __('lang_v1.product_custom_field1');
+  $product_custom_field2 = !empty($custom_labels['product']['custom_field_2']) ? $custom_labels['product']['custom_field_2'] : __('lang_v1.product_custom_field2');
+  $product_custom_field3 = !empty($custom_labels['product']['custom_field_3']) ? $custom_labels['product']['custom_field_3'] : __('lang_v1.product_custom_field3');
+@endphp
+
 @extends('layouts.app')
 @section('title', __('sales_detailed.sales_returns_report'))
 
@@ -86,6 +97,33 @@
                         {!! Form::text('date_range', null, ['class' => 'form-control', 'id' => 'qer_date_filter', 'readonly']); !!}
                     </div>
                 </div>
+
+     <div class="col-md-3">
+    <div class="form-group">
+        {{-- هنا نستخدم المتغير الديناميكي لاسم الحقل --}}
+        {!! Form::label('product_custom_field1', $product_custom_field1 . ':') !!}
+        {{-- هنا نستخدم مصفوفة الأحجام $sizes التي جلبناها من الـ Controller --}}
+        {!! Form::select('product_custom_field1', $sizes, null, ['placeholder' => __('messages.all'), 'class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'product_custom_field1']); !!}
+    </div>
+</div>
+
+<div class="col-md-3">
+    <div class="form-group">
+        {{-- هنا نستخدم المتغير الديناميكي لاسم الحقل الثاني --}}
+        {!! Form::label('product_custom_field2', $product_custom_field2 . ':') !!}
+        {{-- هنا نستخدم مصفوفة الألوان $colors --}}
+        {!! Form::select('product_custom_field2', $colors, null, ['placeholder' => __('messages.all'), 'class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'product_custom_field2']); !!}
+    </div>
+</div>
+
+<div class="col-md-3">
+    <div class="form-group">
+        {{-- هنا نستخدم المتغير الديناميكي لاسم الحقل الثالث --}}
+        {!! Form::label('product_custom_field3', $product_custom_field3 . ':') !!}
+        {{-- هنا نستخدم مصفوفة الموديلات $models --}}
+        {!! Form::select('product_custom_field3', $models, null, ['placeholder' => __('messages.all'), 'class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'product_custom_field3']); !!}
+    </div>
+</div>
             @endcomponent
         </div>
     </div>
@@ -105,6 +143,17 @@
                             <th>{{__('sales_detailed.customer_name')}}</th>
                             <th>SKU</th>
                             <th>{{__('sales_detailed.product_name')}}</th>
+                            @if(!empty($p_labels['custom_field_1']))
+                                    <th>{{ $p_labels['custom_field_1'] }}</th>
+                                    @endif
+                                    
+                                    @if(!empty($p_labels['custom_field_2']))
+                                        <th>{{ $p_labels['custom_field_2'] }}</th>
+                                    @endif
+                                    
+                                   @if(!empty($p_labels['custom_field_3']))
+                                        <th>{{ $p_labels['custom_field_3'] }}</th>
+                                    @endif
                             <th>{{__('sales_detailed.quantity')}}</th>
                             <th>{{__('sales_detailed.total')}}</th>
                             <th>{{__('sales_detailed.cash')}}</th>
@@ -212,7 +261,7 @@
                             <th>{{__('sales_detailed.customer_name')}}</th>
                             <th> {{__('sales_detailed.total_before_tax')}}</th>
                             <th>{{__('sales_detailed.tax')}}</th>
-                            <th>{{__('sales_detailed.discount')}}</th>
+                           <th>{{__('sales_detailed.discount')}}</th>     
                             <th> {{__('sales_detailed.total')}}</th>
                             <th>{{__('sales_detailed.paid')}}</th>
                             <th>{{__('sales_detailed.location')}}</th>
@@ -224,7 +273,7 @@
                             <td colspan="2"></td>
                             <td id="sell_sum_orig"></td>
                             <td id="sell_sum_tax"></td>
-                            <td id="sell_sum_discount"></td>
+                            <td id="sell_sum_discount"></td>   
                             <td id="sell_sum_total"></td>
                             <td colspan="2"></td>
                         </tr>
@@ -353,7 +402,11 @@
                 start_date: start_dt.format('YYYY-MM-DD HH:mm:ss'),
                 end_date: end_dt.format('YYYY-MM-DD HH:mm:ss'),
                 transaction_type: $('#transaction_type').val(),
-                view_type: $('#view_type').val()
+                view_type: $('#view_type').val(),
+                product_custom_field1: $('#product_custom_field1').val(),
+                product_custom_field2: $('#product_custom_field2').val(),
+                product_custom_field3: $('#product_custom_field3').val() 
+                
             };
         };
 
@@ -400,6 +453,9 @@
     { data: 'customer_name', name: 'c.name' },
     { data: 'sku', name: 'p.sku' },
     { data: 'product_name', name: 'p.name' },
+    { data: 'product_size', name: 'product_size' },
+    { data: 'product_color', name: 'product_color' },
+    { data: 'product_model', name: 'product_model' },
     { data: 'quantity', name: 'quantity', render: function(data) {
                     return __number_f(data, false); // تنسيق الكمية بدون كسر إذا لم نحتاج
                 } },
@@ -495,9 +551,46 @@
             { data: 'original_price', name: 'original_price', searchable: false, render: function(data) {
                     return __currency_trans_from_en(data, true); } }, // حقل SUM
             { data: 'unit_tax', name: 'unit_tax', searchable: false , render: function(data) {
-                    return __currency_trans_from_en(data, true);  } },             // حقل SUM
-            { data: 'discount_val', name: 't.discount_amount', searchable: false, render: function(data) {
-                    return __currency_trans_from_en(data, true);  }},
+                    return __currency_trans_from_en(data, true);  } },        
+                    //  { data: 'discount_val', name: 't.discount_amount', searchable: false, render: function(data) {
+                    // return __currency_trans_from_en(data, true);  }}, 
+                        // حقل SUM
+       { 
+    data: 'discount_val', 
+    name: 't.discount_amount', 
+    searchable: false, 
+    render: function(data, type, row) {
+        if (type !== 'display') return data;
+
+        try {
+            // تحويل البيانات لأرقام صافية (تنظيف من أي رموز)
+            var disc_val = parseFloat(data) || 0;
+            var type = row.discount_type || 'fixed';
+            
+            if (type === 'percentage') {
+                // جلب السعر الأصلي وتنظيفه من أي رموز عملة قد تكون ملتصقة به
+                var price = 0;
+                if (row.original_price) {
+                    price = parseFloat(String(row.original_price).replace(/[^\d.]/g, "")) || 0;
+                }
+                
+                // حساب القيمة النقدية للخصم
+                var calculated_amount = (price * disc_val) / 100;
+                
+                // عرض القيمة النقدية وبجانبها النسبة
+                return __currency_trans_from_en(calculated_amount, true) + 
+                       ' <small class="text-muted">(' + disc_val + '%)</small>';
+            }
+
+            // إذا كان مبلغاً ثابتاً
+            return __currency_trans_from_en(disc_val, true);
+
+        } catch (e) {
+            // في حال حدوث أي خطأ مفاجئ، يرجع الرقم الأصلي لكي لا يختفي الجدول
+            return data;
+        }
+    }
+},
             { data: 'total_line_amount', name: 't.final_total', searchable: false, render: function(data) {
                     return __currency_trans_from_en(data, true); } },
             { data: 'payment_methods', name: 'payment_methods', searchable: false, orderable: false },
@@ -507,7 +600,7 @@
             var api = this.api();
             $('#sell_sum_orig').html(__currency_trans_from_en(api.column(3, {page: 'current'}).data().reduce((a, b) => get_raw(a) + get_raw(b), 0), true));
             $('#sell_sum_tax').html(__currency_trans_from_en(api.column(4, {page: 'current'}).data().reduce((a, b) => get_raw(a) + get_raw(b), 0), true));
-            $('#sell_sum_discount').html(__currency_trans_from_en(api.column(5, {page: 'current'}).data().reduce((a, b) => get_raw(a) + get_raw(b), 0), true));
+          //  $('#sell_sum_discount').html(__currency_trans_from_en(api.column(5, {page: 'current'}).data().reduce((a, b) => get_raw(a) + get_raw(b), 0), true));
             $('#sell_sum_total').html(__currency_trans_from_en(api.column(6, {page: 'current'}).data().reduce((a, b) => get_raw(a) + get_raw(b), 0), true));
         }
             }));
@@ -600,7 +693,7 @@
         }
 
         // الاستماع لتغييرات الفلاتر
-        $(document).on('change', '#transaction_type, #location_id, #view_type', function() {
+        $(document).on('change', '#transaction_type, #location_id, #view_type, #product_custom_field1, #product_custom_field2, #product_custom_field3', function() {
             reload_active_table();
         });
         

@@ -4,6 +4,7 @@
 
 @php
 $custom_labels = json_decode(session('business.custom_labels'), true);
+$p_labels = $custom_labels['product'] ?? [];
 @endphp
 
 <section class="content-header">
@@ -111,18 +112,29 @@ $custom_labels = json_decode(session('business.custom_labels'), true);
     <div class="col-sm-12">
         <div class="table-responsive">
             <table class="table table-bordered table-striped" id="purchase_entry_table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                       
-                        <th>SKU</th>
-                        <th> {{ __('quantity_entry.product_name')}}</th>
-                        <th>{{ __('quantity_entry.new_quantity')}}</th>
-                        <th>{{ __('quantity_entry.cost_quantity_entry')}}</th>
-                        <th>{{ __('quantity_entry.total')}}</th>
-                        <th><i class="fa fa-trash"></i></th>
-                    </tr>
-                </thead>
+                 <thead>
+                                <tr class="active">
+                                    {{-- عمود رقم السطر --}}
+                                    <th class="text-center" style="width: 50px;">#</th>
+                                    <th class="text-center sku-column">@lang('product.sku')</th>
+                                      @if(!empty($p_labels['custom_field_3']))
+                                    <th class="text-center custom-field-3">{{ $p_labels['custom_field_3'] }}</th>
+                                    @endif
+                                    
+                                    @if(!empty($p_labels['custom_field_1']))
+                                        <th class="text-center custom-field-1">{{ $p_labels['custom_field_1'] }}</th>
+                                    @endif
+                                    
+                                   @if(!empty($p_labels['custom_field_2']))
+                                        <th class="text-center custom-field-2">{{ $p_labels['custom_field_2'] }}</th>
+                                    @endif
+                                    <th class="text-center product-name-column">@lang('lang_v1.description')</th>
+                                    <th class="text-center quantity-column">@lang('sale.qty')</th>
+                                    <th class="text-center price-column">@lang('lang_v1.cost')</th>
+                                    <th class="text-center total-column">@lang('stock_adjustment.total')</th>
+                                    <th class="text-center actions-column"><i class="fa fa-trash"></i></th>
+                                </tr>
+                            </thead>
                 <tbody></tbody>
             </table>
         </div>

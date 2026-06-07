@@ -144,6 +144,10 @@ $(document).ready(function() {
                 d.sub_category_id = $('#sub_category_id').val();
                 d.brand_id = $('#brand').val();
                 d.unit_id = $('#unit').val();
+                d.stock_filter = $('#stock_filter').val(); 
+                d.product_custom_field1 = $('#product_custom_field1').val();
+        d.product_custom_field2 = $('#product_custom_field2').val();
+        d.product_custom_field3 = $('#product_custom_field3').val();
 
                 d.only_mfg_products = $('#only_mfg_products').length && $('#only_mfg_products').is(':checked') ? 1 : 0;
             },
@@ -225,7 +229,7 @@ $(document).ready(function() {
         });
     }
 
-    $('#stock_report_filter_form #location_id, #stock_report_filter_form #category_id, #stock_report_filter_form #sub_category_id, #stock_report_filter_form #brand, #stock_report_filter_form #unit,#stock_report_filter_form #view_stock_filter'
+    $('#stock_report_filter_form #location_id, #stock_report_filter_form #category_id, #stock_report_filter_form #sub_category_id, #stock_report_filter_form #brand, #stock_report_filter_form #unit,#stock_report_filter_form #view_stock_filter, #stock_filter, #product_custom_field1, #product_custom_field2, #product_custom_field3'
     ).change(function() {
         stock_report_table.ajax.reload();
         stock_expiry_report_table.ajax.reload();
@@ -937,6 +941,9 @@ if ($('span#sr_total_sales').length > 0) {
                     d.category_id = $('select#psr_filter_category_id').val();
                     d.brand_id = $('select#psr_filter_brand_id').val();
                     d.customer_group_id = $('#psr_customer_group_id').val();
+                    d.custom_field1 = $('#psr_custom_field1').val();
+d.custom_field2 = $('#psr_custom_field2').val();
+d.custom_field3 = $('#psr_custom_field3').val();  
                 },
             },
              columns: [
@@ -957,9 +964,10 @@ if ($('span#sr_total_sales').length > 0) {
                 { data: 'unit_sale_price', name: 'transaction_sell_lines.unit_price_inc_tax' },
                 { data: 'subtotal', name: 'subtotal', searchable: false },
                 { data: 'payment_methods', name: 'payment_methods', searchable: false },
+                 { data: 'seller_name', name: 'agent.first_name' },
                 { data: 'added_by', name: 'u_creator.first_name' },
             ],
-            fnDrawCallback: function(oSettings) {
+           fnDrawCallback: function(oSettings) {
                 $('#footer_subtotal').text(
                     sum_table_col($('#product_sell_report_table'), 'row_subtotal')
                 );
@@ -967,7 +975,11 @@ if ($('span#sr_total_sales').length > 0) {
                 $('#footer_tax').html(__sum_stock($('#product_sell_report_table'), 'tax', 'left'));
                 __currency_convert_recursively($('#product_sell_report_table'));
             },
-        });
+        }); 
+        // ← أضف هاد بعد تعريف الجدول بالـ report.js أو بالـ view
+$('#psr_custom_field1, #psr_custom_field2, #psr_custom_field3').change(function() {
+    product_sell_report.ajax.reload();
+});
     }
 
     var is_lot_enabled = $('#lot_enabled').length > 0 ? true : false;

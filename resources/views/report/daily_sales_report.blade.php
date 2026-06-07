@@ -42,34 +42,47 @@
                 <div class="table-responsive">
                     <table class="table table-bordered table-striped" id="daily_sales_grouped_table" style="width: 100%;">
                         <thead>
-    <tr>
-        @if(is_col_visible('daily_sales_grouped', 'date')) <th>@lang('messages.date')</th> @endif
-        @if(is_col_visible('daily_sales_grouped', 'location')) <th>{{__('sales_detailed.location')}}</th> @endif
-        @if(is_col_visible('daily_sales_grouped', 'number_of_sales')) <th>{{__('sales_detailed.number_of_sales')}} </th> @endif
-        @if(is_col_visible('daily_sales_grouped', 'total_sales')) <th> {{__('sales_detailed.total_sales')}}</th> @endif
-        @if(is_col_visible('daily_sales_grouped', 'number_of_returns')) <th>{{__('sales_detailed.number_of_returns')}} </th> @endif
-        @if(is_col_visible('daily_sales_grouped', 'total_returns')) <th> {{__('sales_detailed.total_of_returns')}}</th> @endif
-        @if(is_col_visible('daily_sales_grouped', 'net_sales')) <th>{{__('sales_detailed.net_sales')}} </th> @endif
-        @if(is_col_visible('daily_sales_grouped', 'total_before_tax')) <th> {{__('sales_detailed.total_before_tax')}}</th> @endif
-        @if(is_col_visible('daily_sales_grouped', 'tax')) <th> {{__('sales_detailed.tax')}}</th> @endif
-        @if(is_col_visible('daily_sales_grouped', 'tax_type')) <th> {{__('sales_detailed.tax_type')}}</th> @endif
-        @if(is_col_visible('daily_sales_grouped', 'return_not_paid')) <th> {{__('sales_detailed.return_not_paid')}}</th> @endif
-        @if(is_col_visible('daily_sales_grouped', 'action')) <th>{{__('sales_detailed.action')}}</th> @endif
-    </tr>
-</thead>
-                        <tfoot>
+        <tr>
+            <th>@lang('messages.date')</th> 
+             <th>{{__('sales_detailed.location')}}</th> 
+             <th>{{__('sales_detailed.number_of_sales')}} </th> 
+             <th> {{__('sales_detailed.total_sales')}}</th> 
+            <th>{{__('sales_detailed.number_of_returns')}} </th>
+             <th> {{__('sales_detailed.total_of_returns')}}</th> 
+             <th>{{__('sales_detailed.net_sales')}} </th> 
+            <th> {{__('sales_detailed.total_before_tax')}}</th> 
+           
+          
+            @foreach($taxes as $tax)
+                <th>{{$tax['name']}}</th>
+            @endforeach
+            <th> {{__('sales_detailed.total_all_taxes')}} </th> 
+            
+            <th> {{__('sales_detailed.return_not_paid')}}</th> 
+            
+            <th>{{__('sales_detailed.action')}}</th>
+        </tr>
+    </thead>
+    <tfoot>
     <tr class="bg-gray font-17 footer-total text-center">
         <td colspan="2"><strong>@lang('sale.total'):</strong></td>
-        @if(is_col_visible('daily_sales_grouped', 'number_of_sales')) <td id="g_footer_total_invoices"></td> @endif
-        @if(is_col_visible('daily_sales_grouped', 'total_sales')) <td id="g_footer_total_sales"></td> @endif
-        @if(is_col_visible('daily_sales_grouped', 'number_of_returns')) <td id="g_footer_total_returns_cnt"></td> @endif
-        @if(is_col_visible('daily_sales_grouped', 'total_returns')) <td id="g_footer_total_returns_amt"></td> @endif
-        @if(is_col_visible('daily_sales_grouped', 'net_sales')) <td id="g_footer_net_sales"></td> @endif
-        @if(is_col_visible('daily_sales_grouped', 'total_before_tax')) <td id="g_footer_total_before_tax"></td> @endif
-        @if(is_col_visible('daily_sales_grouped', 'tax')) <td id="g_footer_total_tax"></td> @endif
-        @if(is_col_visible('daily_sales_grouped', 'tax_type')) <td></td> @endif
-        @if(is_col_visible('daily_sales_grouped', 'return_not_paid')) <td id="g_footer_total_return_due"></td> @endif
-        @if(is_col_visible('daily_sales_grouped', 'action')) <td></td> @endif
+         <td id="g_footer_total_invoices"></td>
+         <td id="g_footer_total_sales"></td> 
+         <td id="g_footer_total_returns_cnt"></td>
+         <td id="g_footer_total_returns_amt"></td> 
+        <td id="g_footer_net_sales"></td> 
+         <td id="g_footer_total_before_tax"></td> 
+        
+        {{-- أعمدة الضرائب الديناميكية --}}
+        @foreach($taxes as $tax)
+            <td id="g_footer_tax_{{$tax['id']}}_total"></td> 
+        @endforeach
+        
+        {{-- مجموع الضرائب الكلي --}}
+        <td id="g_footer_total_all_taxes"></td> 
+
+        <td id="g_footer_total_return_due"></td> 
+        <td></td> 
     </tr>
 </tfoot>
                     </table>
@@ -84,30 +97,35 @@
             @component('components.widget', ['class' => 'box-success', 'title' => __('sales_detailed.sales_report_detailed') ])
                 <div class="table-responsive">
                     <table class="table table-bordered table-striped" id="sales_detailed_table" style="width: 100%;">
-                        <thead>
-                            <tr>
-                                <th> {{__('sales_detailed.date')}}</th>
-                                <th>{{__('sales_detailed.ref_no')}} </th>
-                                <th>{{__('sales_detailed.location')}}</th>
-                                <th>{{__('sales_detailed.customer_name')}}</th>
-                                <th>  {{__('sales_detailed.total_before_tax')}} </th>
-                                <th> {{__('sales_detailed.tax')}}  </th>
-                                <th>{{__('sales_detailed.total')}} </th>
-                                <th> {{__('sales_detailed.tax_type')}} </th>
-                                <th> {{__('sales_detailed.paid_type')}} </th>
-                                <th> {{__('sales_detailed.transaction_method')}}</th> 
-                                <th>{{__('sales_detailed.action')}}</th> 
-                            </tr>
-                        </thead>
-                        <tfoot>
-                            <tr class="bg-gray font-17 footer-total text-center">
-                                <td colspan="4"><strong>@lang('sale.total'):</strong></td>
-                                <td id="d_footer_before_tax"></td>
-                                <td id="d_footer_tax"></td>
-                                <td id="d_footer_final_total"></td>
-                                <td colspan="4"></td>
-                            </tr>
-                        </tfoot>
+                       <thead>
+                        <tr>
+                            <th>{{__('sales_detailed.date')}}</th>
+                            <th>{{__('sales_detailed.ref_no')}}</th>
+                            <th>{{__('sales_detailed.location')}}</th>
+                            <th>{{__('sales_detailed.customer_name')}}</th>
+                            <th>{{__('sales_detailed.total_before_tax')}}</th>
+                             @foreach($taxes as $tax)
+                                <th>{{$tax['name']}}</th>
+                            @endforeach
+                            <th>{{__('sales_detailed.total')}}</th>
+                            <th>{{__('sales_detailed.paid_type')}}</th>
+                            <th>{{__('sales_detailed.transaction_method')}}</th>
+                            <th>{{__('sales_detailed.action')}}</th> 
+                           
+                        </tr>
+                    </thead>
+                    <tfoot>
+                        <tr class="bg-gray font-17 footer-total text-center">
+                            <td colspan="4"><strong>@lang('sale.total'):</strong></td>
+                            <td id="d_footer_before_tax"></td>
+                            @foreach($taxes as $tax)
+                                <td></td>
+                            @endforeach
+                            <td id="d_footer_final_total"></td>
+                            <td colspan="3"></td>
+                            
+                        </tr>
+                    </tfoot>
                     </table>
                 </div>
             @endcomponent
@@ -133,26 +151,23 @@
         $('#qer_date_filter').daterangepicker(_.extend({}, dateRangeSettings, {
             timePicker: true,
             timePicker24Hour: false,
-            autoUpdateInput: false, // لمنع الكتابة التلقائية بالوقت الحالي
+            autoUpdateInput: false,
             startDate: start,
             endDate: end,
             locale: { format: moment_date_format + ' hh:mm A' }
         }));
 
-        // 4. معالجة الضغط على Apply لضمان اليوم الكامل
+        // 4. معالجة الضغط على Apply
         $('#qer_date_filter').on('apply.daterangepicker', function(ev, picker) {
             var s = picker.startDate.clone();
             var e = picker.endDate.clone();
 
-            // إذا اختار يوماً واحداً، نجبر الوقت على البداية والنهاية
             if (s.format('YYYY-MM-DD') == e.format('YYYY-MM-DD')) {
                 s.startOf('day');
                 e.endOf('day');
             }
 
             $(this).val(s.format(moment_date_format + ' hh:mm A') + ' ~ ' + e.format(moment_date_format + ' hh:mm A'));
-            
-            // تحديث القيم داخل المكتبة ليتم استخدامها في Ajax
             picker.setStartDate(s);
             picker.setEndDate(e);
             
@@ -161,20 +176,28 @@
 
         // دالة تنظيف الأرقام
         var get_raw_value = function (i) {
-            if (typeof i === 'string') { return parseFloat(i.replace(/[^\d.-]/g, '')) || 0; }
+            if (typeof i === 'string') { 
+                return parseFloat(i.replace(/[^\d.-]/g, '')) || 0; 
+            }
             return typeof i === 'number' ? i : 0;
         };
 
         // دالة جلب التواريخ لـ Ajax
         var get_filter_dates = function() {
             var picker = $('#qer_date_filter').data('daterangepicker');
+            if (!picker) {
+                return {
+                    start: moment().startOf('day').format('YYYY-MM-DD HH:mm:ss'),
+                    end: moment().endOf('day').format('YYYY-MM-DD HH:mm:ss')
+                };
+            }
             return {
                 start: picker.startDate.format('YYYY-MM-DD HH:mm:ss'),
                 end: picker.endDate.format('YYYY-MM-DD HH:mm:ss')
             };
         };
 
-        // تعريف الجداول
+        // تهيئة الجدول المجمع
         daily_sales_grouped_table = $('#daily_sales_grouped_table').DataTable({
             processing: true,
             serverSide: true,
@@ -188,64 +211,66 @@
                     d.location_id = $('#location_id').val();
                 }
             },
-           columns: [
-    @if(is_col_visible('daily_sales_grouped', 'date')) 
-        { data: 'date', name: 'date' }, 
-    @endif
-
-    @if(is_col_visible('daily_sales_grouped', 'location')) 
-        { data: 'location_name', name: 'bl.name' }, 
-    @endif
-
-    @if(is_col_visible('daily_sales_grouped', 'number_of_sales')) 
-        { data: 'total_invoices', name: 'total_invoices', searchable: false }, 
-    @endif
-
-    @if(is_col_visible('daily_sales_grouped', 'total_sales')) 
-        { data: 'total_sales', name: 'total_sales', searchable: false }, 
-    @endif
-
-    @if(is_col_visible('daily_sales_grouped', 'number_of_returns')) 
-        { data: 'total_returns_count', name: 'total_returns_count', searchable: false }, 
-    @endif
-
-    @if(is_col_visible('daily_sales_grouped', 'total_returns')) 
-        { data: 'total_return_amount', name: 'total_return_amount', searchable: false }, 
-    @endif
-
-    @if(is_col_visible('daily_sales_grouped', 'net_sales')) 
-        { data: 'net_sales', name: 'net_sales', searchable: false, orderable: false }, 
-    @endif
-
-    @if(is_col_visible('daily_sales_grouped', 'total_before_tax')) 
-        { data: 'total_before_tax', name: 'total_before_tax', searchable: false }, 
-    @endif
-
-    @if(is_col_visible('daily_sales_grouped', 'tax')) 
-        { data: 'total_tax', name: 'total_tax', searchable: false }, 
-    @endif
-
-    @if(is_col_visible('daily_sales_grouped', 'tax_type')) 
-        { data: 'tax_type', name: 'tax_type', searchable: false }, 
-    @endif
-
-    @if(is_col_visible('daily_sales_grouped', 'return_not_paid')) 
-        { data: 'return_due', name: 'return_due', searchable: false }, 
-    @endif
-
-    @if(is_col_visible('daily_sales_grouped', 'action')) 
-        { data: 'action', name: 'action', orderable: false, searchable: false }, 
-    @endif
-],
-           footerCallback: function (row, data, start, end, display) {
+            columns: [
+              
+                    { data: 'date', name: 'date' }, 
+                
+               
+                    { data: 'location_name', name: 'bl.name' }, 
+                
+               
+                    { data: 'total_invoices', name: 'total_invoices', searchable: false }, 
+               
+                
+                    { data: 'total_sales', name: 'total_sales', searchable: false }, 
+                
+                
+                    { data: 'total_returns_count', name: 'total_returns_count', searchable: false }, 
+                
+                
+                    { data: 'total_return_amount', name: 'total_return_amount', searchable: false }, 
+               
+                
+                    { data: 'net_sales', name: 'net_sales', searchable: false, orderable: false }, 
+              
+                
+                    { data: 'total_before_tax', name: 'total_before_tax', searchable: false }, 
+                  //  { data: 'total_discount', name: 'total_discount' }, 
+               
+                // أعمدة الضرائب الديناميكية
+                 @foreach($taxes as $tax)
+                 { 
+                 data: 'tax_{{$tax['id']}}_total', 
+                 name: 'tax_{{$tax['id']}}_total', 
+                 searchable: false,
+                  render: function(data, type, row) {
+                  if (type === 'display') {
+                     return __number_f(data);
+                  }
+                  return data;
+                 }
+                 },
+                @endforeach
+                   { 
+        data: 'total_all_taxes', 
+        name: 'total_all_taxes', 
+        searchable: false,
+        render: function(data, type, row) {
+            return type === 'display' ? __number_f(data) : data;
+        }
+    },
+               
+                    { data: 'return_due', name: 'return_due', searchable: false }, 
+                
+                
+                    { data: 'action', name: 'action', orderable: false, searchable: false }, 
+                
+            ],
+footerCallback: function (row, data, start, end, display) {
     var api = this.api();
     
-    // دالة مساعدة لحساب المجموع بناءً على اسم العمود (data source name)
     var sumColumn = function(colName, isCurrency = true) {
-        // جلب رقم العمود الحالي بناءً على اسمه البرمجي
         var colIndex = api.column(colName + ':name').index();
-        
-        // التأكد من أن العمود موجود وظاهر حالياً
         if (colIndex !== undefined) {
             var total = api.column(colIndex).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0);
             var html = isCurrency ? __currency_trans_from_en(total, true) : __number_f(total);
@@ -253,67 +278,154 @@
         }
     };
 
-    // حساب المجاميع ديناميكياً (الأسماء هنا تطابق الخاصية 'data' في تعريف الأعمدة)
     sumColumn('total_invoices', false);
     sumColumn('total_sales', true);
     sumColumn('total_returns_count', false);
     sumColumn('total_return_amount', true);
     sumColumn('net_sales', true);
     sumColumn('total_before_tax', true);
-    sumColumn('total_tax', true);
+    
+    // جمع ضرائب الأسطر المنفردة
+    @foreach($taxes as $tax)
+        sumColumn('tax_{{$tax['id']}}_total', true);
+    @endforeach
+    
+    // جمع عمود مجموع الضرائب الكلي الجديد
+    sumColumn('total_all_taxes', true); 
+    
     sumColumn('return_due', true);
 }
         });
 
-        sales_detailed_table = $('#sales_detailed_table').DataTable({
-            processing: true,
-            serverSide: true,
-            aaSorting: [[0, 'desc']],
-            ajax: {
-                url: "{{ action([\App\Http\Controllers\ReportController::class, 'detailedSalesReport']) }}",
-                data: function(d) {
-                    var dates = get_filter_dates();
-                    d.start_date = dates.start;
-                    d.end_date = dates.end;
-                    d.location_id = $('#location_id').val();
-                }
-            },
-            columns: [
-                { data: 'transaction_date', name: 'transaction_date' },
-                { data: 'invoice_no', name: 'invoice_no' },
-                { data: 'location_name', name: 'bl.name' },
-                { data: 'customer_name', name: 'c.name' },
-                { data: 'line_total_before_tax', name: 'line_total_before_tax' },
-                { data: 'line_total_tax', name: 'line_total_tax' },
-                { data: 'final_total', name: 'final_total' },
-                { data: 'tax_type', name: 'tr.name' },
-                { data: 'payment_status', name: 'payment_status' },
-                { data: 'payment_methods', name: 'payment_methods', orderable: false },
-                { data: 'action', name: 'action', orderable: false, searchable: false }
-            ],
-            footerCallback: function (row, data, start, end, display) {
-                var api = this.api();
-                $(api.column(4).footer()).html(__currency_trans_from_en(api.column(4).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0), true));
-                $(api.column(5).footer()).html(__currency_trans_from_en(api.column(5).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0), true));
-                $(api.column(6).footer()).html(__currency_trans_from_en(api.column(6).data().reduce((a, b) => get_raw_value(a) + get_raw_value(b), 0), true));
-            }
-        });
+        // تهيئة الجدول التفصيلي
+        setTimeout(function() {
+            initializeDetailedTable();
+        }, 500);
 
-        // التبديل وتحديث الفلاتر
-        $('#view_type').change(function() {
+        function initializeDetailedTable() {
+            if ($.fn.DataTable.isDataTable('#sales_detailed_table')) {
+                $('#sales_detailed_table').DataTable().destroy();
+            }
+            
+            sales_detailed_table = $('#sales_detailed_table').DataTable({
+                processing: true,
+                serverSide: true,
+                aaSorting: [[0, 'desc']],
+                ajax: {
+                    url: "{{ action([\App\Http\Controllers\ReportController::class, 'detailedSalesReport']) }}",
+                    data: function(d) {
+                        var dates = get_filter_dates();
+                        d.start_date = dates.start;
+                        d.end_date = dates.end;
+                        d.location_id = $('#location_id').val();
+                        console.log('Sending dates:', d); // للتصحيح
+                    },
+                    error: function(xhr, error, thrown) {
+                        console.log('Ajax Error:', xhr.responseText);
+                    }
+                },
+                columns: [
+    { data: 'transaction_date', name: 'transaction_date' },
+    { data: 'invoice_no', name: 'invoice_no' },
+    { data: 'location_name', name: 'bl.name' },
+    { data: 'customer_name', name: 'c.name' },
+    { data: 'line_total_before_tax', name: 'line_total_before_tax' },
+    
+    // أعمدة الضرائب الديناميكية
+    @foreach($taxes as $tax)
+    { 
+       data: "tax_{{$tax['id']}}", // تأكدي أن الاسم يطابق الـ Select في Controller
+    name: "tax_{{$tax['id']}}",
+    searchable: false, 
+    orderable: false, 
+    render: function(data, type, row) {
+        return type === 'display' ? __number_f(data) : data;
+    }
+    },
+    @endforeach
+    
+    { data: 'final_total', name: 'final_total' },
+    { data: 'payment_status', name: 'payment_status' },
+    { data: 'payment_methods', name: 'payment_methods', orderable: false },
+    { data: 'action', name: 'action', orderable: false, searchable: false }
+],
+          footerCallback: function (row, data, start, end, display) {
+    var api = this.api();
+    
+    try {
+        // قبل الضريبة - العمود 4 (ثابت)
+        if (api.column(4) && api.column(4).data().length) {
+            var beforeTax = api.column(4).data().reduce(function(a, b) {
+                return parseFloat(a || 0) + parseFloat(b || 0);
+            }, 0);
+            $(api.column(4).footer()).html(__currency_trans_from_en(beforeTax, true));
+        }
+        
+        // حساب عدد أعمدة الضرائب
+        var taxesCount = {{ count($taxes) }};
+        
+        // المجموع النهائي - الآن في العمود (4 + taxesCount + 1)
+        var finalTotalColumnIndex = 4 + taxesCount + 1;
+        if (api.column(finalTotalColumnIndex) && api.column(finalTotalColumnIndex).data().length) {
+            var total = api.column(finalTotalColumnIndex).data().reduce(function(a, b) {
+                return parseFloat(a || 0) + parseFloat(b || 0);
+            }, 0);
+            $(api.column(finalTotalColumnIndex).footer()).html(__currency_trans_from_en(total, true));
+        }
+        
+        // مجاميع الضرائب الديناميكية
+        @foreach($taxes as $index => $tax)
+            try {
+                var taxCol = api.column('tax_{{$tax['id']}}:name');
+                if (taxCol && taxCol.data().length) {
+                    var taxTotal = taxCol.data().reduce(function(a, b) {
+                        return parseFloat(a || 0) + parseFloat(b || 0);
+                    }, 0);
+                    $(taxCol.footer()).html(__currency_trans_from_en(taxTotal, true));
+                } else {
+                    $(api.column('tax_{{$tax['id']}}:name').footer()).html(__currency_trans_from_en(0, true));
+                }
+            } catch(e) {
+                console.log('Error calculating tax for {{$tax['id']}}:', e);
+            }
+        @endforeach
+        
+    } catch(e) {
+        console.log('Footer callback error:', e);
+    }
+}
+            });
+        }
+
+        // التبديل بين الجداول
+        $('#view_type').on('change', function() {
             var val = $(this).val();
+            console.log('View type changed to:', val); // للتصحيح
+            
             if(val == 'detailed') {
                 $('#grouped_report_div').addClass('hide');
                 $('#detailed_report_div').removeClass('hide');
-                sales_detailed_table.ajax.reload();
+                
+                // تأكد من تهيئة الجدول التفصيلي
+                if (!sales_detailed_table) {
+                    initializeDetailedTable();
+                } else {
+                    sales_detailed_table.ajax.reload(null, false);
+                }
             } else {
                 $('#detailed_report_div').addClass('hide');
                 $('#grouped_report_div').removeClass('hide');
-                daily_sales_grouped_table.ajax.reload();
+                
+                if (daily_sales_grouped_table) {
+                    daily_sales_grouped_table.ajax.reload(null, false);
+                }
             }
         });
 
-        $(document).on('change', '#location_id', function() { reload_tables(); });
+        // تحديث عند تغيير الموقع
+        $(document).on('change', '#location_id', function() { 
+            reload_tables(); 
+        });
 
         // فتح المودال
         $(document).on('click', '.view-daily-details-modal', function(e) {
@@ -327,14 +439,33 @@
                 url: url,
                 dataType: 'html',
                 data: { date: date, location_id: location_id },
-                success: function(result) { $('.view_modal').html(result); }
+                success: function(result) { 
+                    $('.view_modal').html(result); 
+                },
+                error: function(xhr) {
+                    console.log('Modal error:', xhr);
+                }
             });
         });
+
+        // التحقق من وجود البيانات عند تحميل الصفحة
+        console.log('Page loaded, view_type:', $('#view_type').val());
     });
 
     function reload_tables() {
-        if (daily_sales_grouped_table) daily_sales_grouped_table.ajax.reload();
-        if (sales_detailed_table) sales_detailed_table.ajax.reload();
+        console.log('Reloading tables...');
+        
+        if ($('#view_type').val() == 'detailed') {
+            if (sales_detailed_table) {
+                sales_detailed_table.ajax.reload(null, false);
+            } else {
+                initializeDetailedTable();
+            }
+        } else {
+            if (daily_sales_grouped_table) {
+                daily_sales_grouped_table.ajax.reload(null, false);
+            }
+        }
     }
 </script>
 @endsection

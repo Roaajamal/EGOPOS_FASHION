@@ -113,6 +113,55 @@
           </div>
         </div>
         </div>
+
+        <hr>
+      
+        <div class="row check_group">
+        <div class="col-md-1">
+          <h4>@lang( 'role.sales' )</h4>
+        </div>
+        <div class="col-md-2">
+          <div class="checkbox">
+              <label>
+                <input type="checkbox" class="check_all input-icheck" > {{ __( 'role.select_all' ) }}
+              </label>
+            </div>
+        </div>
+        <div class="col-md-9">
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'sales.view', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.sales.view' ) }}
+              </label>
+            </div>
+          </div>
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'sales.create', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.sales.create' ) }}
+              </label>
+            </div>
+          </div>
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'sales.update', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.sales.update' ) }}
+              </label>
+            </div>
+          </div>
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'sales.delete', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.sales.delete' ) }}
+              </label>
+            </div>
+          </div>
+        </div>
+        </div>
         <hr>
         <div class="row check_group">
         <div class="col-md-1">
@@ -362,11 +411,56 @@
           <div class="col-md-12">
             <div class="checkbox">
               <label>
+                {!! Form::checkbox('permissions[]', 'add_product.view', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.add_product.view' ) }}
+              </label>
+            </div>
+          </div>
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'add_product.create', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.add_product.create' ) }}
+              </label>
+            </div>
+          </div>
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
                 {!! Form::checkbox('permissions[]', 'product.opening_stock', false, 
                 [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.add_opening_stock' ) }}
               </label>
             </div>
           </div>
+          <!--  role for new tabs -- daily stock and current stock --> 
+            <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'current_stock_tab.view', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.current_stock_tab.view' ) }}
+              </label>
+            </div>
+          </div>
+
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'daily_stock_tab.view', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.daily_stock_tab.view' ) }}
+              </label>
+            </div>
+          </div> 
+          <!--  role for new tabs -- daily stock and current stock -->  
+          
+           <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'print_barcode.view', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.print_barcode.view' ) }}
+              </label>
+            </div>
+          </div> 
+           
           <div class="col-md-12">
             <div class="checkbox">
               <label>
@@ -396,6 +490,34 @@
              </div>
           </div>
            <!--  add role for view and create quantity entry 001 -->
+
+           <!--  add role for view and create inventory 001 --> 
+          <div class="col-md-12">
+            <div class="checkbox">
+                <label>
+                 {!! Form::checkbox('permissions[]', 'inventory.view', false, 
+                 [ 'class' => 'input-icheck']); !!} {{ __( 'role.inventory.view' ) }}
+                </label>
+             </div>
+            </div>
+
+          <div class="col-md-12">
+            <div class="checkbox">
+               <label>
+                 {!! Form::checkbox('permissions[]', 'inventory.create', false, 
+                 [ 'class' => 'input-icheck']); !!} {{ __( 'role.inventory.create' ) }}
+                </label>
+             </div>
+          </div>
+           <!--  add role for view and create inventory 001 -->
+           <div class="col-md-12">
+            <div class="checkbox">
+               <label>
+                 {!! Form::checkbox('permissions[]', 'new_product.create', false, 
+                 [ 'class' => 'input-icheck']); !!} {{ __( 'role.new_product.create' ) }}
+                </label>
+             </div>
+          </div>
 
         </div>
         </div>
@@ -761,6 +883,38 @@
                   </label>
                 </div>
               </div>
+              <div class="col-md-12">
+                <div class="checkbox">
+                  <label>
+                    {!! Form::checkbox('permissions[]', 'open_cash_drawer', false,  
+                    [ 'class' => 'input-icheck']); !!} {{ __( 'role.open_cash_drawer' ) }}
+                  </label>
+                </div>
+              </div> 
+               <div class="col-md-12">
+                <div class="checkbox">
+                  <label>
+                    {!! Form::checkbox('permissions[]', 'enable_customer_ledger', false,  
+                    [ 'class' => 'input-icheck']); !!} {{ __( 'role.enable_customer_ledger' ) }}
+                  </label>
+                </div>
+              </div> 
+               <div class="col-md-12">
+                <div class="checkbox">
+                  <label>
+                    {!! Form::checkbox('permissions[]', 'enable_search_quantity', false,  
+                    [ 'class' => 'input-icheck']); !!} {{ __( 'role.enable_search_quantity' ) }}
+                  </label>
+                </div>
+              </div> 
+              <div class="col-md-12">
+                <div class="checkbox">
+                  <label>
+                    {!! Form::checkbox('permissions[]', 'sell.send_to_visa', false,  
+                    [ 'class' => 'input-icheck']); !!} {{ __( 'role.send_to_visa' ) }}
+                  </label>
+                </div>
+              </div> 
               <div class="col-md-12">
                 <div class="checkbox">
                   <label>
@@ -1513,10 +1667,21 @@
             <div class="checkbox">
               <label>
                 {!! Form::checkbox('permissions[]', 'contacts_report.view', false, 
-                [ 'class' => 'input-icheck']); !!} {{ __( 'role.contacts_report.view' ) }}
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.customer_group_report.view' ) }} 
               </label>
             </div>
           </div>
+         
+
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'items_report.view', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.items_report.view' ) }} 
+              </label>
+            </div>
+          </div>
+           
           @if(in_array('expenses', $enabled_modules))
           <div class="col-md-12">
             <div class="checkbox">
@@ -1546,6 +1711,24 @@
           <div class="col-md-12">
             <div class="checkbox">
               <label>
+                {!! Form::checkbox('permissions[]', 'product_sales_report.view', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.product_sales_report.view' ) }}
+              </label>
+            </div>
+          </div>
+         
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'cash_drawer.view', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.cash_drawer_report.view' ) }}
+              </label>
+            </div>
+          </div>
+         
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
                 {!! Form::checkbox('permissions[]', 'trending_product_report.view', false, 
                 [ 'class' => 'input-icheck']); !!} {{ __( 'role.trending_product_report.view' ) }}
               </label>
@@ -1559,6 +1742,15 @@
               </label>
             </div>
           </div>
+
+          <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'payment_method_report.view', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.payment_method_report.view' ) }}
+              </label>
+            </div>
+          </div> 
 
           <div class="col-md-12">
             <div class="checkbox">
@@ -1604,6 +1796,15 @@
             </div>
           </div>
           <!--  add roles for quantity entry report and missing product report 001 --> 
+          
+           <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'report.missing_product_with_sales', false,
+                 ['class' => 'input-icheck']); !!} {{ __( 'missing_product.missing_product_with_sales' ) }}
+              </label>
+            </div>
+          </div>
             
 
         </div>
@@ -1689,6 +1890,14 @@
               </label>
             </div>
           </div>
+           <div class="col-md-12">
+            <div class="checkbox">
+              <label>
+                {!! Form::checkbox('permissions[]', 'barcode_design.access', false, 
+                [ 'class' => 'input-icheck']); !!} {{ __( 'role.barcode_design.access' ) }}
+              </label>
+            </div>
+          </div> 
           <div class="col-md-12">
             <div class="checkbox">
               <label>

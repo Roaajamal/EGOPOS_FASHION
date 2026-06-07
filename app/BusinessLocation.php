@@ -139,6 +139,12 @@ class BusinessLocation extends Model
         return $featured_products;
     }
 
+     public function printer()
+{
+    return $this->belongsTo(\App\Printer::class);
+} 
+ 
+
     public function getLocationAddressAttribute()
     {
         $location = $this;

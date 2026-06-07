@@ -273,7 +273,7 @@ private function checkBranchFatoraSettings($businessId, $locationId)
         }
 
         $invoice->customerInformation()
-            ->setId($customerId, 'TIN')
+            ->setId($customerId, 'TN')
             ->setName($customerName);
 
         // Add phone if available (remove non-numeric characters)
@@ -900,7 +900,7 @@ private function checkBranchFatoraSettings($businessId, $locationId)
         }
 
         $invoice->customerInformation()
-            ->setId($customerId, 'TIN')
+            ->setId($customerId, 'TN')
             ->setName($customerName);
 
         if ($customer && !empty($customer->mobile)) {

@@ -247,7 +247,6 @@ class CashRegisterController extends Controller
         \App\Transaction::whereIn('id', $draft_ids)->delete();
     }
 
-    // 2. تصفير العداد (لاحظ أسماء الأعمدة الصحيحة من صورتك)
    \DB::table('reference_counts')
         ->where('business_id', $business_id)
         ->where('ref_type', 'draft')

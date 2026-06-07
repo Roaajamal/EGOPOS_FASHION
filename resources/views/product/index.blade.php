@@ -1,3 +1,14 @@
+@php
+    $custom_labels = json_decode(session('business.custom_labels'), true);
+    $active_custom_fields = [];
+    for ($i = 1; $i <= 10; $i++) {
+        $label = $custom_labels['product']['custom_field_' . $i] ?? '';
+        if (!empty($label)) {
+            $active_custom_fields['product_custom_field' . $i] = $label;
+        }
+    }
+@endphp
+
 @extends('layouts.app')
 @section('title', __('sale.products'))
 
@@ -47,6 +58,46 @@
                         </div>
                     </div>
 
+      <div class="col-md-2 daily_stock_filter" style="display:none;">
+    <div class="form-group">
+        {!! Form::label('snapshot_date', __('lang_v1.stock_date') ) !!}
+        {!! Form::text('snapshot_date', now()->format('Y-m-d'), [
+            'class'    => 'form-control',
+            'id'       => 'snapshot_date',
+            'readonly' => true,
+        ]) !!}
+    </div>
+</div>
+
+<div class="col-md-3 daily_stock_filter" style="display:none;">
+    <div class="form-group">
+        {!! Form::label('daily_location_ids', __('lang_v1.locations')) !!}
+        {!! Form::select('daily_location_ids[]', $stock_locations, null, [
+            'class'    => 'form-control select2',
+            'style'    => 'width:100%',
+            'id'       => 'daily_location_ids',
+            'multiple' => 'multiple',
+        ]) !!}
+    </div>
+</div> 
+
+                  <div class="col-md-3 daily_stock_filter" style="display:none;">
+    <div class="form-group">
+        {!! Form::label('daily_stock_filter', __('lang_v1.stock_quantity') . ':') !!}
+        {!! Form::select('daily_stock_filter', [
+            ''    => __('messages.all'),
+            'gt'  => __('lang_v1.greater_than_zero'),
+            'lt'  => __('lang_v1.less_than_zero'),
+            'gte' => __('lang_v1.greater_than_or_equal_zero'),
+            'lte' => __('lang_v1.less_than_or_equal_zero'),
+            'eq'  => __('lang_v1.equal_zero'),
+        ], null, [
+            'class' => 'form-control select2',
+            'style' => 'width:100%',
+            'id'    => 'daily_stock_filter_qty'
+        ]) !!}
+    </div>
+</div>
                     <div class="col-md-3">
                         <div class="form-group">
                             {!! Form::label('unit_id', __('product.unit') . ':') !!}
@@ -58,6 +109,47 @@
                             ]) !!}
                         </div>
                     </div>
+                    @if (!empty($custom_labels['product']['custom_field_1'] ?? ''))
+<div class="col-md-3" id="cf_filter_1">
+    <div class="form-group">
+        {!! Form::label('custom_field1', ($custom_labels['product']['custom_field_1']) . ':') !!}
+        {!! Form::select('custom_field1', $custom_field1_values, null, [
+            'class'       => 'form-control select2',
+            'style'       => 'width:100%',
+            'id'          => 'filter_cf1',
+            'placeholder' => __('lang_v1.all'),
+        ]) !!}
+    </div>
+</div>
+@endif
+
+@if (!empty($custom_labels['product']['custom_field_2'] ?? ''))
+<div class="col-md-3" id="cf_filter_2">
+    <div class="form-group">
+        {!! Form::label('custom_field2', ($custom_labels['product']['custom_field_2']) . ':') !!}
+        {!! Form::select('custom_field2', $custom_field2_values, null, [
+            'class'       => 'form-control select2',
+            'style'       => 'width:100%',
+            'id'          => 'filter_cf2',
+            'placeholder' => __('lang_v1.all'),
+        ]) !!}
+    </div>
+</div>
+@endif
+
+@if (!empty($custom_labels['product']['custom_field_3'] ?? ''))
+<div class="col-md-3" id="cf_filter_3">
+    <div class="form-group">
+        {!! Form::label('custom_field3', ($custom_labels['product']['custom_field_3']) . ':') !!}
+        {!! Form::select('custom_field3', $custom_field3_values, null, [
+            'class'       => 'form-control select2',
+            'style'       => 'width:100%',
+            'id'          => 'filter_cf3',
+            'placeholder' => __('lang_v1.all'),
+        ]) !!}
+    </div>
+</div>
+@endif
                     <div class="col-md-3">
                         <div class="form-group">
                             {!! Form::label('tax_id', __('product.tax') . ':') !!}
@@ -91,8 +183,9 @@
                         </div>
                     </div>
                     <div class="col-md-3">
-                        <br>
+                        
                         <div class="form-group">
+                            {!! Form::label('active_state', __('lang_v1.status') . ':') !!} 
                             {!! Form::select(
                                 'active_state',
                                 ['active' => __('business.is_active'), 'inactive' => __('lang_v1.inactive')],
@@ -154,13 +247,30 @@
                                      @lang('report.stock_report')</a>
                                 </li>
                             @endcan
+                            @can('daily_stock_tab.view')
+                                <li>
+                                     <a href="#product_daily_stock_report" {{-- ← هون التعديل --}}
+                                        data-toggle="tab" aria-expanded="true">
+                                              <i class="fa fa-calendar" aria-hidden="true"></i>
+                                           @lang('report.daily_stock_report')
+                                     </a>
+                                </li>
+                            @endcan
+                            @can('current_stock_tab.view')
+                                <li>
+                                     <a href="#product_current_stock_report" data-toggle="tab" aria-expanded="true">
+                                     <i class="fa fa-cubes" aria-hidden="true"></i>
+                                        @lang('report.current_stock_report')
+                                      </a>
+                                </li>
+                            @endcan  
                         </ul>
 
                         <div class="tab-content">
                             <div class="tab-pane active " id="product_list_tab">
                                 @if ($is_admin)
 
-                                    <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full pull-right tw-m-2"
+                                    <a class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-font-bold tw-rounded-full pull-right"
                                         href="{{ action([\App\Http\Controllers\ProductController::class, 'downloadExcel']) }}">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
                                             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -175,7 +285,7 @@
                                 @endif
                                 @can('product.create')
 
-                                    <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full pull-right tw-m-2"
+                                    <a class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-font-bold tw-rounded-full pull-right"
                                         href="{{ action([\App\Http\Controllers\ProductController::class, 'create']) }}">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
                                             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -194,6 +304,21 @@
                                     @include('report.partials.stock_report_table')
                                 </div>
                             @endcan
+                          
+                            @can('daily_stock_tab.view')
+                              <div class="tab-pane" id="product_daily_stock_report">
+                                 @include('product.partials.daily_stock_report_table', [
+                                'locations' => $stock_locations  // ← مش $business_locations
+                                  ])
+                                   </div>
+                                  @endcan
+
+                                    @can('current_stock_tab.view')
+                                          <div class="tab-pane" id="product_current_stock_report">
+                                          @include('product.partials.current_stock_report_table')
+                                           </div>
+                                    @endcan 
+                           
                         </div>
                     </div>
                 </div>
@@ -223,9 +348,326 @@
 @endsection
 
 @section('javascript')
+
+
+@php
+    $col_labels = [
+        'product'        => __('sale.product'),
+        'category'       => __('product.category'),
+        'sub_category'   => __('product.sub_category'),
+        'brand'          => __('product.brand'),
+        'unit'           => __('product.unit'),
+        'tax'            => __('product.tax'),
+        'type'           => __('product.product_type'),
+        'selling_price'  => __('lang_v1.selling_price'),
+        'purchase_price' => __('lang_v1.unit_perchase_price'),
+    ];
+
+    $custom_labels = json_decode(session('business.custom_labels'), true);
+    $active_custom_fields = [];
+    for ($i = 1; $i <= 10; $i++) {
+        $label = $custom_labels['product']['custom_field_' . $i] ?? '';
+        if (!empty($label)) {
+            $active_custom_fields['product_custom_field' . $i] = $label;
+        }
+    }
+@endphp
+ 
     <script src="{{ asset('js/product.js?v=' . $asset_v) }}"></script>
     <script src="{{ asset('js/opening_stock.js?v=' . $asset_v) }}"></script>
     <script type="text/javascript">
+
+     var daily_stock_table = null;
+
+function loadDailyStockReport() {
+    var snapshot_date = $('#snapshot_date').val();
+    if (!snapshot_date) return;
+
+    var selected_locations = $('#daily_location_ids').val() || [];
+
+    if (!selected_locations || selected_locations.length === 0) {
+        $('#daily_stock_report_container').html(
+            '<p class="text-center text-muted">اختر فرع واحد على الأقل</p>'
+        );
+        return;
+    }
+
+    // destroy نهائي قبل أي شي
+    if (daily_stock_table !== null) {
+        daily_stock_table.destroy();
+        daily_stock_table = null;
+    }
+    $('#daily_stock_thead').empty();
+    $('#daily_stock_tfoot').empty();
+    $('#daily_stock_table tbody').empty();
+
+    // جيب أسماء الفروع المختارة
+    var location_names = [];
+    $('#daily_location_ids option:selected').each(function() {
+        location_names.push($(this).text());
+    });
+
+    // بناء الـ thead
+  @php
+    $custom_labels = json_decode(session('business.custom_labels'), true);
+    $product_custom_fields = [];
+    for ($i = 1; $i <= 10; $i++) {
+        $label = $custom_labels['product']['custom_field_' . $i] ?? '';
+        if (!empty($label)) {
+            $product_custom_fields[$i] = $label;
+        }
+    }
+@endphp
+
+var thead = '<th>SKU</th>' +
+    '<th>{{ $col_labels["product"] }}</th>' +
+    '<th>{{ $col_labels["category"] }}</th>' +
+    '<th>{{ $col_labels["sub_category"] }}</th>' +
+    '<th>{{ $col_labels["brand"] }}</th>' +
+    '<th>{{ $col_labels["unit"] }}</th>' +
+    '<th>{{ $col_labels["tax"] }}</th>' +
+    '<th>{{ $col_labels["type"] }}</th>' +
+    '<th>{{ $col_labels["selling_price"] }}</th>' +
+    '<th>{{ $col_labels["purchase_price"] }}</th>';
+
+var columns = [
+    { data: 0, title: 'SKU' },
+    { data: 1, title: '{{ $col_labels["product"] }}' },
+    { data: 2, title: '{{ $col_labels["category"] }}' },
+    { data: 3, title: '{{ $col_labels["sub_category"] }}' },
+    { data: 4, title: '{{ $col_labels["brand"] }}' },
+    { data: 5, title: '{{ $col_labels["unit"] }}' },
+    { data: 6, title: '{{ $col_labels["tax"] }}' },
+    { data: 7, title: '{{ $col_labels["type"] }}' },
+    { data: 8, title: '{{ $col_labels["selling_price"] }}',  searchable: false },
+    { data: 9, title: '{{ $col_labels["purchase_price"] }}', searchable: false },
+];
+
+// أضف الـ custom fields المفعلة فقط
+@foreach($product_custom_fields as $index => $label)
+    thead += '<th>{{ $label }}</th>';
+    columns.push({ data: {{ $loop->index + 10 }}, title: '{{ $label }}' });
+@endforeach
+
+var fixed_cols = {{ count($product_custom_fields) + 10 }};
+
+// الفروع
+location_names.forEach(function(name, i) {
+    thead += '<th>' + name + '</th>';
+    columns.push({ data: i + fixed_cols, title: name, searchable: false });
+});
+
+thead += '<th>الإجمالي</th>';
+columns.push({
+    data      : location_names.length + fixed_cols,
+    title     : 'الإجمالي',
+    searchable: false,
+    render    : function(data) {
+        return '<strong>' + (data ?? 0) + '</strong>';
+    }
+    });
+
+    $('#daily_stock_thead').html(thead);
+
+    var tfoot = '';
+    columns.forEach(function(col, i) {
+        tfoot += '<th class="footer_col_' + i + '"></th>';
+    });
+    $('#daily_stock_tfoot').html(tfoot);
+
+    daily_stock_table = $('#daily_stock_table').DataTable({
+        processing : true,
+        serverSide : true,
+        pageLength : 25,
+        ajax: {
+            url  : '{{ route("product.daily_stock_history") }}',
+            data : function(d) {
+                d.snapshot_date    = $('#snapshot_date').val();
+                d.location_ids     = $('#daily_location_ids').val();
+                d.stock_filter   = $('#daily_stock_filter_qty').val();
+                d.category_id   = $('#product_list_filter_category_id').val();
+                d.brand_id      = $('#product_list_filter_brand_id').val();
+                d.unit_id       = $('#product_list_filter_unit_id').val();
+                d.tax_id        = $('#product_list_filter_tax_id').val();
+                d.type          = $('#product_list_filter_type').val();
+                d.active_state  = $('#active_state').val();
+
+                d.custom_field1 = $('#filter_cf1').val();
+                d.custom_field2 = $('#filter_cf2').val();
+                d.custom_field3 = $('#filter_cf3').val(); 
+            }
+        },
+      footerCallback: function() {
+    var api = this.api();
+    var grand_total = 0;
+
+    columns.forEach(function(col, i) {
+        if (i < fixed_cols) return;
+        var total = api.column(i, { page: 'all' })
+            .data()
+            .reduce(function(a, b) {
+                return parseFloat(a || 0) + parseFloat(b || 0);
+            }, 0);
+        if (i === columns.length - 1) {
+            $('.footer_col_' + i).html('<strong>' + grand_total + '</strong>');
+        } else {
+            grand_total += total;
+            $('.footer_col_' + i).html('<strong>' + total + '</strong>');
+        }
+    });
+
+    for (var i = 0; i < fixed_cols; i++) {
+        if (i === 1) {
+            $('.footer_col_1').html('<strong>الإجمالي</strong>');
+        } else {
+            $('.footer_col_' + i).html('');
+        }
+    }
+},  
+ fnDrawCallback: function() {
+            __currency_convert_recursively($('#daily_stock_table'));
+        }
+    });
+}
+
+      ////////////  for current stock report
+
+      var current_stock_table = null;
+
+function loadCurrentStockReport() {
+    var selected_locations = $('#daily_location_ids').val() || [];
+
+    if (!selected_locations || selected_locations.length === 0) {
+        $('#current_stock_report_container').html(
+            '<p class="text-center text-muted">اختر فرع واحد على الأقل</p>'
+        );
+        return;
+    }
+
+    if (current_stock_table !== null) {
+        current_stock_table.destroy();
+        current_stock_table = null;
+    }
+    $('#current_stock_thead').empty();
+    $('#current_stock_tfoot').empty();
+    $('#current_stock_table tbody').empty();
+
+    var location_names = [];
+    $('#daily_location_ids option:selected').each(function() {
+        location_names.push($(this).text());
+    });
+
+    var thead = '<th>SKU</th>' +
+    '<th>{{ $col_labels["product"] }}</th>' +
+    '<th>{{ $col_labels["category"] }}</th>' +
+    '<th>{{ $col_labels["sub_category"] }}</th>' +
+    '<th>{{ $col_labels["brand"] }}</th>' +
+    '<th>{{ $col_labels["unit"] }}</th>' +
+    '<th>{{ $col_labels["tax"] }}</th>' +
+    '<th>{{ $col_labels["type"] }}</th>' +
+    '<th>{{ $col_labels["selling_price"] }}</th>' +
+    '<th>{{ $col_labels["purchase_price"] }}</th>';
+
+    var columns = [
+    { data: 0, title: 'SKU' },
+    { data: 1, title: '{{ $col_labels["product"] }}' },
+    { data: 2, title: '{{ $col_labels["category"] }}' },
+    { data: 3, title: '{{ $col_labels["sub_category"] }}' },
+    { data: 4, title: '{{ $col_labels["brand"] }}' },
+    { data: 5, title: '{{ $col_labels["unit"] }}' },
+    { data: 6, title: '{{ $col_labels["tax"] }}' },
+    { data: 7, title: '{{ $col_labels["type"] }}' },
+    { data: 8, title: '{{ $col_labels["selling_price"] }}',  searchable: false },
+    { data: 9, title: '{{ $col_labels["purchase_price"] }}', searchable: false },
+];
+
+    @foreach($active_custom_fields as $field => $label)
+        thead += '<th>{{ $label }}</th>';
+        columns.push({ data: {{ $loop->index + 10 }}, title: '{{ $label }}' });
+    @endforeach
+
+    var current_fixed_cols = {{ count($active_custom_fields) + 10 }};
+
+    location_names.forEach(function(name, i) {
+        thead += '<th>' + name + '</th>';
+        columns.push({ data: i + current_fixed_cols, title: name, searchable: false });
+    });
+
+    thead += '<th>الإجمالي</th>';
+    columns.push({
+        data      : location_names.length + current_fixed_cols,
+        title     : 'الإجمالي',
+        searchable: false,
+        render    : function(data) {
+            return '<strong>' + (data ?? 0) + '</strong>';
+        }
+    });
+
+    $('#current_stock_thead').html(thead);
+
+    var tfoot = '';
+    columns.forEach(function(col, i) {
+        tfoot += '<th class="current_footer_col_' + i + '"></th>';
+    });
+    $('#current_stock_tfoot').html(tfoot);
+
+    current_stock_table = $('#current_stock_table').DataTable({
+        processing : true,
+        serverSide : true,
+        pageLength : 25,
+        
+        
+        columns    : columns,
+       
+        ajax: {
+            url  : '{{ route("product.current_stock") }}',
+            data : function(d) {
+                d.location_ids = $('#daily_location_ids').val();
+                d.stock_filter = $('#daily_stock_filter_qty').val();
+                d.category_id   = $('#product_list_filter_category_id').val();
+                d.brand_id      = $('#product_list_filter_brand_id').val();
+                d.unit_id       = $('#product_list_filter_unit_id').val();
+                d.tax_id        = $('#product_list_filter_tax_id').val();
+                d.type          = $('#product_list_filter_type').val();
+                d.active_state  = $('#active_state').val();
+                d.custom_field1 = $('#filter_cf1').val();
+                d.custom_field2 = $('#filter_cf2').val();
+                d.custom_field3 = $('#filter_cf3').val();
+                }
+        },
+        footerCallback: function() {
+            var api = this.api();
+            var grand_total = 0;
+
+            columns.forEach(function(col, i) {
+                if (i < current_fixed_cols) return;
+                var total = api.column(i, { page: 'all' })
+                    .data()
+                    .reduce(function(a, b) {
+                        return parseFloat(a || 0) + parseFloat(b || 0);
+                    }, 0);
+                if (i === columns.length - 1) {
+                    $('.current_footer_col_' + i).html('<strong>' + grand_total + '</strong>');
+                } else {
+                    grand_total += total;
+                    $('.current_footer_col_' + i).html('<strong>' + total + '</strong>');
+                }
+            });
+
+            for (var i = 0; i < current_fixed_cols; i++) {
+                if (i === 1) {
+                    $('.current_footer_col_1').html('<strong>الإجمالي</strong>');
+                } else {
+                    $('.current_footer_col_' + i).html('');
+                }
+            }
+        },
+        fnDrawCallback: function() {
+            __currency_convert_recursively($('#current_stock_table'));
+        }
+    });
+}
+
         $(document).ready(function() {
             product_table = $('#product_table').DataTable({
                 processing: true,
@@ -248,6 +690,9 @@
                         d.active_state = $('#active_state').val();
                         d.not_for_selling = $('#not_for_selling').is(':checked');
                         d.location_id = $('#location_id').val();
+                        d.custom_field1 = $('#filter_cf1').val();
+d.custom_field2 = $('#filter_cf2').val();
+d.custom_field3 = $('#filter_cf3').val();
                         if ($('#repair_model_id').length == 1) {
                             d.repair_model_id = $('#repair_model_id').val();
                         }
@@ -529,17 +974,44 @@
                 });
             });
 
-            $(document).on('change',
-                '#product_list_filter_type, #product_list_filter_category_id, #product_list_filter_brand_id, #product_list_filter_unit_id, #product_list_filter_tax_id, #location_id, #active_state, #repair_model_id',
-                function() {
-                    if ($("#product_list_tab").hasClass('active')) {
-                        product_table.ajax.reload();
-                    }
+          $(document).on('select2:select select2:unselect', '#daily_location_ids', function() {
+    // destroy الجدول القديم نهائياً
+    if (daily_stock_table !== null) {
+        daily_stock_table.destroy();
+        daily_stock_table = null;
+    }
+    
+    // امسح الـ thead و tfoot و tbody
+    $('#daily_stock_thead').empty();
+    $('#daily_stock_tfoot').empty();
+    $('#daily_stock_table tbody').empty();
+    
+    if ($('#product_daily_stock_report').hasClass('active')) {
+        setTimeout(function() {
+            loadDailyStockReport();
+        }, 100);
+    }
+});
+ 
+           $(document).on('change select2:select select2:unselect',
+    '#product_list_filter_type, #product_list_filter_category_id, #product_list_filter_brand_id, #product_list_filter_unit_id, #product_list_filter_tax_id, #location_id, #active_state, #repair_model_id, #filter_cf1, #filter_cf2, #filter_cf3',
+    function() {
+        if ($("#product_list_tab").hasClass('active')) {
+            product_table.ajax.reload();
+        }
 
-                    if ($("#product_stock_report").hasClass('active')) {
-                        stock_report_table.ajax.reload();
-                    }
-                });
+        if ($("#product_stock_report").hasClass('active')) {
+            stock_report_table.ajax.reload();
+        }
+
+        if ($("#product_daily_stock_report").hasClass('active') && daily_stock_table !== null) {
+            daily_stock_table.ajax.reload();
+        }
+
+        if ($("#product_current_stock_report").hasClass('active') && current_stock_table !== null) {
+            current_stock_table.ajax.reload();
+        }
+    });
 
             $(document).on('ifChanged', '#not_for_selling, #woocommerce_enabled', function() {
                 if ($("#product_list_tab").hasClass('active')) {
@@ -554,6 +1026,37 @@
             $('#product_location').select2({
                 dropdownParent: $('#product_location').closest('.modal')
             });
+
+            $('#product_location').select2({
+    dropdownParent: $('#product_location').closest('.modal')
+});
+
+// ← حط هنا
+$('#snapshot_date').daterangepicker({
+    singleDatePicker : true,
+    showDropdowns    : true,
+    autoApply        : true,
+    startDate        : moment(),
+    locale           : {
+        format : 'YYYY-MM-DD',
+    }
+}, function(start) {
+    $('#snapshot_date').val(start.format('YYYY-MM-DD'));
+
+    if ($('#product_daily_stock_report').hasClass('active')) {
+        if (daily_stock_table !== null) {
+            daily_stock_table.destroy();
+            daily_stock_table = null;
+        }
+        $('#daily_stock_thead').empty();
+        $('#daily_stock_tfoot').empty();
+        $('#daily_stock_table tbody').empty();
+
+        setTimeout(function() {
+            loadDailyStockReport();
+        }, 100);
+    }
+}); 
 
             @if ($is_woocommerce)
                 $(document).on('click', '.toggle_woocomerce_sync', function(e) {
@@ -614,6 +1117,9 @@
             });
         var data_table_initailized = false;
         $('a[data-toggle="tab"]').on('shown.bs.tab', function(e) {
+             $('.daily_stock_filter').hide();
+             $('#location_filter').show();
+             $('#active_state').closest('.col-md-3').show();
             if ($(e.target).attr('href') == '#product_stock_report') {
                 if (!data_table_initailized) {
                     //Stock report table
@@ -712,6 +1218,7 @@
                             searchable: false
                         });
                     }
+                    
                     stock_report_table = $('#stock_report_table').DataTable({
                         order: [
                             [1, 'asc']
@@ -732,6 +1239,9 @@
                                 d.type = $('#product_list_filter_type').val();
                                 d.active_state = $('#active_state').val();
                                 d.not_for_selling = $('#not_for_selling').is(':checked');
+                                 d.product_custom_field1 = $('#filter_cf1').val();
+        d.product_custom_field2 = $('#filter_cf2').val();
+        d.product_custom_field3 = $('#filter_cf3').val(); 
                                 if ($('#repair_model_id').length == 1) {
                                     d.repair_model_id = $('#repair_model_id').val();
                                 }
@@ -802,17 +1312,115 @@
                         },
                     });
                     data_table_initailized = true;
+                    // الاستماع لحدث التغيير في فلاتر الحقول المخصصة لإعادة تحميل جدول تقرير المخزون
+                    $(document).on('change select2:select select2:unselect', '#filter_cf1, #filter_cf2, #filter_cf3', function() {
+    if ($("#product_stock_report").hasClass('active') && stock_report_table !== null) {
+        stock_report_table.ajax.reload();
+    }
+});
+
                 } else {
                     stock_report_table.ajax.reload();
                 }
+
+            } else if ($(e.target).attr('href') == '#product_daily_stock_report') {
+                $('#location_filter').hide();
+                $('.daily_stock_filter').show();
+                $('#snapshot_date').closest('.col-md-2').show(); // ← أظهر فلتر التاريخ
+                $('#active_state').closest('.col-md-3').hide();
+
+
+                if (!$('#snapshot_date').val()) {
+                    $('#snapshot_date').val(new Date().toISOString().split('T')[0]);
+                }
+
+                if (!$('#daily_location_ids').val() || $('#daily_location_ids').val().length === 0) {
+                    var first_option = $('#daily_location_ids option:first').val();
+                    if (first_option) {
+                        $('#daily_location_ids').val([first_option]).trigger('change');
+                    }
+                }
+
+                setTimeout(function() {
+                    loadDailyStockReport();
+                }, 200);
+
+            } else if ($(e.target).attr('href') == '#product_current_stock_report') {
+                $('#location_filter').hide();
+                $('.daily_stock_filter').show();
+                $('#snapshot_date').closest('.col-md-2').hide(); // ← أخفي فلتر التاريخ
+                $('#active_state').closest('.col-md-3').hide();
+
+
+                if (!$('#daily_location_ids').val() || $('#daily_location_ids').val().length === 0) {
+                    var first_option = $('#daily_location_ids option:first').val();
+                    if (first_option) {
+                        $('#daily_location_ids').val([first_option]).trigger('change');
+                    }
+                }
+
+                setTimeout(function() {
+                    loadCurrentStockReport();
+                }, 300);
+
             } else {
+                $('.daily_stock_filter').hide();
+                $('#location_filter').show();
+                $('#active_state').closest('.col-md-3').show();
+
+                $('#snapshot_date').closest('.col-md-2').hide(); // ← أخفي عند التابات الثانية
                 product_table.ajax.reload();
             }
 
-            // remove class from data table button
             $('.btn-default').removeClass('btn-default');
             $('.tw-dw-btn-outline').removeClass('btn');
         });
+
+        // ← هنا بعد حدث التاب مباشرة
+        $(document).on('change', '#daily_stock_filter_qty', function() {
+            if ($('#product_daily_stock_report').hasClass('active') && daily_stock_table !== null) {
+                daily_stock_table.ajax.reload();
+            }
+            if ($('#product_current_stock_report').hasClass('active') && current_stock_table !== null) {
+                current_stock_table.ajax.reload();
+            }
+        });
+
+      
+
+   
+
+// ── Daily Stock Report ─────────────────────────────────────────────
+
+
+
+
+
+ $(document).on('select2:select select2:unselect', '#daily_location_ids', function() {
+    if (daily_stock_table !== null) {
+        daily_stock_table.destroy();
+        daily_stock_table = null;
+    }
+    $('#daily_stock_thead').empty();
+    $('#daily_stock_tfoot').empty();
+    $('#daily_stock_table tbody').empty();
+
+    if (current_stock_table !== null) {
+        current_stock_table.destroy();
+        current_stock_table = null;
+    }
+    $('#current_stock_thead').empty();
+    $('#current_stock_tfoot').empty();
+    $('#current_stock_table tbody').empty();
+
+    if ($('#product_daily_stock_report').hasClass('active')) {
+        setTimeout(function() { loadDailyStockReport(); }, 100);
+    }
+
+    if ($('#product_current_stock_report').hasClass('active')) {
+        setTimeout(function() { loadCurrentStockReport(); }, 100);
+    }
+});
 
         $(document).on('click', '.update_product_location', function(e) {
             e.preventDefault();

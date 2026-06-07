@@ -48,5 +48,6 @@ return [
     'deactivate' => 'Deactivate',
     'print_detailed' => 'Print Detailed',
     'print_mini' => 'Print Mini',
+    'status' => 'Status',
     'opening' => 'opening',
 ];

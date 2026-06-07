@@ -16,7 +16,7 @@
         @slot('tool')
             <div class="box-tools">
                 @if(auth()->user()->can('stock_adjustment.create'))
-                    <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full pull-right"
+                    <a class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-font-bold tw-rounded-full pull-right"
                         href="{{action([\App\Http\Controllers\StockAdjustmentController::class, 'create'])}}">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -38,6 +38,7 @@
                         <th>@lang('purchase.ref_no')</th>
                         <th>@lang('business.location')</th>
                         <th>@lang('stock_adjustment.out_type')</th>
+                        <th>{{__('stock_adjustment.total_of_quantity')}}</th>
                         <th>@lang('stock_adjustment.total_amount')</th>
                         <th>@lang('stock_adjustment.total_amount_recovered')</th>
                         <th>@lang('stock_adjustment.reason_for_stock_adjustment')</th>

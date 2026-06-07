@@ -5,7 +5,9 @@ $(document).ready(function () {
     // ===============================
     // 🔍 Autocomplete search product
     // ===============================
-   $('#search_product').autocomplete({
+  $('#search_product').autocomplete({
+    delay: 500, // سرعة استجابة للسكانر
+    autoFocus: false, // منع الاختيار العشوائي
     source: function (request, response) {
         $.ajax({
             url: '/quantity-entry/get-products',
@@ -15,14 +17,17 @@ $(document).ready(function () {
                 location_id: $('#location_id').val()
             },
             success: function (data) {
-                // التحقق إذا كان الـ Checkbox مفعل
                 let isAutoSelect = $('#auto_select_products_checkbox').is(':checked');
 
-                // إذا وجدنا نتيجة واحدة بالضبط والـ Checkbox مفعل
+                // إذا وجدنا نتيجة واحدة والـ Checkbox مفعل (حالة السكانر المثالية)
                 if (isAutoSelect && data.length === 1) {
                     add_product_row(data[0].product_id, data[0].variation_id);
-                    $('#search_product').val(''); // تفريغ حقل البحث
-                    $('#search_product').autocomplete("close"); // إغلاق القائمة
+                    $('#search_product').val(''); 
+                    $('#search_product').autocomplete("close");
+                    
+                    // منع استمرار الحدث لتجنب أي Submit تلقائي
+                    response([]); 
+                    return;
                 } else if (data.length === 0) {
                     toastr.error("هذا المنتج غير موجود");
                 }
@@ -33,8 +38,31 @@ $(document).ready(function () {
     },
     minLength: 2,
     select: function (event, ui) {
+        // ✅ منع السلوك الافتراضي للـ Enter
+        event.preventDefault();
+        event.stopPropagation();
+
         add_product_row(ui.item.product_id, ui.item.variation_id);
         $(this).val('');
+        
+        return false;
+    }
+}).autocomplete('instance')._renderItem = function (ul, item) {
+    // إذا كان السيرفر يرسل الاسم في حقل label نستخدمه، وإلا نستخدم item.name
+    var itemName = item.name || item.label || "منتج بدون اسم";
+    var itemSku = item.sub_sku || item.sku || "";
+
+    var displayLine = "<div>" + itemName + (itemSku ? " (" + itemSku + ")" : "") + "</div>";
+
+    return $("<li>")
+        .append(displayLine)
+        .appendTo(ul);
+};
+
+// ✅ منع زر Enter تماماً في حقل البحث لضمان عدم تفعيل كبسة الحفظ بواسطة السكانر
+$(document).on('keypress', '#search_product', function(e) {
+    if (e.which == 13) { 
+        e.preventDefault();
         return false;
     }
 });
@@ -109,34 +137,31 @@ $(document).ready(function () {
     // ➕ Increase quantity
     // ===============================
     $(document).on('click', '.increment_qty', function () {
-        let row = $(this).closest('tr');
-        let qtyInput = row.find('.quantity');
-        let qty = parseFloat(qtyInput.val()) || 0;
-        qtyInput.val(qty + 1);
+    let row = $(this).closest('tr');
+    let qtyInput = row.find('.quantity');
+    let qty = __read_number(qtyInput);
+    __write_number(qtyInput, qty + 1); // استخدام __write_number للكتابة الصحيحة
+    updateRowTotal(row);
+    updateGrandTotals();
+});
+
+// نقصان الكمية
+$(document).on('click', '.decrement_qty', function () {
+    let row = $(this).closest('tr');
+    let qtyInput = row.find('.quantity');
+    let qty = __read_number(qtyInput);
+    if (qty > 1) {
+        __write_number(qtyInput, qty - 1);
         updateRowTotal(row);
         updateGrandTotals();
-    });
-
-    // ===============================
-    // ➖ Decrease quantity
-    // ===============================
-    $(document).on('click', '.decrement_qty', function () {
-        let row = $(this).closest('tr');
-        let qtyInput = row.find('.quantity');
-        let qty = parseFloat(qtyInput.val()) || 0;
-        if (qty > 1) {
-            qtyInput.val(qty - 1);
-            updateRowTotal(row);
-            updateGrandTotals();
-        }
-    });
+    }
+});
 
     // ===============================
     // ❌ Remove row
     // ===============================
-    $(document).on('click', '.remove_row', function () {
-    let row = $(this).closest('tr');
-    row.remove();
+    $(document).on('click', '.remove_row', function() {
+    $(this).closest('tr').remove();
     update_table_sr_number();
     updateGrandTotals();
 });
@@ -155,7 +180,7 @@ $(document).ready(function () {
     // ===============================
     // 💰 Update row total
     // ===============================
-   window.updateRowTotal = function (row) {
+    window.updateRowTotal = function (row) {
     let qty = parseFloat(row.find('.quantity').val()) || 0;
     // التأكد من جلب السعر بكامل أعشاره
     let price = parseFloat(row.find('.purchase_price').val()) || 0;
@@ -166,24 +191,30 @@ $(document).ready(function () {
     row.find('.row_total').text(total); 
     row.find('.line_total').val(total);
 };
-
-    // ===============================
-    // 📊 Update grand totals
-    // ===============================
-   window.updateGrandTotals = function () {
-    let totalQty = 0;
+// ===============================
+// 📊 Update grand totals
+// ===============================
+window.updateGrandTotals = function () {
+   let totalQty = 0;
     let grandTotal = 0;
 
     $('#purchase_entry_table tbody tr').each(function () {
-        let qty = parseFloat($(this).find('.quantity').val()) || 0;
-        let lineTotal = parseFloat($(this).find('.line_total').val()) || 0;
+        // قراءة الكمية من الحقل (input)
+        let qty = __read_number($(this).find('.quantity'));
+        
+        // قراءة إجمالي السطر من الحقل المخفي (input)
+        // تأكدي أن الكلاس هو .line_total وليس .row_total
+        let lineTotal = __read_number($(this).find('.line_total'));
+        
         totalQty += qty;
         grandTotal += lineTotal;
     });
 
-    // عرض المجموع بدقة كاملة
-    $('#total_quantity').text(totalQty);
-    $('#grand_total').text(grandTotal);
+    // تحديث النصوص في أسفل الجدول بتنسيق النظام
+    $('#total_quantity').text(__number_f(totalQty));
+    $('#grand_total').text(__number_f(grandTotal));
+    
+    // تحديث الحقل المخفي النهائي لإرساله للسيرفر
     $('#grand_total_hidden').val(grandTotal);
 };
 
@@ -222,65 +253,94 @@ $(document).ready(function () {
 // ==========================================
     // 📤 5. استيراد المنتجات من الإكسل
     // ==========================================
-    $(document).on('submit', '#import_new_quantity_products_modal form', function(e) {
-        e.preventDefault();
-        let formData = new FormData(this); 
-        let url = $(this).attr('action');
-        let currentRows = $('#purchase_entry_table tbody tr').length;
-        formData.append('location_id', $('#location_id').val()); 
-        formData.append('row_count', currentRows); 
+  $(document).on('submit', '#import_new_quantity_products_modal form', function(e) {
+    e.preventDefault();
+    let formData = new FormData(this); 
+    let url = $(this).attr('action');
+    let currentRows = $('#purchase_entry_table tbody tr').length;
+    formData.append('location_id', $('#location_id').val()); 
+    formData.append('row_count', currentRows); 
 
-        let btn = $(this).find('button[type="submit"]');
-        let btn_text = btn.html();
-        btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+    let btn = $(this).find('button[type="submit"]');
+    let btn_text = btn.html();
+    btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
 
-        $.ajax({
-            method: 'POST',
-            url: url,
-            data: formData,
-            dataType: 'json',
-            processData: false, 
-            contentType: false, 
-            success: function(result) {
-                btn.prop('disabled', false).html(btn_text);
-                if (result.success) {
-                    if (result.html && result.html.trim() !== '') {
-                        let $newRows = $(result.html);
-                        let tbody = $('#purchase_entry_table tbody');
-                        tbody.hide(); 
+    $.ajax({
+        method: 'POST',
+        url: url,
+        data: formData,
+        dataType: 'json',
+        processData: false, 
+        contentType: false, 
+      success: function(result) {
+    btn.prop('disabled', false).html(btn_text);
+    if (result.success) {
+        if (result.html && result.html.trim() !== '') {
+            // 1. تنظيف الـ HTML وتحويله لصفوف حصراً
+            let cleanedHtml = result.html.trim();
+            let $newRows = $(cleanedHtml).filter('tr');
 
-                        $newRows.each(function() {
-                            let $currentRow = $(this);
-                            let variation_id = $currentRow.find('.variation_id').val();
-                            let existingRow = tbody.find('.variation_id[value="' + variation_id + '"]').closest('tr');
+            let tbody = $('#purchase_entry_table tbody');
 
-                            if (existingRow.length > 0) {
-                                let new_qty = parseFloat($currentRow.find('.quantity').val()) || 0;
-                                let current_qty = parseFloat(existingRow.find('.quantity').val()) || 0;
-                                existingRow.find('.quantity').val(current_qty + new_qty);
-                                updateRowTotal(existingRow);
-                            } else {
-                                tbody.append($currentRow);
-                            }
-                        });
+            $newRows.each(function() {
+                let $currentRow = $(this);
+                let variation_id = $currentRow.find('.variation_id').val();
+                
+                // البحث عن المنتج إذا كان موجوداً مسبقاً
+                let existingRow = tbody.find('.variation_id[value="' + variation_id + '"]').closest('tr');
 
-                        tbody.show();
-                        update_table_sr_number();
-                        recalculateAllRows();
-                        $('#import_new_quantity_products_modal').modal('hide');
-                        toastr.success("تم الاستيراد بنجاح");
-                        $('#import_new_quantity_products_modal form')[0].reset();
-                    }
+                if (existingRow.length > 0) {
+                    // إذا كان موجوداً: نجمع الكميات
+                    let new_qty = __read_number($currentRow.find('.quantity'));
+                    let current_qty = __read_number(existingRow.find('.quantity'));
+                    
+                    __write_number(existingRow.find('.quantity'), current_qty + new_qty);
+                    updateRowTotal(existingRow);
                 } else {
-                    toastr.error(result.msg);
+                    // إذا كان جديداً: نضيف السطر كاملاً بدون حذف أي TD
+                    tbody.append($currentRow);
+                    
+                    // تفعيل تنسيق الأرقام والحسابات
+                    if (typeof initialize_input_number == 'function') {
+                        initialize_input_number($currentRow);
+                    }
+                    updateRowTotal($currentRow);
                 }
-            },
-            error: function() {
-                btn.prop('disabled', false).html(btn_text);
-                toastr.error("حدث خطأ أثناء الرفع");
+            });
+
+            update_table_sr_number();
+            updateGrandTotals();
+            
+           // ✅ رسالة النجاح مع عدد المتخطين
+            let message = "تم استيراد " + result.imported_count + " صنف بنجاح.";
+            if (result.skipped_count > 0) {
+                message += " تم تخطي " + result.skipped_count + " صنف.";
             }
-        });
+            toastr.success(message);
+            // ✅ أغلق الموديل وصفر الفورم قبل الـ confirm
+$('#import_new_quantity_products_modal').modal('hide');
+$('#import_new_quantity_products_modal form')[0].reset();
+
+            // ✅ سؤال تنزيل المرفوضين
+            if (result.products_insufficient && result.products_insufficient.length > 0) {
+                let confirmed = confirm("تم تخطي " + result.skipped_count + " صنف. هل تريد تنزيل ملف المنتجات المرفوضة؟");
+                if (confirmed) {
+                    exportInsufficientToExcel(result.products_insufficient);
+                }
+            }
+
+            $('#import_new_quantity_products_modal form')[0].reset();
+        }
+    } else {
+        toastr.error(result.msg);
+    }
+},
+        error: function() {
+            btn.prop('disabled', false).html(btn_text);
+            toastr.error("حدث خطأ أثناء الرفع");
+        }
     });
+});
 
     // ==========================================
     // 💾 6. منطق الحفظ النهائي (الدفعات + التراجع)
@@ -293,13 +353,13 @@ $(document).ready(function () {
 
         let allProducts = [];
         $('#purchase_entry_table tbody tr').each(function() {
-    let row = $(this);
-    
-    // ملاحظة: نبحث عن الحقل باستخدام [name*="product_id"] لأن الكلاس مفقود في الـ HTML لديك
+        let row = $(this);
     let p_id = row.find('input[name*="[product_id]"]').val();
     let v_id = row.find('.variation_id').val();
-    let qty = row.find('.quantity').val();
-    let price = row.find('.purchase_price').val();
+    
+    // قراءة الأرقام الخام (بدون فواصل) لإرسالها للسيرفر
+    let qty = __read_number(row.find('.quantity'));
+    let price = __read_number(row.find('.purchase_price'));
 
     allProducts.push({
         product_id: p_id,
@@ -388,5 +448,28 @@ $(document).ready(function () {
         }
     });
 
+window.exportInsufficientToExcel = function(products) {
+    let csvContent = "SKU,اسم المنتج,الكمية,السبب\n";
+    
+    products.forEach(function(p) {
+        csvContent += [
+            p.sub_sku,
+            p.product_name ?? '',
+            p.qty,
+            p.reason
+        ].join(',') + "\n";
+    });
+
+    let blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    let url = URL.createObjectURL(blob);
+    let link = document.createElement('a');
+    link.href = url;
+    link.download = 'skipped_products_' + Date.now() + '.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
 });
+
+
 

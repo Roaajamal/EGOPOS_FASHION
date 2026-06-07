@@ -15,7 +15,7 @@
             
             @if(!empty($receipt_details->logo))
                 <div style="text-align: center; margin-bottom: 5px;">
-                    <img src="{{$receipt_details->logo}}" style="max-height: 80px; width: auto; display: inline-block;" alt="Logo">
+                    <img src="{{$receipt_details->logo}}" style="max-height: 150px; width: auto; display: inline-block;" alt="Logo">
                 </div>
             @endif
 
@@ -349,10 +349,11 @@
                         <th class="quantity text-right">
                         	{{$receipt_details->table_qty_label}}
                         </th>
-                        @if(empty($receipt_details->hide_price))
+                        @if(!empty($receipt_details->show_price))
                         <th class="unit_price text-right">
                         	{{$receipt_details->table_unit_price_label}}
                         </th>
+                        @endif
                         @if(!empty($receipt_details->discounted_unit_price_label))
 							<th class="text-right">
 								{{$receipt_details->discounted_unit_price_label}}
@@ -362,7 +363,7 @@
 							<th class="text-right">{{$receipt_details->item_discount_label}}</th>
 						@endif
                         <th class="price text-right">{{$receipt_details->table_subtotal_label}}</th>
-                        @endif
+                       
                     </tr>
                 </thead>
                 <tbody>
@@ -410,14 +411,23 @@
 		                            </small>
 		                            @endif
 	                        </td>
-	                        <td class="quantity text-right">{{$line['quantity']}} {{$line['units']}} @if($receipt_details->show_base_unit_details && $line['quantity'] && $line['base_unit_multiplier'] !== 1)
+	                        <td class="quantity text-right">{{$line['quantity']}}
+	                       {{-- الوصول للإعداد من مصفوفة common_settings داخل تفاصيل الإيصال --}}
+   @if(!empty($receipt_details->show_unit))
+        {{$line['units']}}
+    @endif
+	                        @if($receipt_details->show_base_unit_details && $line['quantity'] && $line['base_unit_multiplier'] !== 1)
                             <br><small>
                             	{{$line['quantity']}} x {{$line['base_unit_multiplier']}} = {{$line['orig_quantity']}} {{$line['base_unit_name']}}
                             </small>
                             @endif</td>
-	                        @if(empty($receipt_details->hide_price))
-	                        <td class="unit_price text-right">{{$line['unit_price_before_discount']}}</td>
+	                       @if(!empty($receipt_details->show_price))
+	                        
+	                        <td class="unit_price text-right">
+	                            {{$line['unit_price_before_discount']}}
+	                            </td>
 
+                           @endif
 	                        @if(!empty($receipt_details->discounted_unit_price_label))
 								<td class="text-right">
 									{{$line['unit_price_inc_tax']}} 
@@ -433,7 +443,7 @@
 								</td>
 							@endif
 	                        <td class="price text-right">{{$line['line_total']}}</td>
-	                        @endif
+	                       
 	                    </tr>
 	                    @if(!empty($line['modifiers']))
 							@foreach($line['modifiers'] as $modifier)

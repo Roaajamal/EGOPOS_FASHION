@@ -602,15 +602,17 @@
                                     @if($variation)
                                     @php
                                         $barcode = $variation->sub_sku ?: $p->sku;
-                                        $price = $variation->sell_price_inc_tax ?? $variation->default_sell_price ?? 0;
+                                        $price = number_format((float)($variation->sell_price_inc_tax ?? $variation->default_sell_price ?? 0), 0, '.', '');
                                         $cf1 = trim($p->product_custom_field1 ?? '');
                                         $cf2 = trim($p->product_custom_field2 ?? '');
+                                        $cf3 = trim($p->product_custom_field3 ?? '');
                                         $variationName = trim($variation->name ?? '');
                                         $colorSizeLabel = '';
                                         if ($cf1 !== '' || $cf2 !== '') {
                                             $parts = [];
                                             if ($cf1 !== '') $parts[] = 'اللون: ' . $cf1;
                                             if ($cf2 !== '') $parts[] = 'المقاس: ' . $cf2;
+                                            if ($cf3 !== '') $parts[] = 'الموديل: ' . $cf3;
                                             $colorSizeLabel = implode(' — ', $parts);
                                         } elseif ($variationName !== '' && $variationName !== 'DUMMY') {
                                             $colorSizeLabel = 'اللون والمقاس: ' . $variationName;
@@ -624,7 +626,9 @@
                                          data-price="{{ $price }}" 
                                          data-brand="{{ optional($p->brand)->name ?? '' }}"
                                          data-custom-field-1="{{ $p->product_custom_field1 ?? '' }}"
-                                         data-custom-field-2="{{ $p->product_custom_field2 ?? '' }}">
+                                         data-custom-field-2="{{ $p->product_custom_field2 ?? '' }}"
+                                         data-custom-field-3="{{ $p->product_custom_field3 ?? '' }}">
+                                        
                                         <div class="product-info">
                                             <h4>{{ $p->name }}</h4>
                                             @if($colorSizeLabel !== '')
@@ -766,7 +770,8 @@ qz.security.setSignaturePromise(function(toSign) {
             price: '0.00',
             barcode: '123456789012',
             custom_field_1: '',
-            custom_field_2: ''
+            custom_field_2: '',
+            custom_field_3: ''
         };
 
         let selectedProducts = new Map();
@@ -877,7 +882,8 @@ qz.security.setSignaturePromise(function(toSign) {
                         if (!res.success) {
                             var cf1 = ($item.data('custom-field-1') != null && $item.data('custom-field-1') !== '') ? String($item.data('custom-field-1')) : '';
                             var cf2 = ($item.data('custom-field-2') != null && $item.data('custom-field-2') !== '') ? String($item.data('custom-field-2')) : '';
-                            addProductDirect($item, productId, defaultBarcode, productName, defaultPrice, productBrand, undefined, undefined, cf1, cf2);
+                            var cf3 = ($item.data('custom-field-3') != null && $item.data('custom-field-3') !== '') ? String($item.data('custom-field-3')) : '';
+                            addProductDirect($item, productId, defaultBarcode, productName, defaultPrice, productBrand, undefined, undefined, cf1, cf2, cf3);
                             return;
                         }
                         const byColor = res.by_color || [];
@@ -938,12 +944,12 @@ qz.security.setSignaturePromise(function(toSign) {
                                 currentProduct.name_main = productName;
                                 currentProduct.custom_field_1 = cf1;
                                 currentProduct.custom_field_2 = cf2;
-                                currentProduct.price = (flatList[0].sell_price_inc_tax != null ? parseFloat(flatList[0].sell_price_inc_tax).toFixed(2) : '0.00');
+                                currentProduct.price = (flatList[0].sell_price_inc_tax != null ? parseFloat(flatList[0].sell_price_inc_tax).toFixed(0) : '0.0');
                                 currentProduct.brand = productBrand;
                                 renderLabelPreview();
                             }
                             var addName = productName + (flatList[0] && flatList[0].label ? ' - ' + flatList[0].label : '');
-                            addProductDirect($item, productId, flatList[0] ? flatList[0].sub_sku : defaultBarcode, addName, flatList[0] ? (flatList[0].sell_price_inc_tax != null ? parseFloat(flatList[0].sell_price_inc_tax).toFixed(2) : '0') : defaultPrice, productBrand, flatList[0] ? productId + '_' + (flatList[0].variation_id || flatList[0].sub_sku) : productId, productName, cf1, cf2);
+                            addProductDirect($item, productId, flatList[0] ? flatList[0].sub_sku : defaultBarcode, addName, flatList[0] ? (flatList[0].sell_price_inc_tax != null ? parseFloat(flatList[0].sell_price_inc_tax).toFixed(0) : '0') : defaultPrice, productBrand, flatList[0] ? productId + '_' + (flatList[0].variation_id || flatList[0].sub_sku) : productId, productName, cf1, cf2,cf3);
                             return;
                         }
 
@@ -956,13 +962,13 @@ qz.security.setSignaturePromise(function(toSign) {
                                 html += '<div class="combos-color-group"><div class="combos-color-head">' + (g.color || '') + '</div>';
                                 (g.sizes || []).forEach(function(s, si){
                                     const idx = currentCombosList.findIndex(function(x){ return x.sub_sku === s.sub_sku; });
-                                    html += '<div class="combo-row" data-idx="' + idx + '"><input type="checkbox" class="combo-cb" id="cb_' + idx + '"><label for="cb_' + idx + '">' + (s.size || s.label) + ' <span class="combo-sku">' + (s.sub_sku || '') + '</span> ' + (s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(2) + ' د.أ' : '') + '</label></div>';
+                                    html += '<div class="combo-row" data-idx="' + idx + '"><input type="checkbox" class="combo-cb" id="cb_' + idx + '"><label for="cb_' + idx + '">' + (s.size || s.label) + ' <span class="combo-sku">' + (s.sub_sku || '') + '</span> ' + (s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(0) + 'jd' : '') + '</label></div>';
                                 });
                                 html += '</div>';
                             });
                         } else {
                             flatList.forEach(function(s, idx){
-                                html += '<div class="combo-row" data-idx="' + idx + '"><input type="checkbox" class="combo-cb" id="cb_' + idx + '"><label for="cb_' + idx + '">' + (s.label || s.sub_sku) + ' <span class="combo-sku">' + (s.sub_sku || '') + '</span> ' + (s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(2) + ' د.أ' : '') + '</label></div>';
+                                html += '<div class="combo-row" data-idx="' + idx + '"><input type="checkbox" class="combo-cb" id="cb_' + idx + '"><label for="cb_' + idx + '">' + (s.label || s.sub_sku) + ' <span class="combo-sku">' + (s.sub_sku || '') + '</span> ' + (s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(0) + 'jd' : '') + '</label></div>';
                             });
                         }
                         $('#combosListContainer').html(html);
@@ -976,7 +982,7 @@ qz.security.setSignaturePromise(function(toSign) {
                             currentProduct.name_main = productName;
                             currentProduct.custom_field_1 = (first.custom_field_1 || '').toString();
                             currentProduct.custom_field_2 = (first.custom_field_2 || '').toString();
-                            currentProduct.price = (first.sell_price_inc_tax != null ? parseFloat(first.sell_price_inc_tax).toFixed(2) : '0.00');
+                            currentProduct.price = (first.sell_price_inc_tax != null ? parseFloat(first.sell_price_inc_tax).toFixed(0) : '0.0');
                             currentProduct.brand = productBrand;
                             renderLabelPreview();
                         }
@@ -984,15 +990,17 @@ qz.security.setSignaturePromise(function(toSign) {
                     .fail(function(){
                         var cf1 = ($item.data('custom-field-1') != null && $item.data('custom-field-1') !== '') ? String($item.data('custom-field-1')) : '';
                         var cf2 = ($item.data('custom-field-2') != null && $item.data('custom-field-2') !== '') ? String($item.data('custom-field-2')) : '';
-                        addProductDirect($item, productId, defaultBarcode, productName, defaultPrice, productBrand, undefined, undefined, cf1, cf2);
+                        var cf3 = ($item.data('custom-field-3') != null && $item.data('custom-field-3') !== '') ? String($item.data('custom-field-3')) : '';
+                        addProductDirect($item, productId, defaultBarcode, productName, defaultPrice, productBrand, undefined, undefined, cf1, cf2, cf3);
                     });
             });
 
-            function addProductDirect($item, productId, barcode, name, price, brand, key, name_main, custom_field_1, custom_field_2) {
+            function addProductDirect($item, productId, barcode, name, price, brand, key, name_main, custom_field_1, custom_field_2, custom_field_3) {
                 key = key || productId;
                 name_main = name_main != null ? name_main : name;
                 custom_field_1 = custom_field_1 != null ? custom_field_1 : '';
                 custom_field_2 = custom_field_2 != null ? custom_field_2 : '';
+                custom_field_3 = custom_field_3 != null ? custom_field_3 : '';
                 if (selectedProducts.has(key)) {
                     $item.removeClass('selected');
                     $item.find('.quantity-control').hide();
@@ -1011,7 +1019,8 @@ qz.security.setSignaturePromise(function(toSign) {
                         brand: brand || '',
                         quantity: quantity,
                         custom_field_1: custom_field_1,
-                        custom_field_2: custom_field_2
+                        custom_field_2: custom_field_2,
+                        custom_field_3: custom_field_3
                     });
                 }
                 updateSelectedProductsList();
@@ -1025,6 +1034,7 @@ qz.security.setSignaturePromise(function(toSign) {
                 currentProduct.barcode = barcode;
                 currentProduct.custom_field_1 = custom_field_1;
                 currentProduct.custom_field_2 = custom_field_2;
+                currentProduct.custom_field_3 = custom_field_3;
                 renderLabelPreview();
             }
 
@@ -1046,7 +1056,8 @@ qz.security.setSignaturePromise(function(toSign) {
                 currentProduct.name_main = currentCombosProduct.name;
                 currentProduct.custom_field_1 = (s.custom_field_1 || '').toString();
                 currentProduct.custom_field_2 = (s.custom_field_2 || '').toString();
-                currentProduct.price = (s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(2) : '0.00');
+                currentProduct.custom_field_3 = (s.custom_field_3 || '').toString();
+                currentProduct.price = (s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(0) : '0.0');
                 currentProduct.brand = currentCombosProduct.brand || '';
                 renderLabelPreview();
             }
@@ -1075,11 +1086,12 @@ qz.security.setSignaturePromise(function(toSign) {
                         barcode: s.sub_sku,
                         name: productName + ' - ' + (s.label || s.sub_sku),
                         name_main: productName,
-                        price: (s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(2) : '0.00'),
+                        price: (s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(0) : '0.0'),
                         brand: productBrand,
                         quantity: copies,
                         custom_field_1: (s.custom_field_1 || '').toString(),
-                        custom_field_2: (s.custom_field_2 || '').toString()
+                        custom_field_2: (s.custom_field_2 || '').toString(),
+                        custom_field_3: (s.custom_field_3 || '').toString()
                     };
                     selectedProducts.set(key, item);
                     if (!firstAdded) firstAdded = item;
@@ -1095,6 +1107,7 @@ qz.security.setSignaturePromise(function(toSign) {
                     currentProduct.barcode = firstAdded.barcode;
                     currentProduct.custom_field_1 = (firstAdded.custom_field_1 != null ? firstAdded.custom_field_1 : '').toString();
                     currentProduct.custom_field_2 = (firstAdded.custom_field_2 != null ? firstAdded.custom_field_2 : '').toString();
+                    currentProduct.custom_field_3 = (firstAdded.custom_field_3 != null ? firstAdded.custom_field_3 : '').toString();
                     renderLabelPreview();
                 }
                 $('#combosPanel').hide();
@@ -1228,11 +1241,12 @@ qz.security.setSignaturePromise(function(toSign) {
                             barcode: s.sub_sku,
                             name: name,
                             name_main: productName,
-                            price: (s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(2) : '0.00'),
+                            price: (s.sell_price_inc_tax != null ? parseFloat(s.sell_price_inc_tax).toFixed(0) : '0.0'),
                             brand: productBrand,
                             quantity: copies,
                             custom_field_1: (s.custom_field_1 != null ? s.custom_field_1 : '').toString(),
-                            custom_field_2: (s.custom_field_2 != null ? s.custom_field_2 : '').toString()
+                            custom_field_2: (s.custom_field_2 != null ? s.custom_field_2 : '').toString(),
+                            custom_field_3: (s.custom_field_3 != null ? s.custom_field_3 : '').toString()
                         });
                     });
                 }
@@ -1418,8 +1432,10 @@ qz.security.setSignaturePromise(function(toSign) {
             // إذا التصميم ما فيه عنصر cf1/cf2 أصلاً (غير معرّف) وعندنا لون ومقاس — نعرضهم بموضع افتراضي. لو العنصر معرّف ومخفي (visible: false) لا نعرضه أبداً.
             const cf1 = (currentProduct.custom_field_1 != null ? currentProduct.custom_field_1 : '').toString().trim();
             const cf2 = (currentProduct.custom_field_2 != null ? currentProduct.custom_field_2 : '').toString().trim();
+            const cf3 = (currentProduct.custom_field_3 != null ? currentProduct.custom_field_3 : '').toString().trim();
             const hasCf1Element = !!elements.cf1;
             const hasCf2Element = !!elements.cf2;
+            const hasCf3Element = !!elements.cf3;
             const defLeft = '19px';
             const defFont = '13px';
             const defFamily = 'Arial';
@@ -1441,6 +1457,15 @@ qz.security.setSignaturePromise(function(toSign) {
                     color: '#000'
                 }).text(cf2));
             }
+            if (cf3 && !hasCf3Element) {
+    preview.append($('<div/>').addClass('element').css({
+        left: defLeft,
+        top: '56px', // زيادة المسافة عن cf2
+        'font-size': defFont,
+        'font-family': defFamily,
+        color: '#000'
+    }).text(cf3));
+}
 
             // العناصر الإضافية — بنفس الاسم والباركود المختار
             const extras = designData.extra_elements || {};
@@ -1450,13 +1475,14 @@ qz.security.setSignaturePromise(function(toSign) {
                 
                 const left = parsePosition(el.left);
                 const top = parsePosition(el.top);
-                const fontSize = parseInt(el.fontSize) || 12;
+                const fontSize = Math.max(parseInt(el.fontSize) || 17, 15);
                 const text = substituteElementText('extra', el);
                 
                 const dom = $('<div/>').addClass('element').css({
                     left: left,
                     top: top,
                     'font-size': fontSize + 'px',
+                    'font-weight':'Bold',
                     'font-family': el.fontFamily || 'Tahoma',
                     color: el.color || '#000'
                 }).text(text);
@@ -1474,40 +1500,55 @@ qz.security.setSignaturePromise(function(toSign) {
         }
 
         // استبدال بيانات المنتج الحالي في النص (الاسم الرئيسي، اللون، المقاس، السعر، العلامة، الباركود)
-        function substituteElementText(key, el){
-            const txt = (el.text || '').toString();
-            const name = (currentProduct.name || '').toString();
-            const name_main = (currentProduct.name_main != null && currentProduct.name_main !== '') ? (currentProduct.name_main + '').toString() : name;
-            const price = (currentProduct.price != null ? currentProduct.price : '0.00').toString();
-            const brand = (currentProduct.brand || '').toString();
-            const barcode = (currentProduct.barcode || currentProduct.sku || '').toString();
-            const cf1 = (currentProduct.custom_field_1 != null ? currentProduct.custom_field_1 : '').toString();
-            const cf2 = (currentProduct.custom_field_2 != null ? currentProduct.custom_field_2 : '').toString();
+       function substituteElementText(key, el) {
+    const txt = (el.text || '').toString();
+    const name = (currentProduct.name || '').toString();
+    const name_main = (currentProduct.name_main != null && currentProduct.name_main !== '') ? (currentProduct.name_main + '').toString() : name;
+    const price = (currentProduct.price != null ? currentProduct.price : '0.00').toString();
+    const brand = (currentProduct.brand || '').toString();
+    const barcode = (currentProduct.barcode || currentProduct.sku || '').toString();
+    const cf1 = (currentProduct.custom_field_1 != null ? currentProduct.custom_field_1 : '').toString();
+    const cf2 = (currentProduct.custom_field_2 != null ? currentProduct.custom_field_2 : '').toString();
+    const cf3 = (currentProduct.custom_field_3 != null ? currentProduct.custom_field_3 : '').toString();
 
-            let result = txt
-                .replace(/\{\{\s*product_name\s*\}\}/gi, name_main)
-                .replace(/\{\{\s*name_main\s*\}\}/gi, name_main)
-                .replace(/\{\{\s*price\s*\}\}/gi, price)
-                .replace(/\{\{\s*brand\s*\}\}/gi, brand)
-                .replace(/\{\{\s*sku\s*\}\}/gi, barcode)
-                .replace(/\{\{\s*custom_field_1\s*\}\}/gi, cf1)
-                .replace(/\{\{\s*custom_field_2\s*\}\}/gi, cf2)
-                .replace(/اسم المنتج/gi, name_main)
-                .replace(/0\.00/gi, price)
-                .replace(/Brand/gi, brand)
-                .replace(/123456789012/gi, barcode);
+    // 1. استبدال التاجات (Tags) أولاً داخل النص
+    let result = txt
+        .replace(/\{\{\s*product_name\s*\}\}/gi, name_main)
+        .replace(/\{\{\s*price\s*\}\}/gi, price)
+        .replace(/\{\{\s*brand\s*\}\}/gi, brand)
+        .replace(/\{\{\s*sku\s*\}\}/gi, barcode)
+        .replace(/\{\{\s*custom_field_1\s*\}\}/gi, cf1)
+        .replace(/\{\{\s*custom_field_2\s*\}\}/gi, cf2)
+        .replace(/\{\{\s*custom_field_3\s*\}\}/gi, cf3)
+        .replace(/اسم المنتج/gi, name_main)
+        .replace(/0\.00/gi, price)
+        .replace(/Brand/gi, brand)
+        .replace(/موديل|Model/gi, cf3) // استبدال كلمة موديل بالقيمة الفعلية
+        .replace(/123456789012/gi, barcode);
 
-            if (key === 'barcode-container' || /barcode/i.test(key)) return barcode || result || '';
-            // عناصر اللون والمقاس: بالـ key (cf1/cf2) أو بنص العنصر (اللون، مقاس، color، size) — نعرض القيمة فقط ولا نعرض اسم المنتج أبداً
-            var isColorLabel = /^cf1$/.test(key) || /لون|color/.test(txt) || /لون|color/.test(key);
-            var isSizeLabel = /^cf2$/.test(key) || /مقاس|size/.test(txt) || /مقاس|size/.test(key);
-            if (isColorLabel) return (cf1 && cf1.trim() !== '') ? cf1 : (txt.replace(/اسم المنتج/gi, '').replace(/\{\{\s*product_name\s*\}\}/gi, '').trim() || '');
-            if (isSizeLabel) return (cf2 && cf2.trim() !== '') ? cf2 : (txt.replace(/اسم المنتج/gi, '').replace(/\{\{\s*product_name\s*\}\}/gi, '').trim() || '');
-            if (/^cf(\d+)$/.test(key)) { var n = parseInt(RegExp.$1, 10); var v = (currentProduct['custom_field_' + n] != null ? currentProduct['custom_field_' + n] : '').toString().trim(); return v !== '' ? v : txt; }
-            if (key === 'lblName' || (/lblName|product_name|name/i.test(key) && key !== 'lblPrice' && !/^cf\d+$/.test(key))) return name_main || result || name;
-            return result || txt;
-        }
+    if (key === 'barcode-container' || /barcode/i.test(key)) return barcode || result || '';
 
+    // 2. التحقق من الحقول المخصصة بناءً على المفتاح (Key) أولاً بدقة
+    if (key === 'cf1') return cf1 || "";
+    if (key === 'cf2') return cf2 || "";
+    if (key === 'cf3') return cf3 || "";
+
+    // 3. التحقق الذكي بناءً على محتوى النص (لتجنب التداخل)
+    var isColor = /لون|color/i.test(txt) || /cf1/i.test(key);
+    var isSize = /مقاس|size/i.test(txt) || /cf2/i.test(key);
+    var isModel = /cf3/i.test(key) || /custom_field_3/i.test(key);
+
+    // إذا كان العنصر مخصصاً للموديل حصراً
+    if (isModel) return cf3 || result;
+    if (isColor && !isSize) return cf1 || result;
+    if (isSize && !isColor) return cf2 || result;
+    
+    if (key === 'custom_field_3') return cf3;
+
+    if (key === 'lblName' || (/lblName|product_name|name/i.test(key) && key !== 'lblPrice' && !/^cf\d+$/.test(key))) return name_main || result || name;
+    
+    return result || txt;
+}
         // الطباعة
         async function onPrintSingle() {
             if (!currentProduct.id) {
@@ -1544,10 +1585,11 @@ qz.security.setSignaturePromise(function(toSign) {
                             barcode: product.barcode || product.sku || '',
                             name: (product.name || '').toString(),
                             name_main: (product.name_main != null ? product.name_main : product.name || '').toString(),
-                            price: (product.price != null ? product.price : '0.00').toString(),
+                            price: (product.price != null ? product.price : '0.00').toString()+ ' JD',
                             brand: (product.brand || '').toString(),
                             custom_field_1: (product.custom_field_1 != null ? product.custom_field_1 : '').toString(),
-                            custom_field_2: (product.custom_field_2 != null ? product.custom_field_2 : '').toString()
+                            custom_field_2: (product.custom_field_2 != null ? product.custom_field_2 : '').toString(),
+                            custom_field_3: (product.custom_field_3 != null ? product.custom_field_3 : '').toString()
                         };
                         data.push({ type: 'html', format: 'plain', data: generateLabelHTML() });
                     }
@@ -1606,10 +1648,11 @@ qz.security.setSignaturePromise(function(toSign) {
                 barcode: product.barcode || product.sku || '',
                 name: (product.name || '').toString(),
                 name_main: (product.name_main != null ? product.name_main : product.name || '').toString(),
-                price: (product.price != null ? product.price : '0.00').toString(),
+                price: (product.price != null ? product.price : '0.00').toString()+ ' JD',
                 brand: (product.brand || '').toString(),
                 custom_field_1: (product.custom_field_1 != null ? product.custom_field_1 : '').toString(),
-                custom_field_2: (product.custom_field_2 != null ? product.custom_field_2 : '').toString()
+                custom_field_2: (product.custom_field_2 != null ? product.custom_field_2 : '').toString(),
+                custom_field_3: (product.custom_field_3 != null ? product.custom_field_3 : '').toString()
             };
 
             const previewHTML = generateLabelHTML();
@@ -1680,11 +1723,11 @@ qz.security.setSignaturePromise(function(toSign) {
 
                 if ((key === 'lblName' || (/name|اسم|product_name/i.test(key) && !/^cf\d+$/.test(key)))) {
                     hasNameElement = true;
-                    fontSizePx = Math.max(fontSizePx, 18);
+                    fontSizePx = Math.max(fontSizePx, 15);
                 }
                 if (/price|سعر|lblPrice/i.test(key)) {
                     hasPriceElement = true;
-                    fontSizePx = Math.max(fontSizePx, 14);
+                    fontSizePx = Math.max(fontSizePx, 12);
                 }
                 let finalText = text;
                 if ((key === 'lblName' || (/name|اسم|product_name/i.test(key) && !/^cf\d+$/.test(key))) && !finalText) finalText = selectedNameMain;
@@ -1696,7 +1739,7 @@ qz.security.setSignaturePromise(function(toSign) {
                     left: left,
                     top: top,
                     'font-size': fontSizePt,
-                    'font-weight': (key === 'lblName' || (/name|اسم|product_name/i.test(key) && !/^cf\d+$/.test(key))) ? 'bold' : 'normal',
+                    'font-weight': (key === 'lblName' || (/name|اسم|product_name/i.test(key) && !/^cf\d+$/.test(key))) ? 'normal' : 'normal',
                     'font-family': (el.fontFamily || 'Arial').split(',')[0].trim(),
                     color: el.color || '#000000'
                 }).text(finalText || (key === 'lblName' || (/name|اسم|product_name/i.test(key) && !/^cf\d+$/.test(key)) ? selectedNameMain : (key === 'lblPrice' || /price|سعر/i.test(key) ? selectedPrice : (/^cf\d+$/.test(key) ? text : ''))));
@@ -1707,8 +1750,8 @@ qz.security.setSignaturePromise(function(toSign) {
                 tempDiv.prepend($('<div/>').addClass('element label-text label-name').attr('data-print', '1').css({
                     left: '5px',
                     top: '5px',
-                    'font-size': '14pt',
-                    'font-weight': 'bold',
+                    'font-size': '12pt',
+                    'font-weight': 'normal',
                     'font-family': 'Arial',
                     color: '#000000'
                 }).text(selectedNameMain));
@@ -1717,26 +1760,38 @@ qz.security.setSignaturePromise(function(toSign) {
                 tempDiv.append($('<div/>').addClass('element label-text label-price').attr('data-print', '1').css({
                     left: '5px',
                     top: '45px',
-                    'font-size': '12pt',
-                    'font-weight': 'bold',
+                    'font-size': '10pt',
+                    'font-weight': 'Bold',
                     'font-family': 'Arial',
                     color: '#000000'
                 }).text(selectedPrice));
             }
             var printCf1 = (currentProduct.custom_field_1 != null ? currentProduct.custom_field_1 : '').toString().trim();
             var printCf2 = (currentProduct.custom_field_2 != null ? currentProduct.custom_field_2 : '').toString().trim();
+            var printCf3 = (currentProduct.custom_field_3 != null ? currentProduct.custom_field_3 : '').toString().trim();
             var hasCf1Element = !!elements.cf1;
             var hasCf2Element = !!elements.cf2;
+            var hasCf3Element = !!elements.cf3;
             if (printCf1 && !hasCf1Element) {
                 tempDiv.append($('<div/>').addClass('element label-text').attr('data-print', '1').css({
-                    left: '19px', top: '34px', 'font-size': '10pt', 'font-family': 'Arial', color: '#000000'
+                    left: '19px', top: '34px', 'font-size': '8pt', 'font-family': 'Arial', color: '#000000'
                 }).text(printCf1));
             }
             if (printCf2 && !hasCf2Element) {
                 tempDiv.append($('<div/>').addClass('element label-text').attr('data-print', '1').css({
-                    left: '19px', top: '45px', 'font-size': '10pt', 'font-family': 'Arial', color: '#000000'
+                    left: '19px', top: '45px', 'font-size': '8pt', 'font-family': 'Arial', color: '#000000'
                 }).text(printCf2));
             }
+            
+            if (printCf3 && !hasCf3Element) {
+    tempDiv.append($('<div/>').addClass('element label-text').attr('data-print', '1').css({
+        left: '19px', 
+        top: '56px', 
+        'font-size': '8pt', 
+        'font-family': 'Arial', 
+        color: '#000000'
+    }).text(printCf3));
+}
 
             const extras = designData.extra_elements || {};
             for (const k in extras) {
@@ -1745,13 +1800,14 @@ qz.security.setSignaturePromise(function(toSign) {
 
                 const left = parsePosition(el.left);
                 const top = parsePosition(el.top);
-                const fontSizePx = Math.max(parseInt(el.fontSize) || 12, 11);
+                const fontSizePx = Math.max(parseInt(el.fontSize) || 20, 20);
                 const text = substituteElementText('extra', el);
                 const fontSizePt = pxToPt(fontSizePx);
                 const dom = $('<div/>').addClass('element label-text').attr('data-print', '1').css({
                     left: left,
                     top: top,
                     'font-size': fontSizePt,
+                    'font-weight':'Bold',
                     'font-family': (el.fontFamily || 'Tahoma').split(',')[0].trim(),
                     color: el.color || '#000000'
                 }).text(text);
@@ -1773,7 +1829,7 @@ qz.security.setSignaturePromise(function(toSign) {
                                 padding: 0; 
                                 width: ${wMm}mm; 
                                 height: ${hMm}mm;
-                                font-size: 12pt;
+                                font-size: 8pt;
                                 color: #000000;
                             }
                             .label-content { 
@@ -1786,15 +1842,15 @@ qz.security.setSignaturePromise(function(toSign) {
                                 position: absolute; 
                                 white-space: nowrap; 
                                 overflow: visible;
-                                font-size: 12pt;
+                                font-size: 8pt;
                                 color: #000000;
                             }
                             .label-text, .label-name, .label-price {
-                                font-size: 12pt !important;
+                                font-size: 8pt !important;
                                 color: #000000 !important;
                             }
-                            .label-name { font-size: 14pt !important; font-weight: bold !important; }
-                            .label-price { font-size: 12pt !important; font-weight: bold !important; }
+                            .label-name { font-size: 10pt !important; font-weight: normal !important; }
+                            .label-price { font-size: 8pt !important; font-weight: Extra Bold !important; }
                             svg { display: block !important; }
                         </style>
                     </head>
@@ -1879,6 +1935,7 @@ qz.security.setSignaturePromise(function(toSign) {
                 currentProduct.barcode = product.barcode;
                 currentProduct.custom_field_1 = (product.custom_field_1 != null ? product.custom_field_1 : '').toString();
                 currentProduct.custom_field_2 = (product.custom_field_2 != null ? product.custom_field_2 : '').toString();
+                currentProduct.custom_field_3 = (product.custom_field_3 != null ? product.custom_field_3 : '').toString();
                 renderLabelPreview();
             }
         });

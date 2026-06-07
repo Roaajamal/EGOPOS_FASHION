@@ -12,4 +12,11 @@ class VariationLocationDetails extends Model
      * @var array
      */
     protected $guarded = ['id'];
+    
+     ///////////// 005
+    public function variation()
+{
+    return $this->belongsTo(\App\Variation::class, 'variation_id');
+} 
+
 }

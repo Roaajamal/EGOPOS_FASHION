@@ -66,6 +66,34 @@
                         {!! Form::select('brand_id', $brands, null, ['class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'psr_filter_brand_id', 'placeholder' => __('lang_v1.all')]); !!}
                     </div>
                 </div>
+                
+                @if(!empty($product_custom_field1))
+<div class="col-md-3">
+    <div class="form-group">
+        {!! Form::label('custom_field1', $product_custom_field1 . ':') !!}
+        {!! Form::select('custom_field1', $custom_field1_values, null, ['class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'psr_custom_field1', 'placeholder' => __('lang_v1.all')]); !!}
+    </div>
+</div>
+@endif
+
+@if(!empty($product_custom_field2))
+<div class="col-md-3">
+    <div class="form-group">
+        {!! Form::label('custom_field2', $product_custom_field2 . ':') !!}
+        {!! Form::select('custom_field2', $custom_field2_values, null, ['class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'psr_custom_field2', 'placeholder' => __('lang_v1.all')]); !!}
+    </div>
+</div>
+@endif
+
+@if(!empty($product_custom_field3))
+<div class="col-md-3">
+    <div class="form-group">
+        {!! Form::label('custom_field3', session('business.custom_labels') ? json_decode(session('business.custom_labels'), true)['product']['custom_field_3'] ?? 'Custom Field 3' : 'Custom Field 3') !!}
+        {!! Form::select('custom_field3', $custom_field3_values, null, ['class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'psr_custom_field3', 'placeholder' => __('lang_v1.all')]); !!}
+    </div>
+</div>
+@endif
+ 
                 <div class="col-md-3">
                     <div class="form-group">
                         {!! Form::label('product_sr_date_filter', __('report.date_range') . ':') !!}
@@ -131,21 +159,16 @@
                                         <th>@lang('sale.price_inc_tax')</th>
                                         <th>@lang('sale.total')</th>
                                         <th>@lang('lang_v1.payment_method')</th>
+                                        <th>@lang('lang_v1.seller_name')</th>
                                         <th>@lang('sale.added_by')</th>
                                     </tr>
                                 </thead>
                                 <tfoot>
-                                    <tr class="bg-gray font-17 footer-total text-center">
-                                        <td colspan="9"><strong>@lang('sale.total'):</strong></td>
-                                        <td id="footer_total_sold"></td>
-                                        <td></td>
-                                        <td></td>
-                                        <td id="footer_tax"></td>
-                                        <td></td>
-                                        <td><span class="display_currency" id="footer_subtotal" data-currency_symbol ="true"></span></td>
-                                        <td></td>
-                                    </tr>
-                                </tfoot>
+    <tr class="bg-gray font-17 footer-total text-center">
+        <td colspan="9"><strong>@lang('sale.total'):</strong></td>
+        
+        <td id="footer_total_sold"></td> <td></td> <td></td> <td></td> <td id="footer_tax"></td> <td></td> <td><span class="display_currency" id="footer_subtotal" data-currency_symbol ="true"></span></td> <td></td> <td></td> <td></td> </tr>
+</tfoot>
                             </table>
                         </div>
                     </div>
@@ -217,7 +240,7 @@
     <script src="{{ asset('js/report.js?v=' . $asset_v) }}"></script>
     <script type="text/javascript">
         $(
-        '#product_sell_report_form #location_id, #product_sell_report_form #customer_id, #psr_filter_brand_id, #psr_filter_category_id, #psr_customer_group_id'
+        '#product_sell_report_form #location_id, #product_sell_report_form #customer_id, #psr_filter_brand_id, #psr_filter_category_id, #psr_customer_group_id,, #psr_custom_field1, #psr_custom_field2, #psr_custom_field3'
     ).change(function() {
         $('.nav-tabs li.active').find('a[data-toggle="tab"]').trigger('shown.bs.tab');
     });

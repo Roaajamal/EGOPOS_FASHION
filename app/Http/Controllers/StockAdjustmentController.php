@@ -16,6 +16,7 @@ use App\Events\StockAdjustmentCreatedOrModified;
 use App\Variation;
 use App\Product;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Http\Requests\StockAdjustmentRequest;
 
 class StockAdjustmentController extends Controller
 {
@@ -75,7 +76,9 @@ class StockAdjustmentController extends Controller
                         'total_amount_recovered',
                         'additional_notes',
                         'transactions.id as DT_RowId',
-                        DB::raw("CONCAT(COALESCE(u.surname, ''),' ',COALESCE(u.first_name, ''),' ',COALESCE(u.last_name,'')) as added_by")
+                        DB::raw("CONCAT(COALESCE(u.surname, ''),' ',COALESCE(u.first_name, ''),' ',COALESCE(u.last_name,'')) as added_by"),
+                        // ---  جلب إجمالي الكميات ---
+                        DB::raw('(SELECT SUM(quantity) FROM stock_adjustment_lines WHERE transaction_id = transactions.id) as total_qty'),
                     );
 
             $permitted_locations = auth()->user()->permitted_locations();
@@ -140,6 +143,9 @@ class StockAdjustmentController extends Controller
                         }
                     }
                 )
+                ->editColumn('total_qty', function($row) {
+                    return $this->transactionUtil->num_f($row->total_qty, false);
+                  })
                 ->editColumn('transaction_date', '{{@format_datetime($transaction_date)}}')
                 ->editColumn('adjustment_type', function ($row) {
                     return __('stock_adjustment.'.$row->adjustment_type);
@@ -148,7 +154,7 @@ class StockAdjustmentController extends Controller
                     'data-href' => function ($row) {
                         return  action([\App\Http\Controllers\StockAdjustmentController::class, 'show'], [$row->id]);
                     }, ])
-                ->rawColumns(['final_total', 'action', 'total_amount_recovered'])
+                ->rawColumns(['final_total', 'action', 'total_amount_recovered', 'total_qty'])
                 ->make(true);
         }
 
@@ -160,23 +166,34 @@ class StockAdjustmentController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function create()
+  public function create()
     {
-        if (! auth()->user()->can('stock_adjustment.create')) {
+        if (!auth()->user()->can('stock_adjustment.create')) {
             abort(403, 'Unauthorized action.');
         }
 
         $business_id = request()->session()->get('user.business_id');
 
-        //Check if subscribed or not
-        if (! $this->moduleUtil->isSubscribed($business_id)) {
-            return $this->moduleUtil->expiredResponse(action([\App\Http\Controllers\StockAdjustmentController::class, 'index']));
+        // التحقق من الاشتراك النشط
+        if (!$this->moduleUtil->isSubscribed($business_id)) {
+            return $this->moduleUtil->expiredResponse(
+                action([\App\Http\Controllers\StockAdjustmentController::class, 'index'])
+            );
+        }
+
+        // إنشاء أو استرجاع الرقم المرجعي من الجلسة
+        if (session()->has('next_stock_adjustment_ref')) {
+            $next_ref_no = session('next_stock_adjustment_ref');
+        } else {
+            $ref_count = $this->productUtil->setAndGetReferenceCount('stock_adjustment', $business_id);
+            $next_ref_no = $this->productUtil->generateReferenceNumber('stock_adjustment', $ref_count, $business_id);
+            session(['next_stock_adjustment_ref' => $next_ref_no]);
         }
 
         $business_locations = BusinessLocation::forDropdown($business_id);
 
         return view('stock_adjustment.create')
-                ->with(compact('business_locations'));
+                ->with(compact('business_locations', 'next_ref_no'));
     }
 
     /**
@@ -185,242 +202,247 @@ class StockAdjustmentController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
- public function store(Request $request)
+ public function store(StockAdjustmentRequest $request)
 {
-    if (! auth()->user()->can('stock_adjustment.create')) {
-        abort(403, 'Unauthorized action.');
-    }
-
     try {
         $business_id = $request->session()->get('user.business_id');
-        $location_id = $request->input('location_id');
-        $products = $request->input('products');
+        $validated = $request->validated();
+        
+        $location_id = $validated['location_id'];
+        $products = $validated['products'];
+        $is_last_chunk = filter_var($request->input('is_last_chunk'), FILTER_VALIDATE_BOOLEAN);
 
-        if (empty($products)) {
-            $output = ['success' => 0, 'msg' => __('messages.something_went_wrong')];
-            return $request->ajax() ? response()->json($output) : redirect()->back()->with('status', $output);
-        }
+        // تجهيز بيانات الإدخال
+        $input_data = [
+            'location_id' => $location_id,
+            'transaction_date' => $validated['transaction_date'],
+            'adjustment_type' => $validated['adjustment_type'],
+            'additional_notes' => $request->input('additional_notes'),
+            'total_amount_recovered' => $this->productUtil->num_uf($validated['total_amount_recovered'] ?? 0),
+            'final_total' => $this->productUtil->num_uf($validated['final_total']),
+            'ref_no' => $request->input('ref_no'),
+            'is_last_chunk' => $is_last_chunk
+        ];
 
-        // --- 1. الفحص المسبق الصارم جداً ---
-        foreach ($products as $product) {
-            $v_id = $product['variation_id'];
-            
-            // تنظيف الكمية المدخلة من أي رموز أو مسافات وتحويلها لرقم عشري
-            $qty_requested = (float)str_replace(',', '', $this->productUtil->num_uf($product['quantity']));
-
-            $product_check = \App\Variation::where('variations.id', $v_id)
-                ->join('products as p', 'p.id', '=', 'variations.product_id')
-                ->leftJoin('variation_location_details as vld', function ($join) use ($location_id) {
-                    $join->on('variations.id', '=', 'vld.variation_id')
-                         ->where('vld.location_id', '=', $location_id);
-                })
-                ->where('p.business_id', $business_id)
-                ->select([
-                    'p.enable_stock',
-                    'p.name as product_name',
-                    \DB::raw('COALESCE(vld.qty_available, 0) as qty_available')
-                ])->first();
-
-            if ($product_check && $product_check->enable_stock == 1) {
-                $qty_available = (float)$product_check->qty_available;
-
-                // هذا السطر للدييباج (Debug) - سيطبع القيم في ملف storage/logs/laravel.log
-                \Log::info("فحص المخزن: المنتج: {$product_check->product_name}, المطلوب: $qty_requested, المتوفر: $qty_available");
-
-                // المقارنة باستخدام معامل أكبر من الصريح
-                if ($qty_requested > $qty_available) {
-                    $output = [
-                        'success' => 0, 
-                        'msg' => "توقف! الكمية المطلوبة للمنتج (" . $product_check->product_name . ") هي ($qty_requested) ولكن المتوفر حالياً هو ($qty_available) فقط."
-                    ];
-                    
-                    if ($request->ajax()) {
-                        return response()->json($output);
-                    }
-                    return redirect()->back()->with('status', $output)->withInput();
-                }
-            }
-        }
-
-        // --- 2. إذا نجح الفحص، نبدأ المعاملة ---
+        // بدء معاملة قاعدة البيانات
         DB::beginTransaction();
 
-        $input_data = $request->only(['location_id', 'transaction_date', 'adjustment_type', 'additional_notes', 'total_amount_recovered', 'final_total', 'ref_no']);
-        $user_id = $request->session()->get('user.id');
+        // استدعاء منطق الحفظ
+        $stock_adjustment = $this->productUtil->createStockAdjustment(
+            $business_id, 
+            $location_id, 
+            $products, 
+            $input_data
+        );
 
-        $input_data['type'] = 'stock_adjustment';
-        $input_data['business_id'] = $business_id;
-        $input_data['created_by'] = $user_id;
-        $input_data['transaction_date'] = $this->productUtil->uf_date($input_data['transaction_date'], true);
-        $input_data['total_amount_recovered'] = $this->productUtil->num_uf($input_data['total_amount_recovered']);
-
-        $ref_count = $this->productUtil->setAndGetReferenceCount('stock_adjustment');
-        if (empty($input_data['ref_no'])) {
-            $input_data['ref_no'] = $this->productUtil->generateReferenceNumber('stock_adjustment', $ref_count);
+        // إذا فشل الإنشاء، نرمي استثناء
+        if (!$stock_adjustment) {
+            throw new \Exception('فشل في إنشاء تسوية المخزون');
         }
 
-        $product_data = [];
-        foreach ($products as $product) {
-            $qty = $this->productUtil->num_uf($product['quantity']);
+        // إذا كانت هذه هي الدفعة الأخيرة، نقوم بتأكيد المعاملة ومسح الجلسة
+        if ($is_last_chunk) {
+            DB::commit();
+            session()->forget('next_stock_adjustment_ref');
             
-            $adjustment_line = [
-                'product_id' => $product['product_id'],
-                'variation_id' => $product['variation_id'],
-                'quantity' => $qty,
-                'unit_price' => $this->productUtil->num_uf($product['unit_price']),
+            $output = [
+                'success' => 1,
+                'msg' => __('stock_adjustment.stock_adjustment_added_successfully'),
+                'ref_no' => $stock_adjustment->ref_no,
+                'redirect' => route('stock-adjustments.index')
             ];
-
-            if (! empty($product['lot_no_line_id'])) {
-                $adjustment_line['lot_no_line_id'] = $product['lot_no_line_id'];
-            }
-            $product_data[] = $adjustment_line;
-
-            $this->productUtil->decreaseProductQuantity(
-                $product['product_id'],
-                $product['variation_id'],
-                $location_id,
-                $qty
-            );
+        } else {
+            // للدفعات المتوسطة، نؤقتاً لا نؤكد المعاملة
+            DB::commit(); // أو يمكنك استخدام savepoints إذا كنت تريد التراجع الجزئي
+            $output = [
+                'success' => 1,
+                'msg' => 'تم حفظ الدفعة ' . $request->input('chunk_number') . ' بنجاح',
+                'ref_no' => $stock_adjustment->ref_no
+            ];
         }
-
-        $stock_adjustment = Transaction::create($input_data);
-        $stock_adjustment->stock_adjustment_lines()->createMany($product_data);
-
-        $business = [
-            'id' => $business_id,
-            'accounting_method' => $request->session()->get('business.accounting_method'),
-            'location_id' => $location_id,
-        ];
-        $this->transactionUtil->mapPurchaseSell($business, $stock_adjustment->stock_adjustment_lines, 'stock_adjustment');
-
-        event(new StockAdjustmentCreatedOrModified($stock_adjustment, 'added'));
-        $this->transactionUtil->activityLog($stock_adjustment, 'added', null, [], false);
-
-        DB::commit();
-        $output = ['success' => 1, 'msg' => __('stock_adjustment.stock_adjustment_added_successfully')];
 
     } catch (\Exception $e) {
         DB::rollBack();
-        \Log::emergency('خطأ في الحفظ: '.$e->getMessage());
-        $output = ['success' => 0, 'msg' => "حدث خطأ غير متوقع"];
+        \Log::error('خطأ في حفظ تسوية المخزون: ' . $e->getMessage());
+        \Log::error($e->getTraceAsString());
+        
+        $output = [
+            'success' => 0,
+            'msg' => 'حدث خطأ أثناء الحفظ: ' . $e->getMessage()
+        ];
     }
 
-    if ($request->ajax()) {
-        return response()->json($output);
-    }
+    return response()->json($output);
+}
+// أضيفي Request $request قبل المتغير $type أو اجعلي المتغير اختيارياً
+public function getNextReference($type = 'stock_adjustment')
+{
+    try {
+        $business_id = session()->get('user.business_id');
+        
+        // التحقق من وجود رقم في الجلسة أولاً
+        if (session()->has('next_' . $type . '_ref')) {
+            $ref_no = session('next_' . $type . '_ref');
+        } else {
+            $ref_count = $this->productUtil->setAndGetReferenceCount($type, $business_id);
+            $ref_no = $this->productUtil->generateReferenceNumber($type, $ref_count, $business_id);
+            session(['next_' . $type . '_ref' => $ref_no]);
+        }
 
-    return redirect('stock-adjustments')->with('status', $output);
+        return response()->json([
+            'success' => true,
+            'ref_no' => $ref_no
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'msg' => 'خطأ في إنشاء الرقم المرجعي'
+        ], 500);
+    }
 }
     //////////////// export from excel 001
 public function import(Request $request)
 {
     try {
         $request->validate([
-            'file' => 'required|max:2048', 
-            'location_id' => 'required'
+            'file' => 'required|mimes:xlsx,xls,csv|max:5120',
+            'location_id' => 'required|exists:business_locations,id'
         ]);
 
         $file = $request->file('file');
-        $parsed_array = \Excel::toArray([], $file);
-
-        if (empty($parsed_array) || empty($parsed_array[0])) {
-             throw new \Exception("الملف المرفوع فارغ.");
-        }
-
-        $imported_data = array_splice($parsed_array[0], 1);
         $business_id = auth()->user()->business_id;
         $location_id = $request->input('location_id');
-        $row_index = (int)$request->input('row_count', 0);
 
-        $html = '';
-        $imported_count = 0;
-        $skipped_products = [];
-        $temp_stock_tracker = [];
+        $imported_data = \Excel::toArray([], $file);
+        
+        if (empty($imported_data) || empty($imported_data[0])) {
+            throw new \Exception("الملف المرفوع فارغ أو غير صالح");
+        }
 
-        foreach ($imported_data as $value) {
-            if (empty($value[0])) continue;
+        $headers = array_shift($imported_data[0]);
+        $rows = $imported_data[0];
 
-            $sku = trim(strval($value[0]));
-            if (strpos($sku, '.') !== false) { $sku = explode('.', $sku)[0]; }
+        $column_mapping = [
+            'sku'      => 0,
+            'quantity' => 1,
+            'price'    => 2
+        ];
 
-            // 1. جلب بيانات المنتج
-            $variation = \App\Variation::where('variations.sub_sku', $sku)
-                ->join('products as p', 'p.id', '=', 'variations.product_id')
-                ->join('units as u', 'u.id', '=', 'p.unit_id')
-                ->where('p.business_id', $business_id)
-                ->select([
-                    'variations.id as variation_id',
-                    'p.id as product_id',
-                    'p.name as product_name',
-                    'p.enable_stock',
-                    'p.image as image',
-                    'u.short_name as unit',
-                    'p.product_custom_field2',
-                    'variations.default_purchase_price as last_purchased_price'
-                ])->first();
+        $all_skus = [];
+        foreach ($rows as $row) {
+            if (!empty($row[$column_mapping['sku']])) {
+                $all_skus[] = trim(strval($row[$column_mapping['sku']]));
+            }
+        }
+
+        $variations = \App\Variation::whereIn('variations.sub_sku', $all_skus)
+            ->join('products as p', 'p.id', '=', 'variations.product_id')
+            ->where('p.business_id', $business_id)
+            ->select([
+                'variations.id as variation_id',
+                'p.id as product_id',
+                'variations.sub_sku',
+                'p.enable_stock',
+                'variations.dpp_inc_tax as last_purchased_price',
+                'p.name as product_name',
+                'p.product_custom_field1 as custom_field_1',
+                'p.product_custom_field2 as custom_field_2',
+                'p.product_custom_field3 as custom_field_3'
+            ])
+            ->get()
+            ->keyBy('sub_sku');
+
+        $variation_ids = $variations->pluck('variation_id')->toArray();
+        $stock_quantities = \DB::table('variation_location_details')
+            ->whereIn('variation_id', $variation_ids)
+            ->where('location_id', $location_id)
+            ->select('variation_id', \DB::raw('SUM(qty_available) as total_qty'))
+            ->groupBy('variation_id')
+            ->get()
+            ->keyBy('variation_id');
+
+        $products_data       = [];
+        $products_insufficient = [];
+        $temp_stock_tracker  = [];
+
+        foreach ($rows as $index => $row) {
+            $sku = trim(strval($row[$column_mapping['sku']] ?? ''));
+            
+            if (empty($sku)) continue;
+
+            $variation = $variations->get($sku);
 
             if (!$variation) {
-                $skipped_products[] = ['SKU' => $sku, 'Quantity' => $value[1] ?? 0, 'Reason' => 'المنتج غير موجود'];
+                $products_insufficient[] = [
+                    'sub_sku'       => $sku,
+                    'product_name'  => null,
+                    'qty'           => $row[$column_mapping['quantity']] ?? 0,
+                    'qty_available' => 0,
+                    'reason'        => 'المنتج غير موجود في النظام'
+                ];
                 continue;
             }
 
-            // 2. التعديل الجوهري: استخدام SUM لجمع كافة السجلات (1 + 0 + -1...) 
-            // هذا سيضمن الحصول على المخزن الصافي الذي تراه في شاشات النظام
-            $qty_available = \DB::table('variation_location_details')
-                ->where('variation_id', $variation->variation_id)
-                ->where('location_id', $location_id)
-                ->sum('qty_available'); 
+            $stock_info      = $stock_quantities->get($variation->variation_id);
+            $qty_available   = $stock_info ? floatval($stock_info->total_qty) : 0;
+            $qty_requested   = isset($row[$column_mapping['quantity']]) && is_numeric($row[$column_mapping['quantity']])
+                ? (float)$row[$column_mapping['quantity']]
+                : 0;
 
-            $qty_requested = isset($value[1]) && is_numeric($value[1]) ? (float)$value[1] : 0;
-
-            // 3. الفحص التراكمي داخل ملف الإكسل
-            $already_taken = $temp_stock_tracker[$variation->variation_id] ?? 0;
+            $already_taken   = $temp_stock_tracker[$variation->variation_id] ?? 0;
             $effective_stock = $qty_available - $already_taken;
 
-            // تسجيل البيانات للمراقبة (Log)
-            \Log::info("فحص استيراد (منطق SUM): SKU: $sku, المنتج: {$variation->product_name}, إجمالي المخزن في DB: $qty_available, المتاح بعد خصم الأسطر السابقة: $effective_stock, المطلوب: $qty_requested");
-
             if ($variation->enable_stock == 1) {
-                // إذا كان الإجمالي الصافي 0 أو أقل من المطلوب، نرفض السطر
                 if ($qty_requested <= 0 || $qty_requested > $effective_stock) {
-                    $skipped_products[] = [
-                        'SKU' => $sku,
-                        'Quantity' => $qty_requested,
-                        'Reason' => "رصيد غير كافٍ. المخزن الصافي المتوفر: ($effective_stock)"
+                    $products_insufficient[] = [
+                        'sub_sku'       => $variation->sub_sku,
+                        'product_name'  => $variation->product_name,
+                        'qty'           => $qty_requested,
+                        'qty_available' => $effective_stock,
+                        'reason'        => $qty_requested <= 0
+                            ? 'الكمية المطلوبة غير صالحة'
+                            : "رصيد غير كافٍ. المتوفر: $effective_stock"
                     ];
                     continue;
                 }
             }
 
-            $temp_stock_tracker[$variation->variation_id] = ($temp_stock_tracker[$variation->variation_id] ?? 0) + $qty_requested;
+            $temp_stock_tracker[$variation->variation_id] = $already_taken + $qty_requested;
 
-            // 4. بناء السطر للجدول
-            $price = isset($value[2]) && is_numeric($value[2]) ? (float)$value[2] : $variation->last_purchased_price;
-            $html .= view('stock_adjustment.partials.product_table_row', [
-                'product' => $variation,
-                'row_index' => $row_index,
-                'quantity' => $qty_requested,
-                'purchase_price' => $price
-            ])->render();
+            $price = isset($row[$column_mapping['price']]) && is_numeric($row[$column_mapping['price']]) && (float)$row[$column_mapping['price']] > 0
+                ? (float)$row[$column_mapping['price']]
+                : $variation->last_purchased_price;
 
-            $row_index++;
-            $imported_count++;
+            $products_data[] = [
+                'variation_id'   => $variation->variation_id,
+                'product_id'     => $variation->product_id,
+                'sub_sku'        => $variation->sub_sku,
+                'qty'            => $qty_requested,
+                'price'          => $price,
+                'product_name'   => $variation->product_name,
+                'custom_field_1' => $variation->custom_field_1,
+                'custom_field_2' => $variation->custom_field_2,
+                'custom_field_3' => $variation->custom_field_3
+            ];
         }
 
-        // إرجاع النتيجة كما هي في منطقك السابق
-        $response = ['success' => true, 'html' => $html, 'imported_count' => $imported_count, 'skipped_count' => count($skipped_products), 'download_url' => null];
-        if (count($skipped_products) > 0) {
-            $file_name = 'skipped_products_' . time() . '.xlsx';
-            $folder_path = 'temp_excel/';
-            if (!\Storage::disk('public')->exists($folder_path)) { \Storage::disk('public')->makeDirectory($folder_path); }
-            \Excel::store(new \App\Exports\DataExport($skipped_products), $folder_path . $file_name, 'public');
-            $response['download_url'] = asset('storage/' . $folder_path . $file_name);
-        }
-        return response()->json($response);
+        return response()->json([
+            'success'               => true,
+            'products'              => $products_data,
+            'products_insufficient' => $products_insufficient,
+            'imported_count'        => count($products_data),
+            'skipped_count'         => count($products_insufficient),
+            'msg'                   => count($products_data) . ' منتج تم استيرادهم بنجاح',
+        ]);
 
     } catch (\Exception $e) {
-        \Log::error("خطأ في الاستيراد: " . $e->getMessage());
-        return response()->json(['success' => false, 'msg' => $e->getMessage()]);
+        \Log::error('خطأ في استيراد ملف الإكسل: ' . $e->getMessage());
+        \Log::error($e->getTraceAsString());
+        
+        return response()->json([
+            'success' => false,
+            'msg'     => 'حدث خطأ أثناء معالجة الملف: ' . $e->getMessage()
+        ], 500);
     }
 }
      /*
@@ -483,7 +505,7 @@ public function import(Request $request)
                           'p.product_custom_field1',
                           'p.product_custom_field2',
                           'p.product_custom_field3',
-                          'v.default_purchase_price as last_purchased_price'
+                          'v.dpp_inc_tax as last_purchased_price'
                       ]);
             },
             'location'
@@ -678,7 +700,7 @@ public function import(Request $request)
                 'p.product_custom_field2',
                 'p.product_custom_field3',
                 'variations.id as variation_id',
-                'variations.sub_sku as sku',
+                'variations.sub_sku as sub_sku',
                 'u.short_name as unit',
                 'u.id as unit_id',
                 'variations.dpp_inc_tax as last_purchased_price',

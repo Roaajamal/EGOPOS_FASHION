@@ -47,6 +47,18 @@
 		</div>
 	</div>
 </div>
+<!--   invoice number  006  -->
+               @if(!empty($pos_settings['enable_invoice_number']))
+              <div class="col-sm-4">
+        <div class="well well-sm" style="padding: 5px 10px; margin-bottom: 5px;">
+            <strong>@lang('sale.invoice_number'): </strong>
+            <span id="next_invoice_no_display" class="text-success" style="font-size: 1em; font-weight: bold;">
+                {{ $next_invoice_no }}
+            </span>
+        </div>
+    </div>
+@endif
+                  <!--   invoice number  006  --> 
 <div class="row">
 	@if(!empty($pos_settings['show_invoice_layout']))
 	<div class="col-md-4">

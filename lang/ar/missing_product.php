@@ -3,7 +3,7 @@
 return[
 
 'missing_product_report' => 'كشف  النواقص', 
-'missing_product_report_view' => 'عرض كشف المنتجات الناقصة' ,
+'missing_product_report_view' => 'عرض كشف  النواقص' ,
 'source_branch' => 'الفرع المصدر (المتوفر فيه المنتج)' ,
 'target_branch' => 'الفرع المستهدف (الناقص منه المنتج)' ,
 'view_results' => 'عرض النتائج', 
@@ -20,6 +20,7 @@ return[
 'exclusive' => 'غير شامل' ,
 
 'all' => 'الكل', 
-
-
+'solded_quantity' => 'الكمية المباعة',
+'missing_product_with_sales' => '  كشف النواقص حسب المبيعات',
+ 
 ];

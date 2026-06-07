@@ -121,6 +121,10 @@ class ReportController extends Controller
     //////////////////// payment method 001
 public function getPaymentMethodReport(Request $request)
 {
+     if (! auth()->user()->can('payment_method_report.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+         
     $business_id = $request->session()->get('user.business_id');
 
     if ($request->ajax()) {
@@ -532,7 +536,7 @@ if (!empty($full_start) && !empty($full_end)) {
         }
         if ($request->ajax()) {
             $filters = request()->only(['location_id', 'category_id', 'sub_category_id', 'brand_id', 'unit_id', 'tax_id', 'type',
-                'only_mfg_products', 'active_state',  'not_for_selling', 'repair_model_id', 'product_id', 'active_state', ]);
+                'only_mfg_products', 'active_state',  'not_for_selling', 'repair_model_id', 'product_id', 'active_state', 'stock_filter','product_custom_field1', 'product_custom_field2', 'product_custom_field3' ]);
 
             $filters['not_for_selling'] = isset($filters['not_for_selling']) && $filters['not_for_selling'] == 'true' ? 1 : 0;
 
@@ -670,9 +674,29 @@ if (!empty($full_start) && !empty($full_end)) {
         $units = Unit::where('business_id', $business_id)
                             ->pluck('short_name', 'id');
         $business_locations = BusinessLocation::forDropdown($business_id, true);
+         $custom_field_1_options = \App\Product::where('business_id', $business_id)
+                        ->whereNotNull('product_custom_field1')
+                        ->where('product_custom_field1', '!=', '')
+                        ->distinct()
+                        ->pluck('product_custom_field1', 'product_custom_field1')
+                        ->toArray();
+
+    $custom_field_2_options = \App\Product::where('business_id', $business_id)
+                        ->whereNotNull('product_custom_field2')
+                        ->where('product_custom_field2', '!=', '')
+                        ->distinct()
+                        ->pluck('product_custom_field2', 'product_custom_field2')
+                        ->toArray();
+
+    $custom_field_3_options = \App\Product::where('business_id', $business_id)
+                        ->whereNotNull('product_custom_field3')
+                        ->where('product_custom_field3', '!=', '')
+                        ->distinct()
+                        ->pluck('product_custom_field3', 'product_custom_field3')
+                        ->toArray(); 
 
         return view('report.stock_report')
-            ->with(compact('categories', 'brands', 'units', 'business_locations', 'show_manufacturing_data'));
+            ->with(compact('categories', 'brands', 'units', 'business_locations', 'show_manufacturing_data','custom_field_1_options', 'custom_field_2_options', 'custom_field_3_options'));
     }
 
     // // this function copy of above get route becouse of large size parameter 
@@ -2212,7 +2236,7 @@ public function getSalesRepresentativeSummary(Request $request) {
      *
      * @return \Illuminate\Http\Response
      */
-    public function getproductSellReport(Request $request)
+     public function getproductSellReport(Request $request)
     {
         if (! auth()->user()->can('purchase_n_sell_report.view')) {
             abort(403, 'Unauthorized action.');
@@ -2223,6 +2247,7 @@ public function getSalesRepresentativeSummary(Request $request) {
 
         $product_custom_field1 = !empty($custom_labels['product']['custom_field_1']) ? $custom_labels['product']['custom_field_1'] : '';
         $product_custom_field2 = !empty($custom_labels['product']['custom_field_2']) ? $custom_labels['product']['custom_field_2'] : '';
+         $product_custom_field3 = !empty($custom_labels['product']['custom_field_3']) ? $custom_labels['product']['custom_field_3'] : '';
 
         if ($request->ajax()) {
             $payment_types = $this->transactionUtil->payment_types(null, true, $business_id);
@@ -2283,6 +2308,14 @@ public function getSalesRepresentativeSummary(Request $request) {
                     DB::raw('((transaction_sell_lines.quantity - transaction_sell_lines.quantity_returned) * transaction_sell_lines.unit_price_inc_tax) as subtotal')
                 )
                 ->groupBy('transaction_sell_lines.id');
+                
+                 $query->leftJoin('users as agent', 't.commission_agent', '=', 'agent.id')
+                 ->addSelect([
+                 'agent.first_name as agent_first_name',
+                 'agent.last_name as agent_last_name',
+                 'agent.username as agent_username',
+                 'agent.is_cmmsn_agnt as agent_is_agent',
+                ]);
 
             if (! empty($variation_id)) {
                 $query->where('transaction_sell_lines.variation_id', $variation_id);
@@ -2324,6 +2357,21 @@ public function getSalesRepresentativeSummary(Request $request) {
             if (! empty($brand_id)) {
                 $query->where('p.brand_id', $brand_id);
             }
+             // ← الحقول المخصصة
+$custom_field1 = $request->get('custom_field1', null);
+if (! empty($custom_field1)) {
+    $query->where('p.product_custom_field1', 'LIKE', '%' . trim($custom_field1) . '%');
+}
+
+$custom_field2 = $request->get('custom_field2', null);
+if (! empty($custom_field2)) {
+    $query->where('p.product_custom_field2', 'LIKE', '%' . trim($custom_field2) . '%');
+}
+
+$custom_field3 = $request->get('custom_field3', null);
+if (! empty($custom_field3)) {
+    $query->where('p.product_custom_field3', 'LIKE', '%' . trim($custom_field3) . '%');
+} 
 
             return Datatables::of($query)
                 ->editColumn('product_name', function ($row) {
@@ -2388,6 +2436,13 @@ public function getSalesRepresentativeSummary(Request $request) {
 
                     return $html;
                 })
+                 ->addColumn('seller_name', function ($row) {
+    $name = trim($row->agent_first_name . ' ' . $row->agent_last_name);
+    if (empty($name)) {
+        $name = $row->agent_username ?? '—';
+    }
+    return $name;
+}) 
                 ->editColumn('customer', '@if(!empty($supplier_business_name)) {{$supplier_business_name}},<br>@endif {{$customer}}')
                 ->editColumn('purchase_price_inc_tax', function ($row) {
                     return '<span class="purchase_price" data-orig-value="'.$row->purchase_price_inc_tax.'">'.
@@ -2396,7 +2451,13 @@ public function getSalesRepresentativeSummary(Request $request) {
                 ->editColumn('added_by', function ($row) {
                     return $row->added_by;
                 })
-                ->rawColumns(['invoice_no', 'unit_sale_price', 'subtotal', 'sell_qty', 'discount_amount','purchase_price_inc_tax','unit_price', 'tax', 'customer', 'payment_methods','added_by'])
+                 ->filterColumn('seller_name', function ($query, $keyword) {
+                  $query->whereRaw(
+                  "LOWER(CONCAT(COALESCE(agent.first_name,''),' ',COALESCE(agent.last_name,''))) LIKE ?",
+                   ["%{$keyword}%"]
+                     );
+                })
+                ->rawColumns(['invoice_no', 'unit_sale_price', 'subtotal', 'sell_qty', 'discount_amount','purchase_price_inc_tax','unit_price', 'tax', 'customer', 'payment_methods','seller_name','added_by'])
                 ->make(true);
         }
 
@@ -2405,10 +2466,31 @@ public function getSalesRepresentativeSummary(Request $request) {
         $categories = Category::forDropdown($business_id, 'product');
         $brands = Brands::forDropdown($business_id);
         $customer_group = CustomerGroup::forDropdown($business_id, false, true);
+        
+        $custom_field1_values = DB::table('products')
+    ->where('business_id', $business_id)
+    ->whereNotNull('product_custom_field1')
+    ->where('product_custom_field1', '!=', '')
+    ->distinct()
+    ->pluck('product_custom_field1', 'product_custom_field1');
+
+$custom_field2_values = DB::table('products')
+    ->where('business_id', $business_id)
+    ->whereNotNull('product_custom_field2')
+    ->where('product_custom_field2', '!=', '')
+    ->distinct()
+    ->pluck('product_custom_field2', 'product_custom_field2');
+
+$custom_field3_values = DB::table('products')
+    ->where('business_id', $business_id)
+    ->whereNotNull('product_custom_field3')
+    ->where('product_custom_field3', '!=', '')
+    ->distinct()
+    ->pluck('product_custom_field3', 'product_custom_field3');
 
         return view('report.product_sell_report')
             ->with(compact('business_locations', 'customers', 'categories', 'brands',
-                'customer_group', 'product_custom_field1', 'product_custom_field2'));
+                'customer_group', 'product_custom_field1', 'product_custom_field2', 'custom_field1_values', 'custom_field2_values', 'custom_field3_values'));
     }
     /**
      * Shows product purchase report with purchase details
@@ -3686,6 +3768,10 @@ if (!empty($full_start) && !empty($full_end)) {
      */
     public function itemsReport()
     {
+         if ((! auth()->user()->can('items_report.view')  )) {
+            abort(403, 'Unauthorized action.');
+        }
+         
         $business_id = request()->session()->get('user.business_id');
 
         if (request()->ajax()) {
@@ -4081,8 +4167,9 @@ if (!empty($full_start) && !empty($full_end)) {
         ];
     }
   //////////////////  تعديل ل ادخال كميات عشان تتسجل بسجل النشاطات  001
-    public function activityLog()
+     public function activityLog()
     {
+         
         $business_id = request()->session()->get('user.business_id');
         $transaction_types = [
            'contact' => __('report.contact'),
@@ -4125,7 +4212,7 @@ if (!empty($full_start) && !empty($full_end)) {
                     $activities->where('subject_type', \App\Contact::class);
                 } elseif ($subject_type == 'user') {
                     $activities->where('subject_type', \App\User::class);
-                } elseif (in_array($subject_type, ['sell', 'purchase','quantity_entry',
+                } elseif (in_array($subject_type, ['sell', 'purchase','add_quantity','stock_adjustment',
                     'sales_order', 'purchase_order', 'sell_return', 'purchase_return', 'sell_transfer', 'expense', 'purchase_order', ])) {
                     $activities->where('subject_type', \App\Transaction::class);
                     $activities->whereHasMorph('subject', Transaction::class, function ($q) use ($subject_type) {
@@ -4152,9 +4239,12 @@ if (!empty($full_start) && !empty($full_end)) {
      } elseif ($row->subject_type == \App\Transaction::class && ! empty($row->subject->type)) {
         
         //  الطريقة ادخال كميات     
-        if ($row->subject->type == 'quantity_entry') {
+        if ($row->subject->type == 'add_quantity') {
             $subject_type = __('quantity_entry.quantity_entry');
-        } else {
+        } elseif ($row->subject->type == 'stock_adjustment') {
+        $subject_type = __('stock_adjustment.stock_adjustments'); // هنا تظهر "تسوية المخزون" أو "إخراج كميات" حسب ترجمتك
+         }
+        else {
             $subject_type = isset($transaction_types[$row->subject->type]) ? $transaction_types[$row->subject->type] : $row->subject->type;
         }
                           
@@ -4520,95 +4610,102 @@ if (!empty($full_start) && !empty($full_end)) {
     
     
     ////////// 001 تقرير المبيعات المجمل
- public function dailySalesReport(Request $request)
-    {
-        $business_id = $request->session()->get('user.business_id');
+  public function dailySalesReport(Request $request)
+{
+    $business_id = $request->session()->get('user.business_id');
 
-        if ($request->ajax()) {
-            $query = Transaction::where('transactions.business_id', $business_id)
-                ->join('business_locations as bl', 'transactions.location_id', '=', 'bl.id')
-                ->leftJoin('tax_rates as tr', 'transactions.tax_id', '=', 'tr.id')
-                ->select(
-                    DB::raw("DATE(transaction_date) as date"),
-                    'bl.name as location_name',
-                    // المبيعات (من جدول Transactions)
-                    DB::raw("COUNT(DISTINCT CASE WHEN transactions.type = 'sell' AND transactions.status = 'final' THEN transactions.id END) as total_invoices"),
-                    DB::raw("SUM(CASE WHEN transactions.type = 'sell' AND transactions.status = 'final' THEN transactions.final_total ELSE 0 END) as total_sales"),
+    if ($request->ajax()) {
+        $taxes = \App\TaxRate::where('business_id', $business_id)->get();
+        
+        $query = Transaction::where('transactions.business_id', $business_id)
+            ->whereIn('transactions.type', ['sell', 'sell_return'])
+            ->where('transactions.status', 'final')
+            ->join('business_locations as bl', 'transactions.location_id', '=', 'bl.id');
 
-                    // المرتجعات (من جدول Transactions)
-                    DB::raw("COUNT(DISTINCT CASE WHEN transactions.type = 'sell_return' THEN transactions.id END) as total_returns_count"),
-                    DB::raw("SUM(CASE WHEN transactions.type = 'sell_return' THEN transactions.final_total ELSE 0 END) as total_return_amount"),
+        // --- إضافة الفلتر الافتراضي لتاريخ اليوم ---
+        if (!empty($request->start_date) && !empty($request->end_date)) {
+            $query->whereBetween('transactions.transaction_date', [$request->start_date, $request->end_date]);
+        } else {
+            // إذا لم يتم اختيار تاريخ، أظهر مبيعات اليوم فقط
+            $query->whereDate('transactions.transaction_date', \Carbon\Carbon::today()->format('Y-m-d'));
+        }
 
-                    // تفاصيل الضرائب (من جدول Sell Lines عبر Subquery)
-                    DB::raw("(SELECT SUM(tsl.quantity * tsl.unit_price) 
-                              FROM transaction_sell_lines tsl 
-                              JOIN transactions t2 ON tsl.transaction_id = t2.id 
-                              WHERE DATE(t2.transaction_date) = DATE(transactions.transaction_date) 
-                              AND t2.location_id = transactions.location_id
-                              AND t2.type = 'sell' AND t2.status = 'final') as total_before_tax"),
+        if (!empty($request->location_id)) {
+            $query->where('transactions.location_id', $request->location_id);
+        }
 
-                    DB::raw("(SELECT SUM(tsl.quantity * tsl.item_tax) 
-                              FROM transaction_sell_lines tsl 
-                              JOIN transactions t2 ON tsl.transaction_id = t2.id 
-                              WHERE DATE(t2.transaction_date) = DATE(transactions.transaction_date) 
-                              AND t2.location_id = transactions.location_id
-                              AND t2.type = 'sell' AND t2.status = 'final') as total_tax"),
+        $query->select(
+            DB::raw("DATE(transactions.transaction_date) as date"),
+            'bl.name as location_name',
+            DB::raw("COUNT(DISTINCT CASE WHEN transactions.type = 'sell' THEN transactions.id END) as total_invoices"),
+            DB::raw("COUNT(DISTINCT CASE WHEN transactions.type = 'sell_return' THEN transactions.id END) as total_returns_count"),
+            DB::raw("SUM(CASE WHEN transactions.type = 'sell' THEN transactions.final_total ELSE 0 END) as total_sales"),
+            DB::raw("SUM(CASE WHEN transactions.type = 'sell_return' THEN transactions.final_total ELSE 0 END) as total_return_amount"),
+            DB::raw("SUM(CASE WHEN transactions.type = 'sell' THEN transactions.discount_amount ELSE 0 END) as total_discount"),
+            
+            // --- تطبيق منطق الموديل هنا ---
+            DB::raw("SUM(CASE WHEN transactions.type = 'sell' THEN 
+                COALESCE(NULLIF(transactions.tax_amount, 0), (SELECT SUM(tsl.quantity * tsl.item_tax) FROM transaction_sell_lines tsl WHERE tsl.transaction_id = transactions.id), 0) 
+                ELSE 0 END) as total_all_taxes"),
 
-                    DB::raw("IFNULL(GROUP_CONCAT(DISTINCT tr.name), 'N/A') as tax_type"),
+            DB::raw("SUM(CASE WHEN transactions.type = 'sell' THEN 
+                (transactions.final_total - COALESCE(NULLIF(transactions.tax_amount, 0), (SELECT SUM(tsl.quantity * tsl.item_tax) FROM transaction_sell_lines tsl WHERE tsl.transaction_id = transactions.id), 0)) 
+                ELSE 0 END) as total_before_tax"),
 
-                    // المرتجع غير المدفوع
-                    DB::raw("SUM(CASE WHEN transactions.type = 'sell_return' AND transactions.payment_status != 'paid' THEN (transactions.final_total - (SELECT IFNULL(SUM(tp.amount), 0) FROM transaction_payments tp WHERE tp.transaction_id = transactions.id)) ELSE 0 END) as return_due")
-                );
+            DB::raw("SUM(CASE WHEN transactions.type = 'sell_return' THEN (transactions.final_total - (SELECT IFNULL(SUM(amount), 0) FROM transaction_payments WHERE transaction_id = transactions.id)) ELSE 0 END) as return_due")
+        );
 
-            // الفلترة
-            if (!empty($request->start_date) && !empty($request->end_date)) {
-                $query->whereBetween('transaction_date', [$request->start_date, $request->end_date]);
-            }
-            if (!empty($request->location_id)) {
-                $query->where('transactions.location_id', $request->location_id);
-            }
+       // إضافة الضرائب الديناميكية في التقرير المجمل
+            foreach ($taxes as $tax) {
+            $query->addSelect(DB::raw("SUM((SELECT COALESCE(SUM(tsl.quantity * tsl.item_tax), 0) 
+                                 FROM transaction_sell_lines tsl 
+                                 WHERE tsl.transaction_id = transactions.id 
+                                 AND tsl.tax_id = {$tax->id})) as tax_{$tax->id}_total"));
+                }
 
-            $query->groupBy(DB::raw("DATE(transaction_date)"), 'transactions.location_id');
+        $results = $query->groupBy(DB::raw("DATE(transactions.transaction_date)"), 'bl.name')
+                         ->orderBy('date', 'desc')
+                         ->get();
 
-            // منطق الترتيب عند الضغط على الأسهم
-            if (empty($request->get('order'))) {
-                $query->orderBy('date', 'desc');
-            }
-
-            return Datatables::of($query)
-                ->editColumn('total_sales', '{{@num_format($total_sales)}}')
-                ->editColumn('total_return_amount', '{{@num_format($total_return_amount)}}')
-                ->editColumn('total_before_tax', function($row) {
+        return Datatables::of($results)
+            ->editColumn('total_sales', fn($row) => $this->productUtil->num_f($row->total_sales))
+            ->editColumn('total_discount', fn($row) => $this->productUtil->num_f($row->total_discount))
+            ->editColumn('total_all_taxes', fn($row) => $this->productUtil->num_f($row->total_all_taxes))
+            ->editColumn('total_return_amount', '{{@num_format($total_return_amount)}}')
+            ->editColumn('total_tax', fn($row) => $this->productUtil->num_f($row->total_tax))
+            //->editColumn('total_before_tax', fn($row) => $this->productUtil->num_f($row->total_before_tax))
+            ->editColumn('total_before_tax', function($row) {
                    $net_before_tax = $row->total_before_tax - $row->total_return_amount;
                    return $this->productUtil->num_f($net_before_tax);
                 })
-                ->editColumn('total_tax', '{{@num_format($total_tax)}}')
-                ->editColumn('return_due', '{{@num_format($return_due)}}')
-                ->addColumn('net_sales', function ($row) {
-                    return $this->productUtil->num_f($row->total_sales - $row->total_return_amount);
-                })
-                ->addColumn('action', function ($row) {
-                    return '<button type="button" class="btn btn-primary btn-xs view-daily-details-modal" data-date="' . $row->date . '"><i class="fa fa-eye"></i> عرض التفاصيل</button>';
-                })
-                ->rawColumns(['action'])
-                ->make(true);
-        }
-
-        $business_locations = \App\BusinessLocation::forDropdown($business_id);
-        return view('report.daily_sales_report')->with(compact('business_locations'));
+            ->editColumn('return_due', fn($row) => $this->productUtil->num_f($row->return_due))
+            ->addColumn('net_sales', fn($row) => $this->productUtil->num_f($row->total_sales - $row->total_return_amount))
+            ->addColumn('action', function ($row) {
+                return '<button type="button" class="btn btn-primary btn-xs view-daily-details-modal" data-date="' . $row->date . '"><i class="fa fa-eye"></i> ' . __('messages.view') . '</button>';
+            })
+            ->make(true);
     }
+
+    $business_locations = \App\BusinessLocation::forDropdown($business_id);
+    $taxes = \App\TaxRate::forBusiness($business_id);
+     
+    return view('report.daily_sales_report')->with(compact('business_locations', 'taxes'));
+}
  ////////// 001 تقرير المبيعات التفصيلي
 public function detailedSalesReport(Request $request)
 {
     $business_id = $request->session()->get('user.business_id');
 
     if ($request->ajax()) {
+        $taxes = TaxRate::where('business_id', $business_id)->get();
+        
+        // 1. نبدأ ببناء الاستعلام الأساسي أولاً (تعريف $query)
         $query = Transaction::where('transactions.business_id', $business_id)
             ->where('transactions.type', 'sell')
             ->where('transactions.status', 'final')
             ->join('business_locations as bl', 'transactions.location_id', '=', 'bl.id')
             ->join('contacts as c', 'transactions.contact_id', '=', 'c.id')
-            ->leftJoin('tax_rates as tr', 'transactions.tax_id', '=', 'tr.id')
+            ->leftJoin('tax_rates as T', 'transactions.tax_id', '=', 'T.id')
             ->leftJoin('transaction_payments as tp', 'transactions.id', '=', 'tp.transaction_id')
             ->select(
                 'transactions.id',
@@ -4616,41 +4713,58 @@ public function detailedSalesReport(Request $request)
                 'transactions.invoice_no',
                 'bl.name as location_name',
                 'c.name as customer_name',
-                'tr.name as tax_type',
                 'transactions.final_total',
                 'transactions.payment_status',
+                DB::raw("COALESCE(transactions.tax_amount, 0) as transaction_tax"),
+                DB::raw("COALESCE(T.name, '') as tax_name"),
+                DB::raw("COALESCE(T.id, 0) as tax_id"),
                 DB::raw("GROUP_CONCAT(DISTINCT tp.method SEPARATOR ', ') as payment_methods"),
-                DB::raw("(SELECT SUM(tsl.quantity * tsl.unit_price) FROM transaction_sell_lines tsl WHERE tsl.transaction_id = transactions.id) as line_total_before_tax"),
-                DB::raw("(SELECT SUM(tsl.quantity * tsl.item_tax) FROM transaction_sell_lines tsl WHERE tsl.transaction_id = transactions.id) as line_total_tax")
+                
+                // منطق الموديل لحساب الضريبة الكلية (نفس الموديل الناجح)
+                DB::raw("COALESCE(NULLIF(transactions.tax_amount, 0), (SELECT SUM(tsl.quantity * tsl.item_tax) FROM transaction_sell_lines tsl WHERE tsl.transaction_id = transactions.id), 0) as line_total_tax"),
+                
+                // منطق الموديل لحساب الإجمالي قبل الضريبة
+                DB::raw("(transactions.final_total - COALESCE(NULLIF(transactions.tax_amount, 0), (SELECT SUM(tsl.quantity * tsl.item_tax) FROM transaction_sell_lines tsl WHERE tsl.transaction_id = transactions.id), 0)) as line_total_before_tax")
             )
-            ->groupBy('transactions.id');
+            ->groupBy('transactions.id', 'transactions.transaction_date', 'transactions.invoice_no', 'bl.name', 'c.name', 'transactions.final_total', 'transactions.payment_status', 'transactions.tax_amount');
 
-        // فلاتر البحث
+        // 2. الآن نضيف أعمدة الضرائب الديناميكية (بعد تعريف $query)
+        // هذا الجزء سيجلب قيم الضرائب المنفردة (مثل ضريبة 16) من الأسطر لتطابق الموديل
+        foreach ($taxes as $tax) {
+            $query->addSelect(DB::raw("(SELECT SUM(tsl.quantity * tsl.item_tax) 
+                                        FROM transaction_sell_lines tsl 
+                                        WHERE tsl.transaction_id = transactions.id 
+                                        AND tsl.tax_id = {$tax->id}) as tax_{$tax->id}"));
+        }
+
+        // 3. فلاتر البحث والترتيب
         if (!empty($request->start_date) && !empty($request->end_date)) {
-            $query->whereBetween('transaction_date', [$request->start_date, $request->end_date]);
+            $query->whereBetween('transactions.transaction_date', [$request->start_date, $request->end_date]);
         }
         if (!empty($request->location_id)) {
             $query->where('transactions.location_id', $request->location_id);
         }
 
-        // --- التعديل هنا لتمكين الترتيب عبر الأسهم ---
-        // إذا لم يكن هناك طلب ترتيب محدد من المستخدم، نستخدم التاريخ تنازلياً كحالة افتراضية
         if (empty($request->get('order'))) {
             $query->orderBy('transactions.transaction_date', 'desc');
         }
 
         return Datatables::of($query)
-            ->editColumn('transaction_date', '{{@format_datetime($transaction_date)}}')
-            ->editColumn('final_total', '{{@num_format($final_total)}}')
-            ->editColumn('line_total_before_tax', '{{@num_format($line_total_before_tax)}}')
-            ->editColumn('line_total_tax', '{{@num_format($line_total_tax)}}')
+            ->editColumn('transaction_date', function($row) {
+                return \Carbon\Carbon::parse($row->transaction_date)->format('Y-m-d H:i:s');
+            })
+            ->editColumn('final_total', fn($row) => number_format($row->final_total, 2))
+            ->editColumn('line_total_before_tax', fn($row) => number_format($row->line_total_before_tax, 2))
+            ->editColumn('line_total_tax', fn($row) => number_format($row->line_total_tax, 2))
             ->editColumn('payment_methods', function($row) {
+                if(empty($row->payment_methods)) return '';
                 $methods = explode(', ', $row->payment_methods);
                 $translated = array_map(function($m) { 
                     return !empty($m) ? __('lang_v1.' . $m) : ''; 
                 }, $methods);
                 return implode(', ', array_filter($translated));
             })
+            ->editColumn('payment_status', fn($row) => __('lang_v1.' . $row->payment_status))
             ->addColumn('action', function($row){
                 return '<button type="button" class="btn btn-info btn-xs btn-modal" data-container=".view_modal" data-href="' . action([\App\Http\Controllers\SellController::class, 'show'], [$row->id]) . '"><i class="fa fa-eye"></i> ' . __("messages.view") . '</button>';
             })
@@ -4659,8 +4773,10 @@ public function detailedSalesReport(Request $request)
     }
 
     $business_locations = \App\BusinessLocation::forDropdown($business_id);
-    return view('report.daily_sales_report')->with(compact('business_locations'));
+    $taxes = TaxRate::forBusiness($business_id);
+    return view('report.daily_sales_report')->with(compact('business_locations', 'taxes'));
 }
+
  /////////// موديل تفصيل الفاتورة 001
 public function getDailySalesDetailsModal(Request $request) {
     $business_id = $request->session()->get('user.business_id');
@@ -4672,14 +4788,34 @@ public function getDailySalesDetailsModal(Request $request) {
         ->where('transactions.status', 'final')
         ->whereDate('transactions.transaction_date', $date)
         ->join('contacts as c', 'transactions.contact_id', '=', 'c.id')
+        ->leftJoin('tax_rates as tr', 'transactions.tax_id', '=', 'tr.id')
         ->select(
+            'transactions.id',
             'transactions.invoice_no',
             'transactions.transaction_date',
             'transactions.final_total',
             'transactions.payment_status',
             'c.name as customer_name',
-            DB::raw("(SELECT SUM(tsl.quantity * tsl.unit_price) FROM transaction_sell_lines tsl WHERE tsl.transaction_id = transactions.id) as total_before_tax"),
-            DB::raw("(SELECT SUM(tsl.quantity * tsl.item_tax) FROM transaction_sell_lines tsl WHERE tsl.transaction_id = transactions.id) as total_tax")
+            'tr.name as tax_name',
+            
+            // 1. حساب الضريبة: نأخذ tax_amount من جدول الفاتورة مباشرة لأنه الأدق إذا كان نظامك يستخدم "ضريبة الطلب"
+            // وإذا كان 0 نستخدم مجموع ضرائب الأصناف كاحتياط
+            DB::raw("COALESCE(
+                NULLIF(transactions.tax_amount, 0), 
+                (SELECT SUM(tsl.quantity * tsl.item_tax) FROM transaction_sell_lines tsl WHERE tsl.transaction_id = transactions.id)
+            , 0) as line_total_tax"),
+            
+            // 2. حساب قبل الضريبة: الإجمالي النهائي - قيمة الضريبة المحسوبة أعلاه
+            DB::raw("(transactions.final_total - COALESCE(
+                NULLIF(transactions.tax_amount, 0), 
+                (SELECT SUM(tsl.quantity * tsl.item_tax) FROM transaction_sell_lines tsl WHERE tsl.transaction_id = transactions.id)
+            , 0)) as line_total_before_tax"),
+
+            // جلب أنواع الضرائب المطبقة
+            DB::raw("(SELECT GROUP_CONCAT(DISTINCT tax_r.name SEPARATOR ', ') 
+                      FROM transaction_sell_lines tsl 
+                      JOIN tax_rates tax_r ON tsl.tax_id = tax_r.id 
+                      WHERE tsl.transaction_id = transactions.id) as applied_tax_types")
         )
         ->orderBy('transactions.transaction_date', 'desc');
 
@@ -4694,112 +4830,145 @@ public function getDailySalesDetailsModal(Request $request) {
 ////////////  فتح صفحة تقرير المبيعات والمرتجعات
 public function productSalesIndex(Request $request)
 {
+    //  if (!auth()->user()->can('product_sales_report.view') ) {
+    //         abort(403, 'Unauthorized action.');
+    //     }
     $business_id = $request->session()->get('user.business_id');
 
     // جلب الفروع لعرضها في قائمة الفلتر
     $business_locations = \App\BusinessLocation::forDropdown($business_id);
 
+     $sizes = DB::table('products')->where('business_id', $business_id)->whereNotNull('product_custom_field1')->distinct()->pluck('product_custom_field1', 'product_custom_field1');
+    $colors = DB::table('products')->where('business_id', $business_id)->whereNotNull('product_custom_field2')->distinct()->pluck('product_custom_field2', 'product_custom_field2');
+    $models = DB::table('products')->where('business_id', $business_id)->whereNotNull('product_custom_field3')->distinct()->pluck('product_custom_field3', 'product_custom_field3');
+
     // هذا السطر هو الذي يفتح الصفحة
-    return view('report.product_sales_detailed_report', compact('business_locations'));
+    return view('report.product_sales_detailed_report', compact('business_locations','sizes', 'colors', 'models'));
 }
 /////// كل تفصيلي
 public function productAllTransactionsReport(Request $request) {
     $business_id = $request->session()->get('user.business_id');
     if ($request->ajax()) {
-        $query = DB::table('transactions as t')
-            ->leftJoin('transaction_sell_lines as tsl', function($join) {
-                $join->on('t.id', '=', 'tsl.transaction_id')
-                     ->orOn('t.return_parent_id', '=', 'tsl.transaction_id');
-            })
-            ->leftJoin('variations as v', 'tsl.variation_id', '=', 'v.id')
-            ->leftJoin('products as p', 'v.product_id', '=', 'p.id')
-            ->join('contacts as c', 't.contact_id', '=', 'c.id')
-            ->join('business_locations as bl', 't.location_id', '=', 'bl.id')
-            ->where('t.business_id', $business_id)
-            ->whereIn('t.type', ['sell', 'sell_return'])
-            ->where(function($q) {
-                $q->where('t.type', 'sell')
-                  ->orWhere(function($sub) {
-                      $sub->where('t.type', 'sell_return')
-                          ->where('tsl.quantity_returned', '>', 0);
-                  });
-            })
-            ->where(function($q) {
-                $q->where(function($sub) {
-                    $sub->where('t.type', 'sell')->where('t.status', 'final');
-                })->orWhere(function($sub) {
-                    $sub->where('t.type', 'sell_return')->where('t.payment_status', 'paid');
-                });
-            })
-            ->select([
-                't.transaction_date', 't.type', 't.invoice_no', 'c.name as customer_name',
-                'p.sku', 'p.name as product_name',
-                't.final_total as invoice_total',
-                't.id as t_id',
-                'bl.name as location_name',
-                DB::raw("CASE WHEN t.type = 'sell_return' THEN -1 * tsl.quantity_returned ELSE tsl.quantity END as quantity"),
-                DB::raw("CASE WHEN t.type = 'sell_return' THEN -1 * (tsl.quantity_returned * tsl.unit_price_inc_tax) ELSE (tsl.quantity * tsl.unit_price_inc_tax) END as total_line_amount")
-            ]);
+        $start = !empty($request->start_date) ? $request->start_date : null;
+        $end = !empty($request->end_date) ? $request->end_date : null;
+        $location_id = $request->location_id;
 
-        if (!empty($request->start_date) && !empty($request->end_date)) {
-            $query->whereBetween('t.transaction_date', [$request->start_date, $request->end_date]);
+        $custom_field1 = $request->product_custom_field1;
+        $custom_field2 = $request->product_custom_field2;
+        $custom_field3 = $request->product_custom_field3; 
+
+        // مبيعات عادية
+        $q1 = "SELECT t.transaction_date, t.type, t.invoice_no,
+                c.name as customer_name, p.sku, p.name as product_name,
+                p.product_custom_field1 as product_size, 
+                p.product_custom_field2 as product_color, 
+                p.product_custom_field3 as product_model,
+                t.final_total as invoice_total, t.id as t_id, bl.name as location_name,
+                tsl.quantity as quantity,
+                (tsl.quantity * tsl.unit_price_inc_tax) as total_line_amount
+                FROM transactions as t
+                INNER JOIN transaction_sell_lines as tsl ON t.id = tsl.transaction_id
+                LEFT JOIN variations as v ON tsl.variation_id = v.id
+                LEFT JOIN products as p ON v.product_id = p.id
+                JOIN contacts as c ON t.contact_id = c.id
+                JOIN business_locations as bl ON t.location_id = bl.id
+                WHERE t.business_id = $business_id
+                AND t.type = 'sell'
+                AND t.status = 'final'";
+
+        // مرتجعات عادية (lines من الفاتورة الأم)
+        $q2 = "SELECT t.transaction_date, t.type, t.invoice_no,
+                c.name as customer_name, p.sku, p.name as product_name,
+                p.product_custom_field1 as product_size, 
+                p.product_custom_field2 as product_color, 
+                p.product_custom_field3 as product_model,
+                t.final_total as invoice_total, t.id as t_id, bl.name as location_name,
+                -1 * tsl.quantity_returned as quantity,
+                -1 * (tsl.quantity_returned * tsl.unit_price_inc_tax) as total_line_amount
+                FROM transactions as t
+                INNER JOIN transaction_sell_lines as tsl ON t.return_parent_id = tsl.transaction_id
+                LEFT JOIN products as p ON tsl.product_id = p.id
+                JOIN contacts as c ON t.contact_id = c.id
+                JOIN business_locations as bl ON t.location_id = bl.id
+                WHERE t.business_id = $business_id
+                AND t.type = 'sell_return'
+                AND tsl.quantity_returned > 0
+                AND NOT EXISTS (SELECT 1 FROM transaction_sell_lines own WHERE own.transaction_id = t.id)";
+
+        // مرتجعات التبديل (lines خاصة بالمرتجع)
+        $q3 = "SELECT t.transaction_date, t.type, t.invoice_no,
+                c.name as customer_name, p.sku, p.name as product_name,
+                p.product_custom_field1 as product_size, 
+                p.product_custom_field2 as product_color, 
+                p.product_custom_field3 as product_model,
+                t.final_total as invoice_total, t.id as t_id, bl.name as location_name,
+                -1 * tsl.quantity as quantity,
+                -1 * (tsl.quantity * tsl.unit_price_inc_tax) as total_line_amount
+                FROM transactions as t
+                INNER JOIN transaction_sell_lines as tsl ON t.id = tsl.transaction_id
+                LEFT JOIN products as p ON tsl.product_id = p.id
+                JOIN contacts as c ON t.contact_id = c.id
+                JOIN business_locations as bl ON t.location_id = bl.id
+                WHERE t.business_id = $business_id
+                AND t.type = 'sell_return'";
+
+        if ($start && $end) {
+            $q1 .= " AND t.transaction_date BETWEEN '$start' AND '$end'";
+            $q2 .= " AND t.transaction_date BETWEEN '$start' AND '$end'";
+            $q3 .= " AND t.transaction_date BETWEEN '$start' AND '$end'";
         }
-        if (!empty($request->location_id)) {
-            $query->where('t.location_id', $request->location_id);
+        if ($location_id) {
+            $q1 .= " AND t.location_id = $location_id";
+            $q2 .= " AND t.location_id = $location_id";
+            $q3 .= " AND t.location_id = $location_id";
         }
 
-       return Datatables::of($query)
-    ->editColumn('transaction_date', '{{@format_datetime($transaction_date)}}')
-    
-    // منع البحث في التواريخ لأنه يسبب خطأ LOWER()
-    ->filterColumn('transaction_date', function($query, $keyword) {
-        // نتركه فارغاً لمنع الخطأ، أو ابحث بصيغة RAW إذا لزم الأمر
-    })
+        // تطبيق الفلاتر المخصصة الجديدة (الحجم، اللون، الموديل)
+        if (!empty($custom_field1)) {
+            $q1 .= " AND p.product_custom_field1 = '$custom_field1'";
+            $q2 .= " AND p.product_custom_field1 = '$custom_field1'";
+            $q3 .= " AND p.product_custom_field1 = '$custom_field1'";
+        }
+        if (!empty($custom_field2)) {
+            $q1 .= " AND p.product_custom_field2 = '$custom_field2'";
+            $q2 .= " AND p.product_custom_field2 = '$custom_field2'";
+            $q3 .= " AND p.product_custom_field2 = '$custom_field2'";
+        }
+        if (!empty($custom_field3)) {
+            $q1 .= " AND p.product_custom_field3 = '$custom_field3'";
+            $q2 .= " AND p.product_custom_field3 = '$custom_field3'";
+            $q3 .= " AND p.product_custom_field3 = '$custom_field3'";
+        }
+         
+        $sql = "SELECT * FROM (($q1) UNION ALL ($q2) UNION ALL ($q3)) as combined";
+        $query = collect(DB::select(DB::raw($sql)));
 
-    // توجيه البحث يدوياً للأعمدة النصية فقط لضمان SQL نظيف
-    ->filterColumn('invoice_no', function($query, $keyword) { 
-        $query->where('t.invoice_no', 'like', "%{$keyword}%"); 
-    })
-    ->filterColumn('customer_name', function($query, $keyword) { 
-        $query->where('c.name', 'like', "%{$keyword}%"); 
-    })
-    ->filterColumn('sku', function($query, $keyword) { 
-        $query->where('p.sku', 'like', "%{$keyword}%"); 
-    })
-    ->filterColumn('product_name', function($query, $keyword) { 
-        $query->where('p.name', 'like', "%{$keyword}%"); 
-    })
-    ->filterColumn('location_name', function($query, $keyword) { 
-        $query->where('bl.name', 'like', "%{$keyword}%"); 
-    })
-
-    // معالجة البحث في الكمية (تجنب LOWER التلقائي)
-    ->filterColumn('quantity', function($query, $keyword) {
-        $query->whereRaw("(CASE WHEN t.type = 'sell_return' THEN -1 * tsl.quantity_returned ELSE tsl.quantity END) like ?", ["%{$keyword}%"]);
-    })
-
-    ->addColumn('type_label', function($row) {
-        return $row->type == 'sell' ? 'مبيع' : 'مرتجع مدفوع';
-    })
-    ->addColumn('cash_val', function($row) {
-        $total_cash = DB::table('transaction_payments')->where('transaction_id', $row->t_id)->where('method', 'cash')->sum('amount');
-        $ratio = ($row->invoice_total != 0) ? ($row->total_line_amount / $row->invoice_total) : 0;
-        $val = $total_cash * $ratio;
-        return number_format($row->type == 'sell_return' ? -1 * abs($val) : $val, 2, '.', '');
-    })
-    ->addColumn('card_val', function($row) {
-        $total_card = DB::table('transaction_payments')->where('transaction_id', $row->t_id)->where('method', 'card')->sum('amount');
-        $ratio = ($row->invoice_total != 0) ? ($row->total_line_amount / $row->invoice_total) : 0;
-        $val = $total_card * $ratio;
-        return number_format($row->type == 'sell_return' ? -1 * abs($val) : $val, 2, '.', '');
-    })
-    ->addColumn('due_val', function($row) {
-        if($row->type == 'sell_return') return '0.00';
-        $total_paid = DB::table('transaction_payments')->where('transaction_id', $row->t_id)->sum('amount');
-        $ratio = ($row->invoice_total > 0) ? ($row->total_line_amount / $row->invoice_total) : 0;
-        return number_format($row->total_line_amount - ($total_paid * $ratio), 2, '.', '');
-    })
-    ->make(true);
+        return Datatables::of($query)
+            ->editColumn('transaction_date', function($row) {
+                return \Carbon\Carbon::parse($row->transaction_date)->format('Y-m-d H:i');
+            })
+            ->addColumn('type_label', function($row) {
+                return $row->type == 'sell' ? 'مبيع' : 'مرتجع';
+            })
+            ->addColumn('cash_val', function($row) {
+                $total_cash = DB::table('transaction_payments')->where('transaction_id', $row->t_id)->where('method', 'cash')->sum('amount');
+                $ratio = ($row->invoice_total != 0) ? (abs($row->total_line_amount) / abs($row->invoice_total)) : 0;
+                $val = $total_cash * $ratio;
+                return number_format($row->type == 'sell_return' ? -1 * abs($val) : $val, 2, '.', '');
+            })
+            ->addColumn('card_val', function($row) {
+                $total_card = DB::table('transaction_payments')->where('transaction_id', $row->t_id)->where('method', 'card')->sum('amount');
+                $ratio = ($row->invoice_total != 0) ? (abs($row->total_line_amount) / abs($row->invoice_total)) : 0;
+                $val = $total_card * $ratio;
+                return number_format($row->type == 'sell_return' ? -1 * abs($val) : $val, 2, '.', '');
+            })
+            ->addColumn('due_val', function($row) {
+                if ($row->type == 'sell_return') return '0.00';
+                $total_paid = DB::table('transaction_payments')->where('transaction_id', $row->t_id)->sum('amount');
+                $ratio = ($row->invoice_total > 0) ? (abs($row->total_line_amount) / abs($row->invoice_total)) : 0;
+                return number_format(abs($row->total_line_amount) - ($total_paid * $ratio), 2, '.', '');
+            })
+            ->make(true);
     }
 }
 // 1. دالة الكل مجمل (فواتير مبيعات ومرتجع مدفوع)
@@ -4827,6 +4996,13 @@ public function productAllSummaryReport(Request $request) {
                 't.payment_status', 
                 'bl.name as location_name'
             ]);
+             $query->leftJoin('users as agent', 't.commission_agent', '=', 'agent.id')
+                 ->addSelect([
+                 'agent.first_name as agent_first_name',
+                 'agent.last_name as agent_last_name',
+                 'agent.username as agent_username',
+                 'agent.is_cmmsn_agnt as agent_is_agent',
+                ]);  
 
         // الفلاتر
         if (!empty($request->start_date) && !empty($request->end_date)) {
@@ -4858,6 +5034,19 @@ public function productAllSummaryReport(Request $request) {
             ->addColumn('type_label', function($row) {
                 return $row->type == 'sell' ? 'مبيع' : 'مرتجع مدفوع';
             })
+            ->filterColumn('seller_name', function ($query, $keyword) {
+                  $query->whereRaw(
+                  "LOWER(CONCAT(COALESCE(agent.first_name,''),' ',COALESCE(agent.last_name,''))) LIKE ?",
+                   ["%{$keyword}%"]
+                     );
+                }) 
+                ->addColumn('seller_name', function ($row) {
+               $name = trim($row->agent_first_name . ' ' . $row->agent_last_name);
+               if (empty($name)) {
+                $name = $row->agent_username ?? '—';
+                }
+              return $name;
+              })
             ->editColumn('final_total', '{{@num_format($final_total)}}')
             ->make(true);
     }
@@ -4879,6 +5068,7 @@ public function productSalesSummaryReport(Request $request) {
                 't.transaction_date', 
                 't.invoice_no', 
                 'c.name as customer_name',
+                't.discount_type',
                 DB::raw("SUM(tsl.quantity * tsl.unit_price_before_discount) as original_price"),
                 DB::raw("SUM(tsl.quantity * tsl.item_tax) as unit_tax"), 
                 't.discount_amount as discount_val',
@@ -4888,6 +5078,13 @@ public function productSalesSummaryReport(Request $request) {
                 'bl.name as location_name'
             ])
             ->groupBy('t.id');
+            $query->leftJoin('users as agent', 't.commission_agent', '=', 'agent.id')
+                 ->addSelect([
+                 'agent.first_name as agent_first_name',
+                 'agent.last_name as agent_last_name',
+                 'agent.username as agent_username',
+                 'agent.is_cmmsn_agnt as agent_is_agent',
+                ]);  
 
         // تطبيق الفلاتر
         if (!empty($request->start_date) && !empty($request->end_date)) {
@@ -4920,8 +5117,32 @@ public function productSalesSummaryReport(Request $request) {
 
             ->editColumn('original_price', '{{@num_format($original_price)}}')
             ->editColumn('unit_tax', '{{@num_format($unit_tax)}}')
-            ->editColumn('discount_val', '{{@num_format($discount_val)}}')
+            ->editColumn('discount_val', function($row) {
+    // تنسيق الرقم باستخدام الدالة المساعدة للنظام
+    $amount = number_format($row->discount_val, 2); 
+
+    // إذا كان نوع الخصم نسبة مئوية، أضف العلامة
+    if ($row->discount_type == 'percentage') {
+        return $amount . ' %';
+    }
+
+    return $amount;
+})
+->addColumn('seller_name', function ($row) {
+               $name = trim($row->agent_first_name . ' ' . $row->agent_last_name);
+               if (empty($name)) {
+                $name = $row->agent_username ?? '—';
+                }
+              return $name;
+              })
+->filterColumn('seller_name', function ($query, $keyword) {
+                  $query->whereRaw(
+                  "LOWER(CONCAT(COALESCE(agent.first_name,''),' ',COALESCE(agent.last_name,''))) LIKE ?",
+                   ["%{$keyword}%"]
+                     );
+                }) 
             ->editColumn('total_line_amount', '{{@num_format($total_line_amount)}}')
+            
             ->make(true);
     }
 }
@@ -4954,6 +5175,14 @@ public function productSalesDetailedReport(Request $request) {
                 DB::raw("(SELECT SUM(amount) FROM transaction_payments WHERE transaction_id = t.id AND method = 'card') as total_card"),
                 DB::raw("(SELECT SUM(amount) FROM transaction_payments WHERE transaction_id = t.id AND method NOT IN ('cash', 'card')) as total_other")
             ])->groupBy('transaction_sell_lines.id');
+
+            $query->leftJoin('users as agent', 't.commission_agent', '=', 'agent.id')
+                 ->addSelect([
+                 'agent.first_name as agent_first_name',
+                 'agent.last_name as agent_last_name',
+                 'agent.username as agent_username',
+                 'agent.is_cmmsn_agnt as agent_is_agent',
+                ]);  
 
         if (!empty($request->start_date) && !empty($request->end_date)) {
             $start = \Carbon\Carbon::parse($request->start_date)->toDateTimeString();
@@ -5004,6 +5233,19 @@ public function productSalesDetailedReport(Request $request) {
                 $total_paid = ($row->total_cash + $row->total_card + $row->total_other) * $ratio;
                 return number_format($row->total_line_amount - $total_paid, 2, '.', '');
             })
+            ->filterColumn('seller_name', function ($query, $keyword) {
+                  $query->whereRaw(
+                  "LOWER(CONCAT(COALESCE(agent.first_name,''),' ',COALESCE(agent.last_name,''))) LIKE ?",
+                   ["%{$keyword}%"]
+                     );
+                }) 
+                ->addColumn('seller_name', function ($row) {
+               $name = trim($row->agent_first_name . ' ' . $row->agent_last_name);
+               if (empty($name)) {
+                $name = $row->agent_username ?? '—';
+                }
+              return $name;
+              })
             ->make(true);
     }
 }

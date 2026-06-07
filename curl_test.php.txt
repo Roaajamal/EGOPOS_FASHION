@@ -1,0 +1,11 @@
+<?php
+echo '<pre>';
+
+echo 'extension_loaded(curl): ';
+var_dump(extension_loaded('curl'));
+
+echo 'function curl_init exists: ';
+var_dump(function_exists('curl_init'));
+
+echo "\n\n==== phpinfo() ====\n";
+phpinfo();

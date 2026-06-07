@@ -2,70 +2,78 @@ $(document).ready(function() {
     // 1. إعداد البحث عن المنتجات (يدعم صفحة الإضافة وصفحة التعديل)
     // تم توحيد المعرفات لتعمل على المعرفين (search_product_for_s_adj و search_product_for_srock_adjustment)
     if ($('#search_product_for_s_adj').length > 0 || $('#search_product_for_srock_adjustment').length > 0) {
-        let search_field = $('#search_product_for_s_adj').length > 0 ? '#search_product_for_s_adj' : '#search_product_for_srock_adjustment';
+    let search_field = $('#search_product_for_s_adj').length > 0 ? '#search_product_for_s_adj' : '#search_product_for_srock_adjustment';
+
+    $(search_field).autocomplete({
+        delay: 500, // تقليل التأخير لسرعة الاستجابة مع السكانر
+        autoFocus: false, // مهم لمنع السكانر من اختيار أول عنصر عشوائياً
+
+        source: function(request, response) {
+            $.getJSON(
+                '/products/list',
+                { location_id: $('#location_id').val(), term: request.term },
+                response
+            );
+        },
+        minLength: 2,
+        response: function(event, ui) {
+            if (ui.content.length == 1) {
+                ui.item = ui.content[0];
+                if (ui.item.qty_available > 0 && ui.item.enable_stock == 1) {
+                    $(this).data('ui-autocomplete')._trigger('select', 'autocompleteselect', ui);
+                    $(this).autocomplete('close');
+                }
+            } else if (ui.content.length == 0) {
+                swal(LANG.no_products_found);
+            }
+        },
+        focus: function(event, ui) {
+            // منع وضع القيمة في الحقل عند التحويم إذا كان المنتج غير متوفر
+            if (ui.item.qty_available <= 0) {
+                return false;
+            }
+        },
+        select: function(event, ui) {
+            // ✅ المنع الصريح للـ Enter من عمل Submit للنموذج
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (ui.item.qty_available > 0) {
+                $(this).val(null);
+                // ملاحظة: تأكدي أن اسم الدالة صحيح هنا (كانت stock_adjustment_product_row)
+                stock_adjustment_product_row(ui.item.variation_id);
+            } else {
+                alert(LANG.out_of_stock);
+            }
+            return false; 
+        },
+    }).autocomplete('instance')._renderItem = function(ul, item) {
+        var label = item.name;
+        if (item.type == 'variable') label += '-' + item.variation;
         
-        $(search_field).autocomplete({
-            source: function(request, response) {
-                $.getJSON(
-                    '/products/list',
-                    { location_id: $('#location_id').val(), term: request.term },
-                    response
-                );
-            },
-            minLength: 2,
-            response: function(event, ui) {
-                if (ui.content.length == 1) {
-                    ui.item = ui.content[0];
-                    if (ui.item.qty_available > 0 && ui.item.enable_stock == 1) {
-                        $(this).data('ui-autocomplete')._trigger('select', 'autocompleteselect', ui);
-                        $(this).autocomplete('close');
-                    }
-                } else if (ui.content.length == 0) {
-                    swal(LANG.no_products_found);
-                }
-            },
-            focus: function(event, ui) {
-                if (ui.item.qty_available <= 0) {
-                    return false;
-                }
-            },
-            select: function(event, ui) {
-                if (ui.item.qty_available > 0) {
-                    $(this).val(null);
-                    stock_adjustment_product_row(ui.item.variation_id);
-                } else {
-                    alert(LANG.out_of_stock);
-                }
-            },
-        }).autocomplete('instance')._renderItem = function(ul, item) {
-    if (item.qty_available <= 0) {
-        // حالة المنتج غير المتوفر: نظهر الاسم + الـ SKU + رسالة غير متوفر
-        var string = '<li class="ui-state-disabled">' + item.name;
-        if (item.type == 'variable') {
-            string += '-' + item.variation;
+        var stock_status = '';
+        var is_disabled = '';
+
+        if (item.enable_stock == 1 && item.qty_available <= 0) {
+            is_disabled = 'class="ui-state-disabled"';
+            stock_status = '<br><span class="help-block text-danger">' + LANG.out_of_stock + '</span>';
+        } else if (item.enable_stock == 1) {
+            stock_status = '<br><span class="help-block">' + LANG.quantity_available + ': ' + item.qty_available + '</span>';
         }
-        // إظهار الـ SKU هنا
-        string += ' (' + item.sub_sku + ')'; 
-        string += ' (Out of stock) </li>';
-        return $(string).appendTo(ul);
-    } else if (item.enable_stock != 1) {
-        return ul;
-    } else {
-        // حالة المنتج المتوفر: نظهر الاسم والـ SKU بشكل واضح
-        var string = '<div>' + item.name;
-        if (item.type == 'variable') {
-            string += '-' + item.variation;
-        }
-        // إظهار الـ SKU هنا
-        string += ' (' + item.sub_sku + ')'; 
-        string += ' </div>';
-        
-        return $('<li>')
-            .append(string)
+
+        return $('<li ' + is_disabled + '>')
+            .append('<div>' + label + ' (' + item.sub_sku + ')' + stock_status + '</div>')
             .appendTo(ul);
-    }
-};
-    }
+    };
+
+    // ✅ إضافة مستمع للأحداث لمنع زر Enter تماماً في خانة البحث
+    $(document).on('keypress', search_field, function(e) {
+        if (e.which == 13) { 
+            e.preventDefault();
+            return false;
+        }
+    });
+}
 
     // 2. تحديث عداد الأسطر وتحديث الإجماليات عند تحميل الصفحة (مهم جداً لصفحة التعديل)
     if ($('#stock_adjustment_product_table tbody tr').length > 0) {
@@ -76,6 +84,7 @@ $(document).ready(function() {
              $('#product_row_index').val(total_rows);
         }
         update_table_total();
+        updateLineNumbers(); // تحديث أرقام الأسطر
     }
 
     // 3. تغيير الفرع/الموقع
@@ -125,6 +134,7 @@ $(document).on('input change keyup', 'input.product_quantity, input.product_unit
             if (willDelete) {
                 $(this).closest('tr').remove();
                 update_table_total();
+                updateLineNumbers(); // تحديث أرقام الأسطر بعد الحذف
             }
         });
     });
@@ -160,6 +170,7 @@ $(document).on('input change keyup', 'input.product_quantity, input.product_unit
             { data: 'ref_no', name: 'ref_no' },
             { data: 'location_name', name: 'BL.name' },
             { data: 'adjustment_type', name: 'adjustment_type' },
+            { data: 'total_qty', name: 'total_qty', searchable: false },
             { data: 'final_total', name: 'final_total' },
             { data: 'total_amount_recovered', name: 'total_amount_recovered' },
             { data: 'additional_notes', name: 'additional_notes' },
@@ -185,17 +196,123 @@ $(document).on('input change keyup', 'input.product_quantity, input.product_unit
                     url: href,
                     dataType: 'json',
                     success: function(result) {
-                        if (result.success) {
-                            toastr.success(result.msg);
-                            stock_adjustment_table.ajax.reload();
-                        } else {
-                            toastr.error(result.msg);
-                        }
+                      if (result.success) {
+        // 1. تحديث الرقم المرجعي لضمان ربط الدفعات القادمة بنفس السند
+        if (result.ref_no) {
+            ref_no = result.ref_no;
+            $('#ref_no').val(ref_no);
+        }
+
+        if (isLast) {
+            // 2. عند الدفعة الأخيرة فقط: أظهري رسالة النجاح النهائية وانتقلي للصفحة
+            toastr.success("تم حفظ كامل الكميات بنجاح");
+            window.location.href = '/stock-adjustments';
+        } else {
+            // 3. إذا لم تكن الأخيرة، اطلبي الدفعة التالية تلقائياً
+            sendChunk(index + 1);
+        }
+    } else {
+        // في حال فشل أي دفعة، نظهر الخطأ ونعيد تفعيل الزر
+        toastr.error(result.msg);
+        btn.prop('disabled', false).text('حفظ');
+    }
                     },
                 });
             }
         });
     });
+
+    /////////  007
+    // 11. إضافة مستمع لحدث الحفظ لتقسيم البيانات إلى دفعات (Chunks)
+$(document).on('submit', 'form#stock_adjustment_form', function(e) {
+    e.preventDefault();
+    var form = $(this);
+    var fixed_ref_no = $('#ref_no').val();
+    // تعريف الزر هنا لضمان استخدامه داخل دالة sendChunk
+    var btn = form.find('button[type="submit"]');
+
+    if (!form.valid()) {
+        toastr.error("الرجاء تصحيح أخطاء الكميات في الجدول");
+        return false;
+    }
+    
+    var all_products = [];
+    // تجميع كافة المنتجات من الجدول
+    $('#stock_adjustment_product_table tbody tr.product_row').each(function() {
+        var row = $(this);
+        var p_id = row.find('input.product_id').val();
+        var v_id = row.find('input.variation_id').val();
+        var qty = row.find('input.product_quantity').val();
+        var price = row.find('input.product_unit_price').val();
+
+        if (p_id && v_id) {
+            all_products.push({
+                product_id: p_id,
+                variation_id: v_id,
+                quantity: qty,
+                unit_price: price,
+                lot_no_line_id: row.find('.lot_number').val() || null
+            });
+        }
+    });
+
+
+    if (all_products.length === 0) {
+        toastr.warning("لا توجد منتجات صالحة للحفظ - تأكد من إضافة أصناف للجدول");
+        return false;
+    }
+
+    var chunkSize = 50;
+    var totalChunks = Math.ceil(all_products.length / chunkSize);
+    var ref_no = $('#ref_no').val();
+
+    function sendChunk(index) {
+        var start = index * chunkSize;
+        var chunk = all_products.slice(start, start + chunkSize);
+        var isLast = (index + 1) === totalChunks;
+
+        
+        // الآن سيتم تحديث نص الزر بشكل سليم
+        btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> حفظ جزء ' + (index + 1) + ' / ' + totalChunks);
+
+        $.ajax({
+            method: 'POST',
+            url: form.attr('action'),
+            headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') },
+            data: {
+                location_id: $('#location_id').val(),
+                ref_no: fixed_ref_no,
+                transaction_date: $('#transaction_date').val(),
+                adjustment_type: $('#adjustment_type').val(),
+                total_amount_recovered: $('#total_amount_recovered').val(),
+                additional_notes: $('#additional_notes').val(),
+                final_total: $('#total_adjustment_value').val(),
+                products: chunk,
+                is_last_chunk: isLast
+            },
+            success: function(result) {
+                if (result.success || result.success === 1) {
+                    if (isLast) {
+                        toastr.success("تم حفظ كامل الأصناف بنجاح");
+                        window.location.href = '/stock-adjustments';
+                    } else {
+                        sendChunk(index + 1);
+                    }
+                } else {
+                    toastr.error(result.msg);
+                    btn.prop('disabled', false).text('حفظ');
+                }
+            },
+            error: function() {
+                toastr.error("فشل الاتصال أثناء حفظ الدفعة " + (index + 1));
+                btn.prop('disabled', false).text('حفظ');
+            }
+        });
+    }
+
+    sendChunk(0);
+});
+//////// 007
 });
 
 // 9. الدوال المساعدة (Functions)
@@ -211,6 +328,7 @@ function stock_adjustment_product_row(variation_id) {
             $('table#stock_adjustment_product_table tbody').append(result);
             update_table_total();
             $('#product_row_index').val(row_index + 1);
+            updateLineNumbers(); // تحديث أرقام الأسطر بعد الإضافة
         },
     });
 }
@@ -218,18 +336,20 @@ function stock_adjustment_product_row(variation_id) {
 function update_table_total() {
     var table_total = 0;
     var total_diff = 0;
+     var total_qty = 0; 
 
     $('table#stock_adjustment_product_table tbody tr').each(function() {
         var row = $(this);
         // استخدام دالة __read_number لفك تنسيق العملة
-        var qty = parseFloat(__read_number(row.find('input.product_quantity'))) || 0;
-        var unit_price = parseFloat(__read_number(row.find('input.product_unit_price'))) || 0;
+        var qty = __read_number(row.find('input.product_quantity')) || 0;
+        var unit_price = __read_number(row.find('input.product_unit_price')) || 0;
         
         // قراءة السعر الأصلي مباشرة لأنه مخزن كرقم بسيط في الـ value
         var original_price = parseFloat(row.find('input.original_purchase_price').val()) || 0;
 
         var row_total = qty * unit_price;
         table_total += row_total;
+         total_qty += qty;
 
         if (original_price > 0) {
             total_diff += (original_price ) * qty;
@@ -238,12 +358,12 @@ function update_table_total() {
 
     $('span#total_adjustment').text(__number_f(table_total));
     $('#total_adjustment_value').val(table_total);
-
+    $('span#total_quantities').text(__number_f(total_qty));
    
 }
 function update_table_row(tr) {
     var quantity = parseFloat(__read_number(tr.find('input.product_quantity'))) || 0;
-    var unit_price = parseFloat(__read_number(tr.find('input.product_unit_price'))) || 0;
+    var unit_price = __read_number(tr.find('input.product_unit_price')) || 0;
     
     // حساب المجموع الفرعي للسطر
     var row_total = quantity * unit_price;
@@ -295,14 +415,18 @@ $(document).on('submit', '#export_quantity_products_modal form', function(e) {
     e.preventDefault();
     let formData = new FormData(this); 
     let url = $(this).attr('action');
+    let location_id = $('#location_id').val();
 
-    let currentRows = parseInt($('#product_row_index').val()) || 0;
-    formData.append('location_id', $('#location_id').val()); 
-    formData.append('row_count', currentRows); 
+    if (!location_id) {
+        toastr.error("الرجاء اختيار الموقع أولاً");
+        return false;
+    }
+
+    formData.append('location_id', location_id); 
 
     let btn = $(this).find('button[type="submit"]');
     let btn_text = btn.html();
-    btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+    btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> جاري التحليل...');
 
     $.ajax({
         method: 'POST',
@@ -312,71 +436,209 @@ $(document).on('submit', '#export_quantity_products_modal form', function(e) {
         processData: false, 
         contentType: false, 
         success: function(result) {
-            btn.prop('disabled', false).html(btn_text);
             if (result.success) {
-                if (result.html && result.html.trim() !== '') {
-                    let $wrappedHtml = $('<table><tbody>' + result.html + '</tbody></table>');
-                    let $newRows = $wrappedHtml.find('tr.product_row');
+                let products = result.products; // السيرفر يرسل مصفوفة بيانات JSON
+                let total = products.length;
 
-                    $newRows.each(function() {
-                        let $currentRow = $(this).clone(); 
-                        let variation_id = $currentRow.find('.variation_id').val();
-                        let new_qty = parseFloat($currentRow.find('.product_quantity').val()) || 0;
+                if (total === 0) {
+                    toastr.error("لا توجد بيانات صالحة.");
+                    btn.prop('disabled', false).html(btn_text);
+                    return;
+                }
 
-                        let existingRow = $('#stock_adjustment_product_table tbody')
-                                            .find('.variation_id[value="' + variation_id + '"]')
-                                            .closest('tr');
+                // استخدام القالب المخفي إذا كان موجوداً
+                if ($('#product_row_template').length > 0) {
+                    addProductsFromTemplate(products, location_id);
+                    btn.prop('disabled', false).html(btn_text);
+                    $('#export_quantity_products_modal').modal('hide');
+                    
+                    let message = "تم استيراد " + total + " صنف بنجاح.";
+                    if (result.skipped_count > 0) {
+                        message += " تم تخطي " + result.skipped_count + " صنف.";
+                       // ✅ أضف هنا بدل download_url
+                if (result.products_insufficient && result.products_insufficient.length > 0) {
+                   let confirmed = confirm("تم تخطي " + result.skipped_count + " صنف. هل تريد تنزيل ملف المنتجات المرفوضة؟");
+        if (confirmed) {
+            exportInsufficientToExcel(result.products_insufficient);
+        }
+                }
+                    }
+                    if (result.products_insufficient && result.products_insufficient.length > 0) {
+                exportInsufficientToExcel(result.products_insufficient);
+            }
+                    toastr.success(message);
+                } else {
+                    // طلب "قالب" سطر واحد فقط من السيرفر (الطريقة القديمة)
+                    $.ajax({
+                        method: 'POST',
+                        url: '/stock-adjustments/get_product_row',
+                        data: { 
+                            row_index: 0, 
+                            variation_id: products[0].variation_id, 
+                            location_id: location_id
+                        },
+                        dataType: 'html',
+                        success: function(template_html) {
+                            let $tableBody = $('#stock_adjustment_product_table tbody');
+                            let currentRows = parseInt($('#product_row_index').val()) || 0;
 
-                        if (existingRow.length > 0) {
-                            // إذا المنتج موجود مسبقاً، نجمع الكميات
-                            let current_qty = parseFloat(__read_number(existingRow.find('.product_quantity'))) || 0;
-                            let total_qty = current_qty + new_qty;
-                            __write_number(existingRow.find('.product_quantity'), total_qty);
+                            btn.html('<i class="fa fa-rocket"></i> جاري الرسم...');
+
+                            products.forEach(function(p) {
+                                // البحث عن المنتج إذا كان موجوداً مسبقاً للدمج
+                                let existingRow = $tableBody.find('.variation_id[value="' + p.variation_id + '"]').closest('tr');
+
+                                if (existingRow.length > 0) {
+                                    let current_qty = parseFloat(__read_number(existingRow.find('.product_quantity'))) || 0;
+                                    __write_number(existingRow.find('.product_quantity'), current_qty + parseFloat(p.qty));
+                                    update_table_row(existingRow);
+                                } else {
+                                    // بناء السطر الجديد باستخدام القالب وتعديل البيانات برمجياً
+                                    let $newRow = $(template_html);
+                                    
+                                    // تحديث الفهارس (Indexes) والبيانات
+                                    $newRow.find('input, select').each(function() {
+                                        let name = $(this).attr('name');
+                                        if (name) $(this).attr('name', name.replace('[0]', '[' + currentRows + ']'));
+                                    });
+
+                                    $newRow.find('.variation_id').val(p.variation_id);
+                                    $newRow.find('.product_id').val(p.product_id);
+                                    $newRow.find('td:first-child').html('<strong class="text-primary">' + p.sub_sku + '</strong>');
+                                    __write_number($newRow.find('.product_quantity'), p.qty);
+                                    $newRow.find('.product_unit_price').val(p.price);
+
+                                    $tableBody.append($newRow);
+                                    update_table_row($newRow);
+                                    currentRows++;
+                                }
+                            });
+
+                            $('#product_row_index').val(currentRows);
+                            update_table_total();
+                            updateLineNumbers(); // تحديث أرقام الأسطر بعد الاستيراد
+                            btn.prop('disabled', false).html(btn_text);
+                            $('#export_quantity_products_modal').modal('hide');
                             
-                            // تحديث السطر (هنا يتم ربط السعر بالخصم)
-                            update_table_row(existingRow);
-                        } else {
-                            // إذا منتج جديد، نضيف السطر للجدول
-                            $('#stock_adjustment_product_table tbody').append($currentRow);
-                            
-                            // تشغيل الحسبة للسطر الجديد فور إضافته
-                            update_table_row($currentRow);
-                            currentRows++;
+                            let message = "تم استيراد " + total + " صنف بنجاح.";
+                            if (result.skipped_count > 0) {
+                                message += " تم تخطي " + result.skipped_count + " صنف.";
+                                if (result.download_url) {
+                                    toastr.info('<a href="' + result.download_url + '" target="_blank">تحميل المنتجات المرفوضة</a>', 'معلومات', { allowHtml: true });
+                                }
+                            }
+                            toastr.success(message);
                         }
                     });
-
-                    // تحديث العداد الكلي وتحديث إجمالي السند والخصم
-                    $('#product_row_index').val(currentRows);
-                    update_table_total();
                 }
-
-                // إدارة رسائل التنبيه والملفات المرفوضة
-                if (result.skipped_count > 0) {
-                    let downloadLink = '';
-                    if (result.download_url) {
-                        downloadLink = '<br><a href="' + result.download_url + '" target="_blank" style="color: #fff; font-weight: bold; text-decoration: underline;">' +
-                                       '<i class="fa fa-download"></i> تحميل ملف المنتجات المرفوضة</a>';
-                    }
-                    toastr.warning(result.msg + downloadLink, "تقرير الاستيراد", {
-                        "timeOut": 0, "extendedTimeOut": 0, "closeButton": true, "tapToDismiss": false
-                    });
-                } else {
-                    toastr.success(result.msg);
-                }
-
-                $('#export_quantity_products_modal').modal('hide');
-                $('#export_quantity_products_modal form')[0].reset();
             } else {
-                toastr.error(result.msg);
+                btn.prop('disabled', false).html(btn_text);
+                toastr.error(result.msg || "حدث خطأ في الاستيراد");
             }
         },
-        error: function(e) {
+        error: function(xhr) {
             btn.prop('disabled', false).html(btn_text);
-            toastr.error("حدث خطأ أثناء الرفع");
+            let errorMsg = "حدث خطأ أثناء الرفع";
+            if (xhr.responseJSON && xhr.responseJSON.msg) {
+                errorMsg = xhr.responseJSON.msg;
+            }
+            toastr.error(errorMsg);
         }
     });
 });
 
+// دالة جديدة لإضافة المنتجات من القالب المخفي
+function addProductsFromTemplate(products, location_id) {
+    let $tableBody = $('#stock_adjustment_product_table tbody');
+    let currentRows = parseInt($('#product_row_index').val()) || 0;
+    let template = $('#product_row_template').html();
+
+    products.forEach(function(product) {
+        // البحث عن المنتج إذا كان موجوداً مسبقاً
+        let existingRow = $tableBody.find('.variation_id[value="' + product.variation_id + '"]').closest('tr');
+
+        if (existingRow.length > 0) {
+            // دمج مع المنتج الموجود
+            let current_qty = parseFloat(__read_number(existingRow.find('.product_quantity'))) || 0;
+            let new_qty = current_qty + parseFloat(product.qty);
+            __write_number(existingRow.find('.product_quantity'), new_qty);
+            update_table_row(existingRow);
+        } else {
+            // إنشاء صف جديد من القالب
+            let $newRow = $(template);
+            
+            // تحديث الفهارس
+            $newRow.find('input, select').each(function() {
+                let name = $(this).attr('name');
+                if (name) {
+                    $(this).attr('name', name.replace('[0]', '[' + currentRows + ']'));
+                }
+            });
+
+            // تعبئة البيانات
+            $newRow.find('.variation_id').val(product.variation_id);
+            $newRow.find('.product_id').val(product.product_id);
+            $newRow.find('.sku-column strong').text(product.sub_sku); 
+            $newRow.find('.custom-field-1').text(product.custom_field_1 || '-');
+$newRow.find('.custom-field-2').text(product.custom_field_2 || '-');
+$newRow.find('.custom-field-3').text(product.custom_field_3 || '-');
+            __write_number($newRow.find('.product_quantity'), product.qty);
+            __write_number($newRow.find('.product_unit_price'), product.price || 0);
+            
+            // تعيين اسم المنتج إذا كان متوفراً
+            if (product.product_name) {
+                $newRow.find('.product-name-column strong').text(product.product_name);
+            }
+
+            $tableBody.append($newRow);
+            update_table_row($newRow);
+            currentRows++;
+        }
+    });
+
+    $('#product_row_index').val(currentRows);
+    update_table_total();
+    updateLineNumbers(); // تحديث أرقام الأسطر
+}
+
+// دالة تحديث أرقام الأسطر
+function updateLineNumbers() {
+    $('#stock_adjustment_product_table tbody tr').each(function(index) {
+        let row = $(this);
+        let lineNumber = index + 1;
+        
+        // تحديث رقم السطر
+        if (row.find('.line-number').length > 0) {
+            row.find('.line-number').text(lineNumber);
+        }
+        
+        // تحديث data attribute
+        row.attr('data-row-index', index);
+    });
+}
+
 $(document).on('shown.bs.modal', '.view_modal', function() {
     __currency_convert_recursively($('.view_modal'));
 });
+function exportInsufficientToExcel(products) {
+    let csvContent = "SKU,اسم المنتج,الكمية المطلوبة,الكمية المتوفرة,السبب\n";
+    
+    products.forEach(function(p) {
+        csvContent += [
+            p.sub_sku,
+            p.product_name ?? '',
+            p.qty,
+            p.qty_available,
+            p.reason
+        ].join(',') + "\n";
+    });
+
+    let blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    let url = URL.createObjectURL(blob);
+    let link = document.createElement('a');
+    link.href = url;
+    link.download = 'skipped_products_' + Date.now() + '.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+}
+ 

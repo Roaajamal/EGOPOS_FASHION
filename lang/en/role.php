@@ -19,16 +19,20 @@ return [
     'customer' => 'Customer',
     
     'report' => 'Report',
-
+     'inventory.view' => 'View Inventory Page', 
+     'inventory.create' => 'Create Inventory Page',
     'user.view' => 'View user',
     'user.create' => 'Add user',
     'user.update' => 'Edit user',
     'user.delete' => 'Delete user',
-
+    'open_cash_drawer' => 'Open Cash Drawer',  
+    'send_to_visa' => 'Send To Visa',
     'supplier.view' => 'View supplier',
     'supplier.create' => 'Add supplier',
     'supplier.update' => 'Edit supplier',
     'supplier.delete' => 'Delete supplier',
+    
+    'enable_customer_ledger' => 'Show Customer Ledger',
 
     'customer.view' => 'View customer',
     'customer.create' => 'Add customer',
@@ -39,13 +43,33 @@ return [
     'product.create' => 'Add product',
     'product.update' => 'Edit product',
     'product.delete' => 'Delete product',
+    
+    'current_stock_tab.view' => 'View Current Stock Tab',
+     'daily_stock_tab.view' => 'View Daily Stock Tab',
+    
+    'add_product.view' => 'View Import Product',
+    'add_product.create' => 'Create Import Product',
 
+    'enable_search_quantity' => 'Show Search Quantity',
+    
     'purchase.view' => 'View purchase',
     'purchase.view_own' => 'View own purchase',
     'purchase.view_all' => 'View all purchase',
     'purchase.create' => 'Add purchase',
     'purchase.update' => 'Edit purchase',
     'purchase.delete' => 'Delete purchase',
+    
+    'product_sales_report.view' => 'View Sales And Returns Products',
+    'cash_drawer_report.view' => 'View Cash Drawer Report',
+     'customer_group_report.view' => 'View Customer Group Report',
+      'items_report.view' => 'View Items Report',
+      'payment_method_report.view' => 'View Payment Method Report',
+    
+    'sales' => 'Sellers', 
+    'sales.view' => 'View Seller',
+    'sales.create' => 'Add Seller', 
+    'sales.update' => 'Edit Seller',
+    'sales.delete' => 'Delete Seller', 
     
     'stock_adjustment.view' => 'View all stock adjustment',
     'stock_adjustment.view_own' => 'View own stock adjustment',
@@ -54,6 +78,8 @@ return [
     'stock_adjustment.delete' => 'Delete stock adjustment',
     'purchase' => 'Purchase',
     'stock_adjustment' => 'Stock Adjustment',
+    
+    'new_product.create' => 'Add New Product',
 
     // Stock Transfer permissions
     'stock_transfer' => 'Stock Transfer',

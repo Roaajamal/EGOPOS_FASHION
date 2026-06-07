@@ -5,8 +5,9 @@ use App\Http\Controllers\FatoraController;
 use App\Http\Controllers\BarcodeDesignController;
 use App\Http\Controllers\QuantityEntryController;
 use App\Http\Controllers\MissingProductController;
-
-
+use App\Http\Controllers\CashDrawerLogController;   
+use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\AddProductController;
 use App\Http\Controllers\PrintBarcodeController;
 use App\Http\Controllers\EgoReportController;
 Route::middleware(['auth', 'SetSessionData', 'language', 'timezone', 'AdminSidebarMenu'])
@@ -75,12 +76,55 @@ Route::get('/get-next-invoice-no', function () {
 });
 //////////////////////// invoice number 001
 
+
+
 /////////// route for advanced setting 
 Route::group(['middleware' => ['auth', 'SetSessionData', 'language', 'timezone'], ], function () {
     Route::get('/advanced-settings', [\App\Http\Controllers\AdvancedSettingController::class, 'index']);
     Route::post('/advanced-settings/update', [\App\Http\Controllers\AdvancedSettingController::class, 'update']);
 });
 /////////////////////  
+
+////////////////////// 005 inventory route صفحة الجرد 
+Route::group([
+    'middleware' => ['auth', 'SetSessionData', 'language', 'timezone', 'AdminSidebarMenu']
+], function () {
+
+    Route::prefix('inventory')->group(function () {
+
+        // صفحة الإدخال
+        Route::get('/', [InventoryController::class, 'index'])->name('inventory.index');
+
+        Route::get('/show/{id}', [InventoryController::class, 'show'])
+            ->name('inventory.show');  
+
+       Route::get('/print/{id}', [InventoryController::class, 'printInventory'])->name('inventory.printInventory');   
+        
+       Route::get('/create', [InventoryController::class, 'create'])->name('inventory.create');  
+
+        // البحث عن المنتجات
+        Route::get('/get-products', [InventoryController::class, 'getProducts'])
+            ->name('inventory.getProducts');
+
+        // إضافة سطر منتج للجدول
+        Route::get('/get-entry-row', [InventoryController::class, 'getPurchaseEntryRow'])
+            ->name('inventory.getEntryRow');
+
+        // حفظ الكميات
+        Route::post('/store', [InventoryController::class, 'store'])->name('inventory.store');
+
+        Route::post('/import',[InventoryController::class, 'import'])->name('inventory.import');
+        Route::post('/update-stock', [InventoryController::class, 'updateProductStock']);
+         Route::post('/cleanup', [InventoryController::class, 'cleanupFailedTransaction']);
+
+
+
+    });
+
+});
+
+////////////////// 005
+
 
 // routes لـ ECR Integration
 Route::group(['middleware' => ['auth', 'SetSessionData', 'language', 'timezone']], function () {
@@ -147,8 +191,15 @@ Route::group(['middleware' => ['auth', 'language', 'timezone'], 'prefix' => 'rep
     
     ->group(function () {
        Route::get('/', [MissingProductController::class, 'getMissingProducts'])->name('missing-products.index');
+       Route::get('missing-products-sales', [MissingProductController::class, 'getMissingProductsWithSales'])->name('reports.missing_products_sales');
 
     });
+
+    //صفحة اعدادات المنتج الجديدة
+Route::group(['middleware' => ['web', 'auth', 'language', 'admin'], 'prefix' => 'custom-settings'], function () {
+    Route::get('/product-page', 'CustomProductSettingsController@index')->name('custom_product_settings.index');
+    Route::post('/product-page/update', 'CustomProductSettingsController@update')->name('custom_product_settings.update');
+});
 
 
 ///////////// quantity entry routes 001
@@ -212,7 +263,15 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/barcode-test', [App\Http\Controllers\BarcodeDesignController::class, 'testConnection'])
          ->name('barcode.test');
 
+
+    Route::get('/barcode-design/products-search', [App\Http\Controllers\BarcodeDesignController::class, 'searchProducts'])
+         ->name('barcode.design.products_search');
+    Route::get('/barcode-design/product-variations/{product_id}', [App\Http\Controllers\BarcodeDesignController::class, 'getProductVariations'])
+         ->name('barcode.design.product_variations');
 });
+Route::get('/pos/get-product-by-barcode', [PosController::class, 'getProductByBarcode'])->name('pos.get-product-by-barcode');
+Route::get('/invoice/print-direct/{id}', [InvoiceController::class, 'printDirect'])
+    ->name('invoice.print.direct');
 Route::get('/pos/get-product-by-barcode', [PosController::class, 'getProductByBarcode'])->name('pos.get-product-by-barcode');
 Route::get('/invoice/print-direct/{id}', [InvoiceController::class, 'printDirect'])
     ->name('invoice.print.direct');
@@ -445,6 +504,10 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('pause-resume-service-staff-timer/{user_id}', [SellPosController::class, 'pauseResumeServiceStaffTimer']);
     Route::get('mark-as-available/{user_id}', [SellPosController::class, 'markAsAvailable']);
 
+
+    /////////// for search quantity of product 009 
+Route::get('/get-product-stock-by-sku/{sku}', [SellPosController::class, 'getProductStockDetails']);
+
     Route::resource('purchase-requisition', PurchaseRequisitionController::class)->except(['edit', 'update']);
     Route::post('/get-requisition-products', [PurchaseRequisitionController::class, 'getRequisitionProducts'])->name('get-requisition-products');
     Route::get('get-purchase-requisitions/{location_id}', [PurchaseRequisitionController::class, 'getPurchaseRequisitions']);
@@ -503,6 +566,10 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('/products/download-excel', [ProductController::class, 'downloadExcel']);
 
     Route::get('/products/stock-history/{id}', [ProductController::class, 'productStockHistory']);
+    
+     Route::get('products/daily-stock-history', [ProductController::class, 'dailyStockHistory'])->name('product.daily_stock_history'); //// daily Stock
+    Route::get('products/current-stock', [ProductController::class, 'currentStockReport'])->name('product.current_stock');  ///// current stock
+      
     Route::get('/delete-media/{media_id}', [ProductController::class, 'deleteMedia']);
     Route::post('/products/mass-deactivate', [ProductController::class, 'massDeactivate']);
     Route::get('/products/activate/{id}', [ProductController::class, 'activate']);
@@ -531,6 +598,20 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::post('/products/save_quick_product', [ProductController::class, 'saveQuickProduct']);
     Route::get('/products/get-combo-product-entry-row', [ProductController::class, 'getComboProductEntryRow']);
     Route::post('/products/toggle-woocommerce-sync', [ProductController::class, 'toggleWooCommerceSync']);
+
+
+
+
+    //(new import product)
+    Route::get('products/products/new', [App\Http\Controllers\NewProductController::class, 'create'])->name('product.new');
+    Route::post('products/smart-store', [App\Http\Controllers\NewProductController::class, 'store'])->name('product.smartStore');
+    Route::get('products/check-name', [App\Http\Controllers\NewProductController::class, 'checkProductName']);
+    Route::delete('/products/destroy/{id}', [App\Http\Controllers\ProductController::class, 'destroy']);
+    Route::post('/products/quick-update/{id}', [App\Http\Controllers\NewProductController::class, 'quickUpdate']);
+    Route::get('/products/get-product-details/{id}', [App\Http\Controllers\NewProductController::class, 'getProductDetails']);
+    Route::get('/new-products/sub-categories/{category_id}', [\App\Http\Controllers\NewProductController::class, 'getSubCategories']);
+     Route::get('/new-products/cf-suggestions', [\App\Http\Controllers\NewProductController::class, 'cfSuggestions'])->name('new_products.cf_suggestions');
+    //end 
 
     Route::resource('products', ProductController::class);
     Route::get('/toggle-subscription/{id}', 'SellPosController@toggleRecurringInvoices');
@@ -717,10 +798,28 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::get('/cash-register/close-register/{id?}', [CashRegisterController::class, 'getCloseRegister']);
     Route::post('/cash-register/close-register', [CashRegisterController::class, 'postCloseRegister']);
     Route::resource('cash-register', CashRegisterController::class);
+ 
+    ///////// route for cash openenig drawer 009 
+     // 1. رابط لعرض صفحة التقرير (التي تحتوي على الـ Blade والـ DataTable)
+    Route::get('/reports/cash-drawer-logs', [CashDrawerLogController::class, 'index'])->name('cash-drawer.report');
+
+    // 2. رابط لاستقبال بيانات الحفظ من الـ Ajax (الذي تبرمجناه سابقاً)
+    Route::post('/reports/cash-drawer-logs', [CashDrawerLogController::class, 'storeDrawerLog'])->name('cash_drawer.store'); 
 
     //Import products
     Route::get('/import-products', [ImportProductsController::class, 'index']);
     Route::post('/import-products/store', [ImportProductsController::class, 'store']);
+
+    Route::get('/add-products/data', [AddProductController::class, 'getData'])->name('add-products.data');
+    Route::get('/add-products', [AddProductController::class, 'index'])->name('add-products.index');
+    Route::get('/add-products/create', [AddProductController::class, 'create'])->name('add-products.create');
+    Route::post('/add-products/store', [AddProductController::class, 'store'])->name('add-products.store');
+    Route::post('import-products/preview', [AddProductController::class, 'preview'])
+    ->name('import-products.preview');
+    Route::get('/add-products/{id}/details', [AddProductController::class, 'details'])->name('add-products.details');
+    Route::post('import-products/get-headers', [AddProductController::class, 'getHeaders'])
+    ->name('import-products.get-headers');
+    Route::get('/add-products/{id}/show', [AddProductController::class, 'printImport'])->name('add-products.show');
 
     //Sales Commission Agent
     Route::resource('sales-commission-agents', SalesCommissionAgentController::class);
@@ -728,7 +827,8 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     //Stock Transfer
     Route::get('stock-transfers/print/{id}', [StockTransferController::class, 'printInvoice']);
     ////////////////// 001 route for import excel for stock transfer
-    Route::post('/stock-transfers/import', [StockTransferController::class, 'import'])->name('stock_transfer.export');
+Route::post('/stock-transfers/import-products', [StockTransferController::class, 'importProducts'])
+    ->name('stock_transfer.import_products');
     
     Route::post('stock-transfers/update-status/{id}', [StockTransferController::class, 'updateStatus']);
     Route::resource('stock-transfers', StockTransferController::class);
@@ -868,6 +968,15 @@ Route::middleware(['setData', 'auth', 'SetSessionData', 'language', 'timezone', 
     Route::put('update-sales-orders/{id}/status', [SalesOrderController::class, 'postEditSalesOrderStatus']);
     Route::get('reports/activity-log', [ReportController::class, 'activityLog']);
     Route::get('user-location/{latlng}', [HomeController::class, 'getUserLocation']);
+
+
+
+        Route::prefix('settings')->group(function () {
+    Route::get('/reset-system', [\App\Http\Controllers\ResetSystemController::class, 'index'])->name('reset_system.index');
+    Route::post('/reset-system/post', [\App\Http\Controllers\ResetSystemController::class, 'resetData'])->name('reset_system.post');
+
+    
+});
 
     
 });

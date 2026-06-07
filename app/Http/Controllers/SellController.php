@@ -97,6 +97,16 @@ class SellController extends Controller
             $sale_type = ! empty(request()->input('sale_type')) ? request()->input('sale_type') : 'sell';
 
             $sells = $this->transactionUtil->getListSells($business_id, $sale_type);
+            
+             ///////////// اسم البائع
+         $sells->leftJoin('users as agent', 'transactions.commission_agent', '=', 'agent.id')
+    ->addSelect([
+        'agent.first_name as agent_first_name',
+        'agent.last_name as agent_last_name',
+        'agent.username as agent_username',
+        'agent.is_cmmsn_agnt as agent_is_agent',
+    ]);
+        ////////////////
 
             // only display sell invoice we add it because project invoive show in sell list
             if($sale_type == 'sell'){
@@ -672,6 +682,12 @@ if (!empty(request()->input('fatora_status'))) {
                         ->orWhere('contacts.supplier_business_name', 'like', "%{$keyword}%");
                     });
                 })
+                ->filterColumn('seller_name', function ($query, $keyword) {
+                  $query->whereRaw(
+                  "LOWER(CONCAT(COALESCE(agent.first_name,''),' ',COALESCE(agent.last_name,''))) LIKE ?",
+                   ["%{$keyword}%"]
+                     );
+                })
                 ->addColumn('payment_methods', function ($row) use ($payment_types) {
                     $methods = array_unique($row->payment_lines->pluck('method')->toArray());
                     $count = count($methods);
@@ -699,6 +715,13 @@ if (!empty(request()->input('fatora_status'))) {
 
                     return $status;
                 })
+                ->addColumn('seller_name', function ($row) {
+    $name = trim($row->agent_first_name . ' ' . $row->agent_last_name);
+    if (empty($name)) {
+        $name = $row->agent_username ?? '—';
+    }
+    return $name;
+})
                 ->editColumn('zatca_status', function ($row) use ($is_zatca) {
                     $status = '';
                     if($is_zatca){
@@ -843,7 +866,7 @@ $datatable->addColumn('gift_invoice', function ($row) {
         </a>';
 });
        ///////////// اضافة شرط التفعيل بالاعدادات 001
-            $rawColumns = ['final_total', 'action', 'total_paid', 'total_remaining', 'payment_status', 'invoice_no', 'discount_amount', 'tax_amount', 'total_before_tax', 'shipping_status', 'types_of_service_name', 'payment_methods', 'return_due', 'conatct_name', 'status', 'zatca_status','fatora_action',  'fatora_status', 'gift_invoice'];
+            $rawColumns = ['final_total', 'action', 'total_paid', 'total_remaining', 'payment_status', 'invoice_no', 'discount_amount', 'tax_amount', 'total_before_tax', 'shipping_status', 'types_of_service_name', 'payment_methods', 'return_due', 'conatct_name', 'status', 'zatca_status','fatora_action',  'fatora_status', 'gift_invoice', 'seller_name'];
 
             return $datatable->rawColumns($rawColumns)
                       ->make(true);
@@ -1516,7 +1539,7 @@ $datatable->addColumn('gift_invoice', function ($row) {
      *
      * @return \Illuminate\Http\Response
      */
-    public function getDraftDatables()
+ public function getDraftDatables()
     {
         if (request()->ajax()) {
             $business_id = request()->session()->get('user.business_id');
@@ -1553,10 +1576,18 @@ $datatable->addColumn('gift_invoice', function ($row) {
                     'is_direct_sale',
                     'sub_status',
                     DB::raw('COUNT( DISTINCT tsl.id) as total_items'),
-                    DB::raw('SUM(tsl.quantity) as total_quantity'),
+                    DB::raw('SUM(tsl.quantity * tsl.unit_price_inc_tax) as total_price'),
                     DB::raw("CONCAT(COALESCE(u.surname, ''), ' ', COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) as added_by"),
                     'transactions.is_export'
-                )->groupBy('transactions.id');
+                );
+                $sells->leftJoin('users as agent', 'transactions.commission_agent', '=', 'agent.id')
+                 ->addSelect([
+                 'agent.first_name as agent_first_name',
+                 'agent.last_name as agent_last_name',
+                 'agent.username as agent_username',
+                 'agent.is_cmmsn_agnt as agent_is_agent',
+                ]);
+                
                }
 
             if ($is_quotation == 1) {
@@ -1605,7 +1636,10 @@ $datatable->addColumn('gift_invoice', function ($row) {
             if ($is_woocommerce) {
                 $sells->addSelect('transactions.woocommerce_order_id');
             }
-            $sells->groupBy('transactions.id');
+             if ($view_type !== 'detailed') {
+           $sells->groupBy('transactions.id');
+           }
+           
 
             return Datatables::of($sells)
                  ->addColumn(
@@ -1729,8 +1763,8 @@ $datatable->addColumn('gift_invoice', function ($row) {
                   ->editColumn('quantity', function($row) {
                     return isset($row->quantity) ? $this->transactionUtil->num_f($row->quantity, false, false, true) : '';
                   })
-                 ->editColumn('total_quantity', function($row) {
-                    return isset($row->total_quantity) ? $this->transactionUtil->num_f($row->total_quantity,true) : '';
+                 ->editColumn('total_price', function($row) {
+                    return isset($row->total_price) ? $this->transactionUtil->num_f($row->total_price,true) : '';
                  })
                  ->editColumn('tax', function($row) {
                      return isset($row->tax) ? $this->transactionUtil->num_f($row->tax, true) : '';
@@ -1738,8 +1772,20 @@ $datatable->addColumn('gift_invoice', function ($row) {
                  ->editColumn('line_discount', function($row) {
                     return isset($row->line_discount) ? $this->transactionUtil->num_f($row->line_discount, true) : '';
                   })
-                
+                ->addColumn('contact_mobile', function($row) {
+                  return $row->mobile ?? '--'; 
+                  })
                 ->addColumn('conatct_name', '@if(!empty($supplier_business_name)) {{$supplier_business_name}}, <br>@endif {{$name}}')
+                 ->addColumn('contact_mobile', function($row) {
+                  return $row->mobile ?? '--'; 
+                  })
+                  ->addColumn('seller_name', function ($row) {
+    $name = trim($row->agent_first_name . ' ' . $row->agent_last_name);
+    if (empty($name)) {
+        $name = $row->agent_username ?? '—';
+    }
+    return $name;
+}) 
                 ->filterColumn('conatct_name', function ($query, $keyword) {
                     $query->where(function ($q) use ($keyword) {
                         $q->where('contacts.name', 'like', "%{$keyword}%")
@@ -1748,6 +1794,12 @@ $datatable->addColumn('gift_invoice', function ($row) {
                 })
                 ->filterColumn('added_by', function ($query, $keyword) {
                     $query->whereRaw("CONCAT(COALESCE(u.surname, ''), ' ', COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, '')) like ?", ["%{$keyword}%"]);
+                })
+                 ->filterColumn('seller_name', function ($query, $keyword) {
+                  $query->whereRaw(
+                  "LOWER(CONCAT(COALESCE(agent.first_name,''),' ',COALESCE(agent.last_name,''))) LIKE ?",
+                   ["%{$keyword}%"]
+                     );
                 })
                 ->setRowAttr([
                     'data-href' => function ($row) {
@@ -1799,6 +1851,8 @@ $datatable->addColumn('gift_invoice', function ($row) {
             'transactions.location_id' // إضافة هذا الحقل ضروري لعمل الفلاتر بشكل صحيح
         );
 }
+
+
     /**
      * Creates copy of the requested sale.
      *

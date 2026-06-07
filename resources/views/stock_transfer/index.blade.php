@@ -11,22 +11,54 @@
 
 <!-- Main content -->
 <section class="content no-print">
+
+<div class="row">
+        <div class="col-md-12">
+            @component('components.filters', ['title' => __('report.filters')])
+
+                <div class="col-md-3" id="location_filter">
+                    <div class="form-group">
+                        {!! Form::label('location_id_filter', __('purchase.business_location') . ':') !!}
+                        {!! Form::select('location_id_filter', $business_locations, null, [
+                            'class'       => 'form-control select2',
+                            'style'       => 'width:100%',
+                            'placeholder' => __('lang_v1.all'),
+                        ]) !!}
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="form-group">
+                        {!! Form::label('qer_date_filter', __('report.date_range') . ':') !!}
+                        {!! Form::text('date_range', null, [
+                            'placeholder' => __('lang_v1.select_a_date_range'),
+                            'class'       => 'form-control',
+                            'id'          => 'qer_date_filter',
+                            'readonly'
+                        ]); !!}
+                    </div>
+                </div>
+
+            @endcomponent
+        </div>
+    </div>
+    
     @component('components.widget', ['class' => 'box-primary', 'title' => __('lang_v1.all_stock_transfers')])
         @slot('tool')
-            <div class="box-tools">
-                @if(auth()->user()->can('stock_transfer.create'))
-                    <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full pull-right"
-                        href="{{action([\App\Http\Controllers\StockTransferController::class, 'create'])}}">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                            class="icon icon-tabler icons-tabler-outline icon-tabler-plus">
-                            <path stroke="none" d="M0 0h24v24H0z" fill="none" />
-                            <path d="M12 5l0 14" />
-                            <path d="M5 12l14 0" />
-                        </svg> @lang('messages.add')
-                    </a>
-                @endif
-            </div>
+           <div class="box-tools">
+    @if(auth()->user()->can('stock_transfer.create'))
+        <a class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-font-bold tw-rounded-full pull-right"
+            href="{{action([\App\Http\Controllers\StockTransferController::class, 'create'])}}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="icon icon-tabler icons-tabler-outline icon-tabler-plus">
+                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                <path d="M12 5l0 14" />
+                <path d="M5 12l14 0" />
+            </svg> @lang('messages.add')
+        </a>
+    @endif
+</div>
         @endslot
         <div class="table-responsive">
             <table class="table table-bordered table-striped ajax_view" id="stock_transfer_table">

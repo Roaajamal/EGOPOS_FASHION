@@ -1,3 +1,10 @@
+@php
+  $custom_labels = json_decode(session('business.custom_labels'), true);
+  $product_custom_field1 = !empty($custom_labels['product']['custom_field_1']) ? $custom_labels['product']['custom_field_1'] : __('lang_v1.product_custom_field1');
+  $product_custom_field2 = !empty($custom_labels['product']['custom_field_2']) ? $custom_labels['product']['custom_field_2'] : __('lang_v1.product_custom_field2');
+  $product_custom_field3 = !empty($custom_labels['product']['custom_field_3']) ? $custom_labels['product']['custom_field_3'] : __('lang_v1.product_custom_field3');
+@endphp 
+
 @extends('layouts.app')
 @section('title', __('report.stock_report'))
 
@@ -44,6 +51,40 @@
                         {!! Form::select('unit', $units, null, ['placeholder' => __('messages.all'), 'class' => 'form-control select2', 'style' => 'width:100%']); !!}
                     </div>
                 </div>
+                  <div class="col-md-3">
+    <div class="form-group">
+        {!! Form::label('stock_filter', __('lang_v1.stock_quantity') . ':') !!}
+        {!! Form::select('stock_filter', [
+            ''   => __('messages.all'),
+            'gt' => __('lang_v1.greater_than_zero'),        // أكبر من 0
+            'lt' => __('lang_v1.less_than_zero'),           // أصغر من 0
+            'gte'=> __('lang_v1.greater_than_or_equal_zero'),// أكبر أو يساوي 0
+            'lte'=> __('lang_v1.less_than_or_equal_zero'),  // أصغر أو يساوي 0
+            'eq' => __('lang_v1.equal_zero'),               // يساوي 0
+        ], null, ['class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'stock_filter']); !!}
+    </div>
+</div> 
+
+               <div class="col-md-3">
+    <div class="form-group">
+        {!! Form::label('product_custom_field1', $product_custom_field1 . ':') !!}
+        {!! Form::select('product_custom_field1', $custom_field_1_options, null, ['placeholder' => __('messages.all'), 'class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'product_custom_field1']); !!}
+    </div>
+</div>
+
+<div class="col-md-3">
+    <div class="form-group">
+        {!! Form::label('product_custom_field2', $product_custom_field2 . ':') !!}
+        {!! Form::select('product_custom_field2', $custom_field_2_options, null, ['placeholder' => __('messages.all'), 'class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'product_custom_field2']); !!}
+    </div>
+</div>
+
+<div class="col-md-3">
+    <div class="form-group">
+        {!! Form::label('product_custom_field3', $product_custom_field3 . ':') !!}
+        {!! Form::select('product_custom_field3', $custom_field_3_options, null, ['placeholder' => __('messages.all'), 'class' => 'form-control select2', 'style' => 'width:100%', 'id' => 'product_custom_field3']); !!}
+    </div>
+</div> 
                 @if($show_manufacturing_data)
                     <div class="col-md-3">
                         <div class="form-group">

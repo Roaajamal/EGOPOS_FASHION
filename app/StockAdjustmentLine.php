@@ -22,4 +22,21 @@ class StockAdjustmentLine extends Model
     {
         return $this->belongsTo(\App\PurchaseLine::class, 'lot_no_line_id');
     }
+    
+     /**
+ * علاقة سطر التسوية بالمنتج
+ */  //// 005
+public function product()
+{
+    return $this->belongsTo(\App\Product::class, 'product_id');
+}
+
+/**
+ * علاقة سطر التسوية بالنوع (Variation)
+ */  //// 005
+public function variations()
+{
+    return $this->belongsTo(\App\Variation::class, 'variation_id');
+}
+
 }

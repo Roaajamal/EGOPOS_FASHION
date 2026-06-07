@@ -98,6 +98,7 @@
                                 <th>@lang('purchase.ref_no')</th>
                                 <th>@lang('business.location')</th>
                                 <th>@lang('stock_adjustment.out_type')</th>
+                                <th>{{__('stock_adjustment.total_of_quantity')}}</th>
                                 <th>@lang('stock_adjustment.total_amount')</th>
                                 <th>@lang('stock_adjustment.total_amount_recovered')</th>
                                 <th>@lang('stock_adjustment.recipient')</th>

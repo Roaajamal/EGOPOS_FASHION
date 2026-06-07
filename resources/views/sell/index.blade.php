@@ -24,7 +24,7 @@
             @can('direct_sell.access')
                 @slot('tool')
                     <div class="box-tools">
-                        <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full pull-right" href="{{ action([\App\Http\Controllers\SellController::class, 'create']) }}">
+                        <a class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-font-bold tw-rounded-full pull-right">
                             <i class="fa fa-plus"></i> @lang('messages.add')
                         </a>
                     </div>
@@ -61,6 +61,7 @@
                             <th>{{ $custom_labels['sell']['custom_field_3'] ?? '' }}</th>
                             <th>{{ $custom_labels['sell']['custom_field_4'] ?? '' }}</th>
                             <th>@lang('lang_v1.added_by')</th>
+                            <th>@lang('lang_v1.seller_name')</th>
                             <th>@lang('sale.sell_note')</th>
                             <th>@lang('sale.staff_note')</th>
                             <th>@lang('sale.shipping_details')</th>
@@ -70,12 +71,12 @@
                         </tr>
                     </thead>
                     <tbody></tbody>
-                   <tfoot>
+            <tfoot>
     <tr class="bg-gray font-17 footer-total text-center">
         {{-- 1. الأعمدة التي تسبق حالة الدفع --}}
         @php
-            // الحسبة الأساسية: الأكشن(1) + التاريخ(1) + الفاتورة(1) + الاسم(1) + الهاتف(1) + الموقع(1) = 6
-            $initial_cols = 6;
+            // الحسبة الأساسية: الأكشن(1) + التاريخ(1) + الفاتورة(1) + الاسم(1) + الهاتف(1) + الموقع(1) = 
+            $initial_cols = 2;
             if(!empty($pos_settings['enable_fatora'])) {
                 $initial_cols += 2; // إضافة عمودي الفوترة
             }
@@ -181,6 +182,7 @@ $(document).ready(function() {
         { data: 'custom_field_3', name: 'transactions.custom_field_3', @if(empty($custom_labels['sell']['custom_field_3'])) visible: false @endif },
         { data: 'custom_field_4', name: 'transactions.custom_field_4', @if(empty($custom_labels['sell']['custom_field_4'])) visible: false @endif },
         { data: 'added_by', name: 'u.first_name' },
+         { data: 'seller_name', name: 'agent.first_name' },
         { data: 'additional_notes', name: 'additional_notes' },
         { data: 'staff_note', name: 'staff_note' },
         { data: 'shipping_details', name: 'shipping_details' },
@@ -251,5 +253,6 @@ $(document).ready(function() {
     });
 });
 </script>
+<script src="{{ asset('js/fatoraego.js?v=' . $asset_v) }}"></script>
 <script src="{{ asset('js/payment.js?v=' . $asset_v) }}"></script>
 @endsection

@@ -1,3 +1,7 @@
+@php
+    $custom_labels = json_decode(session('business.custom_labels'), true);
+@endphp
+
 <table class="table @if(!empty($for_ledger)) table-slim mb-0 bg-light-gray @else bg-gray @endif" @if(!empty($for_pdf)) style="width: 100%;" @endif>
         <tr @if(empty($for_ledger)) class="bg-green" @endif>
         <th>#</th>
@@ -14,6 +18,10 @@
                 @lang('restaurant.service_staff')
             </th>
         @endif
+        
+        <th>{{ $custom_labels['product']['custom_field_1'] ?? __('lang_v1.custom_field1') }}</th>
+        <th>{{ $custom_labels['product']['custom_field_2'] ?? __('lang_v1.custom_field2') }}</th>
+        
         <th>{{ __('sale.unit_price') }}</th>
         <th>{{ __('sale.discount') }}</th>
         <th>{{ __('sale.tax') }}</th>
@@ -79,6 +87,11 @@
                     {{$sell_line->product->second_unit->short_name}}
                 @endif
             </td>
+            
+            {{-- custom fields بعد الكمية  الاعمدة المخصصة --}}
+            <td>{{ $sell_line->product->product_custom_field1 ?? '' }}</td>
+            <td>{{ $sell_line->product->product_custom_field2 ?? '' }}</td>
+            
             @if(!empty($pos_settings['inline_service_staff']))
                 <td>
                 {{ $sell_line->service_staff->user_full_name ?? '' }}

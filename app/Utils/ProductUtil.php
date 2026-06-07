@@ -665,24 +665,30 @@ class ProductUtil extends Util
         $variation = Variation::with('media')->findOrFail($variation_id);
 
         $query = Variation::join('products AS p', 'variations.product_id', '=', 'p.id')
-                ->join('product_variations AS pv', 'variations.product_variation_id', '=', 'pv.id')
-                ->leftjoin('variation_location_details AS vld', 'variations.id', '=', 'vld.variation_id')
-                ->leftjoin('units', 'p.unit_id', '=', 'units.id')
-                ->leftjoin('units as u', 'p.secondary_unit_id', '=', 'u.id')
-                ->leftjoin('brands', function ($join) {
-                    $join->on('p.brand_id', '=', 'brands.id')
-                        ->whereNull('brands.deleted_at');
-                })
-                ->where('p.business_id', $business_id)
-                ->where('variations.id', $variation_id);
-
-        //Add condition for check of quantity. (if stock is not enabled or qty_available > 0)
-        if ($check_qty) {
-            $query->where(function ($query) {
-                $query->where('p.enable_stock', '!=', 1)
-                    ->orWhere('vld.qty_available', '>', 0);
-            });
+    ->join('product_variations AS pv', 'variations.product_variation_id', '=', 'pv.id')
+    // الربط مع جدول المخزون حسب الفرع الممرر فقط
+    ->leftjoin('variation_location_details AS vld', function ($join) use ($location_id) {
+        $join->on('variations.id', '=', 'vld.variation_id');
+        if (!empty($location_id)) {
+            $join->where('vld.location_id', '=', $location_id);
         }
+    })
+    ->leftjoin('units', 'p.unit_id', '=', 'units.id')
+    ->leftjoin('units as u', 'p.secondary_unit_id', '=', 'u.id')
+    ->leftjoin('brands', function ($join) {
+        $join->on('p.brand_id', '=', 'brands.id')
+            ->whereNull('brands.deleted_at');
+    })
+    ->where('p.business_id', $business_id)
+    ->where('variations.id', $variation_id);
+
+// تصفية النتائج بناءً على حالة المخزون
+if ($check_qty) {
+    $query->where(function ($q) {
+        $q->where('p.enable_stock', '!=', 1) // إذا كان المنتج لا يتبع المخزون
+          ->orWhere('vld.qty_available', '>', 0); // أو إذا كان متوفراً في الفرع المحدد
+    });
+}
 
         if (! empty($location_id) && $check_qty) {
             //Check for enable stock, if enabled check for location id.
@@ -2089,6 +2095,18 @@ class ProductUtil extends Util
         if (! empty($filters['repair_model_id'])) {
             $query->where('p.repair_model_id', request()->get('repair_model_id'));
         }
+        
+         if (! empty($filters['product_custom_field1'])) {
+    $query->where('p.product_custom_field1', $filters['product_custom_field1']);
+}
+
+if (! empty($filters['product_custom_field2'])) {
+    $query->where('p.product_custom_field2', $filters['product_custom_field2']);
+}
+
+if (! empty($filters['product_custom_field3'])) {
+    $query->where('p.product_custom_field3', $filters['product_custom_field3']);
+} 
 
         //TODO::Check if result is correct after changing LEFT JOIN to INNER JOIN
         $pl_query_string = $this->get_pl_quantity_sum_string('pl');
@@ -2114,7 +2132,7 @@ class ProductUtil extends Util
                     AND (SAL.variation_id=variations.id)) as total_adjusted"),
             DB::raw("(SELECT SUM( COALESCE(pl.quantity - ($pl_query_string), 0) * purchase_price_inc_tax) FROM transactions 
                   JOIN purchase_lines AS pl ON transactions.id=pl.transaction_id
-                  WHERE (transactions.status='received' OR transactions.type='purchase_return')  AND transactions.location_id=vld.location_id 
+                  WHERE (transactions.status='received' OR transactions.type='purchase_return' OR transactions.type='add_quantity' )  AND transactions.location_id=vld.location_id 
                   AND (pl.variation_id=variations.id)) as stock_price"),
             DB::raw('SUM(vld.qty_available) as stock'),
             'variations.sub_sku as sku',
@@ -2136,6 +2154,27 @@ class ProductUtil extends Util
             'p.product_custom_field3',
             'p.product_custom_field4'
         )->groupBy('variations.id', 'vld.location_id');
+        
+        // فلتر الكمية المتبقية
+        if (!empty($filters['stock_filter'])) {
+            switch ($filters['stock_filter']) {
+                case 'gt':   // أكبر من 0
+                    $products->havingRaw('SUM(vld.qty_available) > 0');
+                    break;
+                case 'lt':   // أصغر من 0
+                    $products->havingRaw('SUM(vld.qty_available) < 0');
+                    break;
+                case 'gte':  // أكبر أو يساوي 0
+                    $products->havingRaw('SUM(vld.qty_available) >= 0');
+                    break;
+                case 'lte':  // أصغر أو يساوي 0
+                    $products->havingRaw('SUM(vld.qty_available) <= 0');
+                    break;
+                case 'eq':   // يساوي 0
+                    $products->havingRaw('SUM(vld.qty_available) = 0');
+                    break;
+            }
+        } 
 
         if (isset($filters['show_manufacturing_data']) && $filters['show_manufacturing_data']) {
             $pl_query_string = $this->get_pl_quantity_sum_string('PL');
@@ -2384,7 +2423,7 @@ class ProductUtil extends Util
                 'quantity_change' => $quantity_change,
                 'stock' => $this->roundQuantity($stock),
                 'type' => 'stock_adjustment',
-                'type_label' => __('stock_adjustment.stock_adjustment'),
+                'type_label' => __('stock_adjustment.stock_adjustments'),
                 'ref_no' => $stock_line->ref_no,
                 'stock_in_second_unit' => $this->roundQuantity($stock_in_second_unit),
             ]);
@@ -2699,5 +2738,192 @@ class ProductUtil extends Util
         return $products;
     }
 
-  
+    /**
+ * حفظ عملية إدخال كميات (Add Quantity) وتحديث المخزون
+ */
+/**
+ * حفظ عملية إدخال كميات (Add Quantity) وتحديث المخزون
+ * تم وضعها هنا لتسهيل الوصول لدوال تحديث المخزون مباشرة
+ */
+public function createAddQuantityTransaction($business_id, $data)
+{ 
+
+    $t_date = $data['transaction_date'];
+    if (is_string($t_date) && strpos($t_date, '/') !== false) {
+        $t_date = $this->uf_date($t_date, true);
+    }
+    
+    return \DB::transaction(function () use ($business_id, $data, $t_date) {
+        
+        // 1. البحث عن المعاملة أو إنشاؤها (لدعم نظام الـ Chunks)
+        $transaction = \App\Transaction::where('ref_no', $data['ref_no'])
+                                    ->where('business_id', $business_id)
+                                    ->first();
+
+        if (!$transaction) {
+            $transaction = \App\Transaction::create([
+                'business_id' => $business_id,
+                'location_id' => $data['location_id'],
+                'type' => 'add_quantity',
+                'status' => 'draft', // نبدأ بحالة Draft
+                'ref_no' => $data['ref_no'],
+                'transaction_date' => $t_date,
+                'created_by' => auth()->id(),
+                'final_total' => 0
+            ]);
+        }
+
+        // 2. متغير لتجميع المبلغ الإجمالي للمنتجات الحالية
+        $current_chunk_total = 0;
+        
+        // 3. إدخال الأسطر وتحديث المخزون
+        foreach ($data['products'] as $product) {
+
+            $quantity = $this->num_uf($product['quantity']);
+            $purchase_price = $this->num_uf($product['purchase_price']);
+
+            \DB::table('purchase_lines')->insert([
+                'transaction_id' => $transaction->id,
+                'product_id' => $product['product_id'],
+                'variation_id' => $product['variation_id'],
+                'quantity' => $quantity,
+                'purchase_price' =>$purchase_price,
+                'purchase_price_inc_tax' =>$purchase_price,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            
+            // حساب المجموع لهذا الجزء
+            $current_chunk_total += ($product['quantity'] * $product['purchase_price']);
+
+            // تحديث المخزون بشكل فوري لهذا المنتج
+            // هذه هي الخطوة الأهم: تحديث المخزون في كل جزء
+            $this->updateProductQuantity(
+                $data['location_id'], 
+                $product['product_id'], 
+                $product['variation_id'], 
+                $quantity,
+                0, 
+                null, 
+                false
+            );
+
+            // تحديث updated_at في variation_location_details (اختياري)
+            \DB::table('variation_location_details')
+               ->where('variation_id', $product['variation_id'])
+               ->where('location_id', $data['location_id'])
+               ->update(['updated_at' => now()]);
+        }
+
+        // 4. تحديث final_total للمعاملة (جمع المبلغ الجديد مع القديم)
+        $transaction->final_total += $current_chunk_total;
+
+        // 5. تغيير الحالة إلى received إذا كان هذا هو الجزء الأخير
+        if ($data['is_last_chunk']) {
+            $transaction->status = 'received';
+            // استدعاء سجل النشاطات من TransactionUtil
+            app(\App\Utils\TransactionUtil::class)->activityLog($transaction, 'added');
+        }
+
+        $transaction->save();
+        return $transaction;
+    });
+}
+/**
+ * إنشاء سند إخراج (Stock Adjustment) وتحديث المخزون
+ */
+public function createStockAdjustment($business_id, $location_id, $products, $input_data)
+{
+    return \DB::transaction(function () use ($business_id, $location_id, $products, $input_data) {
+        $user_id = auth()->id();
+        
+        // تحويل قيمة is_last_chunk للتأكد من أنها Boolean
+        $is_last_chunk = isset($input_data['is_last_chunk']) && 
+                         ($input_data['is_last_chunk'] === 'true' || $input_data['is_last_chunk'] === true);
+
+        // احفظ الإجمالي الحقيقي قبل أي تعديل
+        $real_final_total = $input_data['final_total'];
+
+        // 1. البحث عن المعاملة الحالية لربط الدفعات
+        $stock_adjustment = \App\Transaction::where('ref_no', $input_data['ref_no'])
+                                    ->where('business_id', $business_id)
+                                    ->where('type', 'stock_adjustment')
+                                    ->first();
+
+        if (!$stock_adjustment) {
+            $input_data['type'] = 'stock_adjustment';
+            $input_data['business_id'] = $business_id;
+            $input_data['created_by'] = $user_id;
+            $input_data['location_id'] = $location_id;
+            $input_data['status'] = 'received';
+
+            if (strpos($input_data['transaction_date'], '-') === false) {
+                $input_data['transaction_date'] = $this->uf_date($input_data['transaction_date'], true);
+            }
+            
+            $input_data['total_amount_recovered'] = $this->num_uf($input_data['total_amount_recovered'] ?? 0);
+            
+            // الإجمالي المبدئي 0 حتى تكتمل الدفعات
+            $input_data['final_total'] = 0;
+
+            $stock_adjustment = \App\Transaction::create($input_data);
+        }
+
+        $current_product_data = [];
+        foreach ($products as $product) {
+            $qty = $this->num_uf($product['quantity']);
+            
+            // 2. التحقق من توفر الكمية
+            $qty_available = \DB::table('variation_location_details')
+                    ->where('variation_id', $product['variation_id'])
+                    ->where('location_id', $location_id)
+                    ->sum('qty_available');
+
+            if ($qty > $qty_available) {
+                $p = \App\Product::find($product['product_id']);
+                throw new \Exception("الكمية غير متوفرة للصنف: " . ($p->name ?? 'Unknown'));
+            }
+
+            $line_data = [
+                'product_id' => $product['product_id'],
+                'variation_id' => $product['variation_id'],
+                'quantity' => $qty,
+                'unit_price' => $this->num_uf($product['unit_price']),
+                'lot_no_line_id' => $product['lot_no_line_id'] ?? null
+            ];
+
+            $new_line = $stock_adjustment->stock_adjustment_lines()->create($line_data);
+            $current_product_data[] = $new_line;
+
+            // 3. خصم الكمية من المخزون
+            $this->decreaseProductQuantity($product['product_id'], $product['variation_id'], $location_id, $qty);
+        }
+
+        // 4. معالجة حسابات FIFO/LIFO
+        $transactionUtil = app(\App\Utils\TransactionUtil::class);
+        $business = [
+            'id' => $business_id,
+            'accounting_method' => session()->get('business.accounting_method') ?? 'fifo',
+            'location_id' => $location_id,
+        ];
+        
+        $transactionUtil->mapPurchaseSell($business, collect($current_product_data), 'stock_adjustment');
+
+        // 5. عند اكتمال الدفعة الأخيرة فقط
+        if ($is_last_chunk) {
+            $stock_adjustment->final_total = $this->num_uf($real_final_total);
+            
+            if (isset($input_data['total_amount_recovered'])) {
+                $stock_adjustment->total_amount_recovered = $this->num_uf($input_data['total_amount_recovered']);
+            }
+
+            $stock_adjustment->save();
+
+            event(new \App\Events\StockAdjustmentCreatedOrModified($stock_adjustment, 'added'));
+            $transactionUtil->activityLog($stock_adjustment, 'added', null, [], false);
+        }
+
+        return $stock_adjustment;
+    });
+}
 }

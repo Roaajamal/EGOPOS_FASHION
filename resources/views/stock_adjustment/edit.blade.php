@@ -68,28 +68,26 @@
             <div class="col-sm-12">
                 <div class="table-responsive">
                     <table class="table table-bordered table-striped table-condensed" id="stock_adjustment_product_table">
-                        <thead>
-                            <tr>
-                                @if(!empty($p_labels['custom_field_1']))
-                                    <th class="text-center">{{ $p_labels['custom_field_1'] }}</th>
-                                @endif
-                                <th class="text-center">@lang('product.sku')</th> 
-                                <th class="text-center">الوصف</th>
-                                <th class="text-center">@lang('sale.qty')</th>
-
-                                @if(!empty($p_labels['custom_field_2']))
-                                    <th class="text-center">{{ $p_labels['custom_field_2'] }}</th>
-                                @endif
-
-                                @if(!empty($p_labels['custom_field_3']))
-                                    <th class="text-center">{{ $p_labels['custom_field_3'] }}</th>
-                                @endif
-
-                                 <th class="text-center"> @lang('lang_v1.cost') </th>
-                                 <th class="text-center"> @lang('stock_adjustment.total_amount') </th>
-                                 <th class="text-center"><i class="fa fa-trash"></i></th>
-                            </tr>
-                        </thead>
+                       <thead>
+    <tr>
+        <th class="text-center" style="width: 50px;">#</th>
+        <th class="text-center">@lang('product.sku')</th>
+        @if(!empty($p_labels['custom_field_3']))
+            <th class="text-center custom-field-3">{{ $p_labels['custom_field_3'] }}</th>
+        @endif
+        @if(!empty($p_labels['custom_field_1']))
+            <th class="text-center custom-field-1">{{ $p_labels['custom_field_1'] }}</th>
+        @endif
+        @if(!empty($p_labels['custom_field_2']))
+            <th class="text-center custom-field-2">{{ $p_labels['custom_field_2'] }}</th>
+        @endif
+        <th class="text-center">الوصف</th>
+        <th class="text-center">@lang('sale.qty')</th>
+        <th class="text-center">@lang('lang_v1.cost')</th>
+        <th class="text-center">@lang('stock_adjustment.total_amount')</th>
+        <th class="text-center"><i class="fa fa-trash"></i></th>
+    </tr>
+</thead>
                         <tbody>
     @foreach($stock_adjustment->stock_adjustment_lines as $line)
         @include('stock_adjustment.partials.product_table_row', [
@@ -102,24 +100,23 @@
     @endforeach
 </tbody>
                         <tfoot>
-                            <tr class="text-center">
-                                @php
-                                // زدنا الرقم الأساسي ليصبح 3 (SKU + وصف + كمية)
-                                 $footer_colspan = 3; 
-                                 if(!empty($p_labels['custom_field_1'])) $footer_colspan++;
-                                 if(!empty($p_labels['custom_field_2'])) $footer_colspan++;
-                                 if(!empty($p_labels['custom_field_3'])) $footer_colspan++;
-                                 $footer_colspan++; // عمود السعر "س"
-                                @endphp
-                                <td colspan="{{ $footer_colspan }}"></td>
-                                <td><b>ج الكلي:</b></td>
-                                <td>
-                                    <input type="hidden" name="final_total" id="total_adjustment_value" value="{{$stock_adjustment->final_total}}">
-                                    <span id="total_adjustment">{{@num_format($stock_adjustment->final_total)}}</span>
-                                </td>
-                                <td></td>
-                            </tr>
-                        </tfoot>
+    <tr class="text-center">
+        @php
+            $footer_colspan = 3; // # + SKU + الوصف
+            if (!empty($p_labels['custom_field_1'])) $footer_colspan++;
+            if (!empty($p_labels['custom_field_2'])) $footer_colspan++;
+            if (!empty($p_labels['custom_field_3'])) $footer_colspan++;
+            $footer_colspan++; // الكمية
+        @endphp
+        <td colspan="{{ $footer_colspan }}"></td>
+        <td><b>ج الكلي:</b></td>
+        <td>
+            <input type="hidden" name="final_total" id="total_adjustment_value" value="{{$stock_adjustment->final_total}}">
+            <span id="total_adjustment">{{@num_format($stock_adjustment->final_total)}}</span>
+        </td>
+        <td></td>
+    </tr>
+</tfoot>
                     </table>
                 </div>
             </div>

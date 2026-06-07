@@ -1,8 +1,53 @@
-<div class="row" id="featured_products_box" style="display: none;">
-    @if (!empty($featured_products))
-        @include('sale_pos.partials.featured_products')
-    @endif
+<!-- تنسيق CSS -->
+<style>
+    #featured_products_box {
+        max-height: 300px; 
+        overflow-y: auto;
+        background: #f9f9f9;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        padding: 15px;
+        display: none; /* مخفي ويظهر عند الضغط على الكبسة */
+    }
+
+    #show_featured_products {
+        width: 100%;
+        border-radius: 10px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        background-color: blue; /* يمكنك تغيير اللون هنا أو تركه كما في التنسيق المتدرج بالأسفل */
+    }
+</style>
+
+@php
+    // جلب القيمة ديناميكياً من الإعدادات في أول الملف لتفادي خطأ التعريف
+    $columns_per_row = !empty($pos_settings['products_per_row']) ? intval($pos_settings['products_per_row']) : 4;
+@endphp
+
+<!-- بداية تعديل منطقة المنتجات المميزة -->
+@if(!empty($featured_products) && count($featured_products) > 0)
+<div class="row" id="feature_product_wrapper">
+    <div class="col-md-12">
+        <div id="feature_product_div_container" style="margin-bottom: 10px;">
+            <!-- الكبسة: ستظهر فقط إذا تحقق الشرط العلوى -->
+            <button type="button" 
+                class="tw-bg-gradient-to-r tw-from-amber-500 tw-to-orange-600 tw-text-white tw-font-bold tw-rounded-xl tw-h-12 tw-w-full tw-flex tw-items-center tw-justify-center tw-gap-2"
+                id="show_featured_products">
+                <i class="fa fa-star"></i> @lang('lang_v1.featured_products')
+            </button>
+            
+            <!-- الحاوية مع الـ Grid الديناميكي للمنتجات المميزة -->
+            <div id="featured_products_box" style="margin-top: 10px; display: grid !important; grid-template-columns: repeat({{ $columns_per_row }}, minmax(0, 1fr)) !important; gap: 8px !important; width: 100%;">
+                @include('sale_pos.partials.featured_products')
+            </div>
+        </div>
+    </div>
 </div>
+@endif
+<!-- نهاية تعديل منطقة المنتجات المميزة -->
+
+@if(empty($pos_settings['hide_product_suggestion']))
 <div class="row tw-mb-1">
     @if (!empty($categories))
         <div class="col-md-6 !tw-px-2" id="product_category_div">
@@ -168,17 +213,36 @@
         ) !!}
     </div>
 
-    <div class="col-sm-4 @if (empty($featured_products)) hide @endif" id="feature_product_div">
-        <button type="button" class="btn btn-primary btn-flat"
-            id="show_featured_products">@lang('lang_v1.featured_products')</button>
-    </div>
 </div>
+
 <div class="row">
     <input type="hidden" id="suggestion_page" value="1">
     <div class="col-md-12">
-        <div class="eq-height-row" id="product_list_body"></div>
+        <!-- الحاوية مع الـ Grid الديناميكي للمنتجات العادية -->
+        <div class="eq-height-row" id="product_list_body" 
+             style="display: grid !important; grid-template-columns: repeat({{ $columns_per_row }}, minmax(0, 1fr)) !important; gap: 8px !important; width: 100%;">
+        </div>
     </div>
     <div class="col-md-12 text-center" id="suggestion_page_loader" style="display: none;">
         <i class="fa fa-spinner fa-spin fa-2x"></i>
     </div>
 </div>
+
+<style>
+    #product_list_body > div, #featured_products_box > div {
+        width: 100% !important;
+        float: none !important;
+        clear: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+</style>
+@endif
+
+<script>
+    $(document).ready(function() {
+    $(document).on('click', '#show_featured_products', function() {
+        $('#featured_products_box').slideToggle();
+    });
+});
+</script>

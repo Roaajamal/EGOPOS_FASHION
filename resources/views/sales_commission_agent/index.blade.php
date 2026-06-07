@@ -12,7 +12,7 @@
 <!-- Main content -->
 <section class="content">
     @component('components.widget', ['class' => 'box-primary'])
-        @can('user.create')
+        @can('sales.create')
             @slot('tool')
                 <div class="box-tools">                
                         <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full btn-modal pull-right"
@@ -28,7 +28,7 @@
                     </div>
             @endslot
         @endcan
-        @can('user.view')
+        @can('sales.view')
             <div class="table-responsive">
                 <table class="table table-bordered table-striped" id="sales_commission_agent_table">
                     <thead>

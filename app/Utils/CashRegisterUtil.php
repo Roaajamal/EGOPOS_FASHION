@@ -315,22 +315,27 @@ class CashRegisterUtil extends Util
         'bl.name as location_name'
     )->groupBy('cash_registers.id')->first();
 
-    // 2. حساب المصاريف المستحقة (خارج الـ select لتجنب الأخطاء البرمجية)
+    // 2. حساب المصاريف المدفوعة خلال وقت الوردية فقط
     if ($register_details) {
         $location_id = $register_details->location_id;
         $business_id = $register_details->business_id;
+        $open_time = $register_details->open_time;
+        $closed_at = $register_details->closed_at ?? date('Y-m-d H:i:s');
 
-        $expense_res = DB::table('transactions as t')
+        // نستخدم جدول المدفوعات لأنه يحتوي على التاريخ الفعلي للدفع
+        $expense_res = DB::table('transaction_payments as tp')
+            ->join('transactions as t', 'tp.transaction_id', '=', 't.id')
             ->where('t.business_id', $business_id)
             ->where('t.location_id', $location_id)
             ->where('t.type', 'expense')
-            ->whereIn('t.payment_status', ['due', 'partial'])
-            ->selectRaw("
-                SUM(t.final_total) as total_expense_amount,
-                SUM((SELECT IFNULL(SUM(tp.amount), 0) FROM transaction_payments tp WHERE tp.transaction_id = t.id)) as total_paid_amount
-            ")->first();
+            ->whereIn('t.payment_status', ['paid', 'partial'])
+            // شرط الوقت: الدفعة تمت خلال فترة الوردية
+            ->whereBetween('tp.paid_on', [$open_time, $closed_at])
+            ->selectRaw("SUM(tp.amount) as total_paid_amount")
+            ->first();
 
-        $register_details->total_expense = (float)($expense_res->total_expense_amount ?? 0) - (float)($expense_res->total_paid_amount ?? 0);
+        // إسناد النتيجة
+        $register_details->total_expense = (float)($expense_res->total_paid_amount ?? 0);
 
         // 3. المعادلات النهائية
         $register_details->net_total_sales = ($register_details->total_sales ?? 0) - ($register_details->total_return ?? 0);

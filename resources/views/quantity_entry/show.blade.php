@@ -5,6 +5,11 @@
             <h4 class="modal-title">@lang('quantity_entry.quantity_entry_details')</h4>
         </div>
         <div class="modal-body">
+            @php
+                $custom_labels = json_decode(session('business.custom_labels'), true);
+                $p_labels = $custom_labels['product'] ?? [];
+            @endphp
+
             <style>
                 .table-bold-border, .table-bold-border th, .table-bold-border td {
                     border: 1px solid #000 !important;
@@ -22,7 +27,16 @@
                 <div class="col-sm-12">
                     <strong style="margin-right: 15px;">إظهار/إخفاء أعمدة:</strong>
                     <label style="margin-right: 10px; cursor: pointer;"><input type="checkbox" class="toggle-col" data-col="col-sku" checked> SKU</label>
-                    <label style="margin-right: 10px; cursor: pointer;"> <input type="checkbox" class="toggle-col" data-col="col-product" checked> المنتج</label>
+                    @if(!empty($p_labels['custom_field_3']))
+                        <label style="margin-right: 10px; cursor: pointer;"><input type="checkbox" class="toggle-col" data-col="col-cf3" checked> {{ $p_labels['custom_field_3'] }}</label>
+                    @endif
+                    @if(!empty($p_labels['custom_field_1']))
+                        <label style="margin-right: 10px; cursor: pointer;"><input type="checkbox" class="toggle-col" data-col="col-cf1" checked> {{ $p_labels['custom_field_1'] }}</label>
+                    @endif
+                    @if(!empty($p_labels['custom_field_2']))
+                        <label style="margin-right: 10px; cursor: pointer;"><input type="checkbox" class="toggle-col" data-col="col-cf2" checked> {{ $p_labels['custom_field_2'] }}</label>
+                    @endif
+                    <label style="margin-right: 10px; cursor: pointer;"><input type="checkbox" class="toggle-col" data-col="col-product" checked> المنتج</label>
                     <label style="margin-right: 10px; cursor: pointer;"><input type="checkbox" class="toggle-col" data-col="col-price" checked> السعر</label>
                     <label style="margin-right: 10px; cursor: pointer;"><input type="checkbox" class="toggle-col" data-col="col-subtotal" checked> الإجمالي</label>
                 </div>
@@ -34,7 +48,6 @@
                     <b>@lang('messages.date'):</b> {{ @format_datetime($quantity_entry->transaction_date) }}<br/>
                     <b>@lang('business.location'):</b> {{ $quantity_entry->location->name }}
                 </div>
-                
             </div>
 
             <div class="row" style="margin-top: 20px;">
@@ -45,6 +58,15 @@
                                 <tr class="bg-green">
                                     <th>#</th>
                                     <th class="col-sku">SKU</th>
+                                    @if(!empty($p_labels['custom_field_3']))
+                                        <th class="text-center col-cf3">{{ $p_labels['custom_field_3'] }}</th>
+                                    @endif
+                                    @if(!empty($p_labels['custom_field_1']))
+                                        <th class="text-center col-cf1">{{ $p_labels['custom_field_1'] }}</th>
+                                    @endif
+                                    @if(!empty($p_labels['custom_field_2']))
+                                        <th class="text-center col-cf2">{{ $p_labels['custom_field_2'] }}</th>
+                                    @endif
                                     <th class="text-center col-product">@lang('sale.product')</th>
                                     <th class="text-center">@lang('sale.qty')</th>
                                     <th class="text-center col-price @cannot('view_purchase_price') hide @endcan">@lang('lang_v1.cost')</th>
@@ -52,20 +74,29 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach( $quantity_entry->purchase_lines as $line )
-                                  <tr>
-        <td>{{ $loop->iteration }}</td>
-        <td class="col-sku">{{ $line->variations->sub_sku ?? '' }}</td>
-        <td class="col-product">
-            {{ $line->product->name }}
-            @if($line->variations->name != 'DUMMY')
-                - {{ $line->variations->name }}
-            @endif
-        </td>
-        <td class="text-center">{{ @format_quantity($line->quantity) }}</td>
-        <td class="text-center col-price @cannot('view_purchase_price') hide @endcan">{{ @num_format($line->purchase_price) }}</td>
-        <td class="text-center col-subtotal @cannot('view_purchase_price') hide @endcan">{{ @num_format($line->purchase_price * $line->quantity) }}</td>
-    </tr>
+                                @foreach($quantity_entry->purchase_lines as $line)
+                                    <tr>
+                                        <td>{{ $loop->iteration }}</td>
+                                        <td class="col-sku">{{ $line->variations->sub_sku ?? '' }}</td>
+                                        @if(!empty($p_labels['custom_field_3']))
+                                            <td class="text-center col-cf3">{{ $line->product->product_custom_field3 ?? '-' }}</td>
+                                        @endif
+                                        @if(!empty($p_labels['custom_field_1']))
+                                            <td class="text-center col-cf1">{{ $line->product->product_custom_field1 ?? '-' }}</td>
+                                        @endif
+                                        @if(!empty($p_labels['custom_field_2']))
+                                            <td class="text-center col-cf2">{{ $line->product->product_custom_field2 ?? '-' }}</td>
+                                        @endif
+                                        <td class="col-product">
+                                            {{ $line->product->name }}
+                                            @if($line->variations->name != 'DUMMY')
+                                                - {{ $line->variations->name }}
+                                            @endif
+                                        </td>
+                                        <td class="text-center">{{ @format_quantity($line->quantity) }}</td>
+                                        <td class="text-center col-price @cannot('view_purchase_price') hide @endcan">{{ @num_format($line->purchase_price) }}</td>
+                                        <td class="text-center col-subtotal @cannot('view_purchase_price') hide @endcan">{{ @num_format($line->purchase_price * $line->quantity) }}</td>
+                                    </tr>
                                 @endforeach
                             </tbody>
                         </table>
@@ -74,19 +105,17 @@
             </div>
 
             <div class="row">
-                <div class="col-md-6 col-md-offset-6 col-sm-12">
-                    <table class="table no-border">
-                       <tr>
-                           <th>@lang('quantity_entry.total_of_quantity'): </th>
+                <div class="col-md-6 col-md-offset-6 col-sm-8">
+                    <table class="table no-border @cannot('view_purchase_price') show_price_with_permission @endcan">
+                        <tr>
+                            <th>@lang('quantity_entry.total_of_quantity'): </th>
                             <td>
-                              <span class="pull-right">
-                                {{ @format_quantity($total_quantity) }}
-                              </span>
+                                <span class="pull-right">{{ @format_quantity($total_quantity) }}</span>
                             </td>
                         </tr>
                         <tr>
                             <th>@lang('quantity_entry.total'): </th>
-                            <td><span class="display_currency pull-right" data-currency_symbol="true">{{ $quantity_entry->final_total }}</span></td>
+                            <td><span class="display_currency pull-right" data-currency_symbol="true">{{ @num_format($quantity_entry->final_total) }}</span></td>
                         </tr>
                     </table>
                 </div>
@@ -94,8 +123,8 @@
         </div>
 
         <div class="modal-footer">
-            <button type="button" class="tw-dw-btn tw-dw-btn-primary tw-text-white no-print" onclick="$(this).closest('div.modal-content').printThis();"><i class="fa fa-print"></i> @lang( 'messages.print' )</button>
-            <button type="button" class="tw-dw-btn tw-dw-btn-neutral tw-text-white no-print" data-dismiss="modal">@lang( 'messages.close' )</button>
+            <button type="button" class="tw-dw-btn tw-dw-btn-primary tw-text-white no-print" onclick="$(this).closest('div.modal-content').printThis();"><i class="fa fa-print"></i> @lang('messages.print')</button>
+            <button type="button" class="tw-dw-btn tw-dw-btn-neutral tw-text-white no-print" data-dismiss="modal">@lang('messages.close')</button>
         </div>
     </div>
 </div>
@@ -112,3 +141,11 @@
         });
     });
 </script>
+
+@cannot('view_purchase_price')
+    <style>
+        .show_price_with_permission {
+            display: none !important;
+        }
+    </style>
+@endcannot

@@ -322,6 +322,7 @@ if (in_array($new_design_type, $unique_designs)) {
         'invoice_return' => __('invoice_return'),
         'gift' => __('gift'), 
         'slip' => __('slip'),
+        'slip_square' => __('slip_square'),
     ];
 
     $business_id = request()->session()->get('user.business_id');

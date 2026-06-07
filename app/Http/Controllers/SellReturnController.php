@@ -429,65 +429,83 @@ class SellReturnController extends Controller
  ////////////////////// 001
  
     public function store(Request $request)
-    {
-          $fatoraResponse = null;
-      
-        if (!auth()->user()->can('access_sell_return') && !auth()->user()->can('access_own_sell_return')) {
-            abort(403, 'Unauthorized action.');
-        }
-      
-        try {
-            $input = $request->except('_token');
-
-            if (!empty($input['products'])) {
-                $business_id = $request->session()->get('user.business_id');
-
-                //Check if subscribed or not
-                if (!$this->moduleUtil->isSubscribed($business_id)) {
-                    return $this->moduleUtil->expiredResponse(action([\App\Http\Controllers\SellReturnController::class, 'index']));
-                }
-
-                $user_id = $request->session()->get('user.id');
-
-                DB::beginTransaction();
-
-                $sell_return = $this->transactionUtil->addSellReturn($input, $business_id, $user_id);
-
+{
+    $fatoraResponse = null;
     
+    if (!auth()->user()->can('access_sell_return') && !auth()->user()->can('access_own_sell_return')) {
+        abort(403, 'Unauthorized action.');
+    }
+    
+    try {
+        $input = $request->except('_token');
 
-                // for zatca invoice response
-                $this->moduleUtil->getModuleData('after_sales_return', ['transaction' => $sell_return]);
+        if (!empty($input['products'])) {
+            $business_id = $request->session()->get('user.business_id');
 
-                DB::commit();
+            //Check if subscribed or not
+            if (!$this->moduleUtil->isSubscribed($business_id)) {
+                return $this->moduleUtil->expiredResponse(action([\App\Http\Controllers\SellReturnController::class, 'index']));
+            }
+
+            $user_id = $request->session()->get('user.id');
+
+            DB::beginTransaction();
+
+            $sell_return = $this->transactionUtil->addSellReturn($input, $business_id, $user_id);
+
+            // for zatca invoice response
+            $this->moduleUtil->getModuleData('after_sales_return', ['transaction' => $sell_return]);
+
+            DB::commit();
+            
+            // تجهيز محتوى الإيصال (تم نقله قبل إرسال الفاتورة)
+            $receipt = $this->receiptContent($business_id, $sell_return->location_id, $sell_return->id);
+            
+            // إرسال الفاتورة للنظام الأردني (محاولة حتى لو فشلت لا توقف العملية)
+            try {
+                $fatoraResponse = $this->sendCreditInvoiceToFatora($business_id, $sell_return);
                 
-            $fatoraResponse = $this->sendCreditInvoiceToFatora($business_id, $sell_return);
-                        $receipt = $this->receiptContent($business_id, $sell_return->location_id, $sell_return->id);
-            // إذا فشل الإرسال وتم تحديد وجوب نجاحه
-            if (!$fatoraResponse['success'] && $request->input('require_fatora_success', false)) {
-                throw new \Exception('فشل إرسال الفاتورة إلى نظام الفوترة');
+                // إذا فشل الإرسال وتم تحديد وجوب نجاحه
+                if (!$fatoraResponse['success'] && $request->input('require_fatora_success', false)) {
+                    throw new \Exception('فشل إرسال الفاتورة إلى نظام الفوترة');
+                }
+            } catch (\Exception $fatoraError) {
+                // تسجيل الخطأ ولكن لا نوقف العملية
+                \Log::warning('فشل إرسال المرتجع للنظام الأردني: ' . $fatoraError->getMessage());
+                // يمكنك إضافة رسالة تحذيرية للمستخدم
             }
-                $output = ['success' => 1,
-                    'msg' => __('lang_v1.success'),
-                    'receipt' => $receipt,
-                ];
-            }
-        } catch (\Exception $e) {
-            DB::rollBack();
-            dd($e);
-            if (get_class($e) == \App\Exceptions\PurchaseSellMismatch::class) {
-                $msg = $e->getMessage();
-            } else {
-                \Log::emergency('File:' . $e->getFile() . 'Line:' . $e->getLine() . 'Message:' . $e->getMessage());
-                $msg = __('messages.something_went_wrong');
-            }
-
-            $output = ['success' => 0,
-                'msg' => $msg,
+            
+            $output = [
+                'success' => 1,
+                'msg' => __('lang_v1.success'),
+                'receipt' => $receipt,
+                'return_id' => $sell_return->id // ✅ تصحيح: استخدام $sell_return->id بدلاً من $transaction->id
+            ];
+        } else {
+            $output = [
+                'success' => 0,
+                'msg' => 'لا توجد منتجات للإرجاع'
             ];
         }
+    } catch (\Exception $e) {
+        DB::rollBack();
+        
+        if (get_class($e) == \App\Exceptions\PurchaseSellMismatch::class) {
+            $msg = $e->getMessage();
+        } else {
+            \Log::emergency('File:' . $e->getFile() . 'Line:' . $e->getLine() . 'Message:' . $e->getMessage());
+            $msg = __('messages.something_went_wrong');
+        }
 
-        return $output;
+        $output = [
+            'success' => 0,
+            'msg' => $msg,
+            'error_detail' => $e->getMessage()
+        ];
     }
+
+    return response()->json($output);
+}
 /////////////////////////////////////////////
 // دالة لإرسال فاتورة المرتجع إلى نظام الفوترة بعد التخزين
 private function sendCreditInvoiceToFatora($business_id, $transaction)

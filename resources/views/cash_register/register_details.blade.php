@@ -2,7 +2,7 @@
   <div class="modal-content">
     <div class="modal-header mini_print">
       <button type="button" class="close no-print" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
-      <h3 class="modal-title">@lang( 'cash_register.register_details' ) ( {{ \Carbon::createFromFormat('Y-m-d H:i:s', $register_details->open_time)->format('jS M, Y h:i A') }} -  {{\Carbon::createFromFormat('Y-m-d H:i:s', $close_time)->format('jS M, Y h:i A')}} )</h3>
+      <h5 class="modal-title">@lang( 'cash_register.register_details' ) ( {{ \Carbon::createFromFormat('Y-m-d H:i:s', $register_details->open_time)->format('jS M, Y h:i A') }} -  {{\Carbon::createFromFormat('Y-m-d H:i:s', $close_time)->format('jS M, Y h:i A')}} )</h3>
     </div>
 
     <div class="modal-body">
@@ -51,6 +51,9 @@
           </div>
         </div>
       @endif
+
+      @include('cash_register.register_product_details')
+
       
       <div class="row">
         <div class="col-xs-6">
@@ -67,6 +70,8 @@
       </div>
     </div>
 
+
+ 
     <div class="modal-footer">
   <button type="button" class="tw-dw-btn tw-dw-btn-primary tw-text-white no-print print-mini-button" 
           aria-label="Print">

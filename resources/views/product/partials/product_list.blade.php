@@ -28,8 +28,8 @@
             <th>@lang('product.brand')</th>
             <th>@lang('product.tax')</th>
             <th>@lang('product.sku')</th>
-            <th id="cf_1">{{ $custom_labels['product']['custom_field_1'] ?? 'اللون' }}</th>
-            <th id="cf_2">{{ $custom_labels['product']['custom_field_2'] ?? 'المقاس' }}</th>
+            <th id="cf_1">{{ $custom_labels['product']['custom_field_1'] ?? '' }}</th>
+            <th id="cf_2">{{ $custom_labels['product']['custom_field_2'] ?? '' }}</th>
             <th id="cf_3">{{ $custom_labels['product']['custom_field_3'] ?? '' }}</th>
             <th id="cf_4">{{ $custom_labels['product']['custom_field_4'] ?? '' }}</th>
             <th id="cf_5">{{ $custom_labels['product']['custom_field_5'] ?? '' }}</th>

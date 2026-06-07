@@ -66,11 +66,15 @@ class StockTransferController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
         if (! $this->userCanAccessStockTransfer()) {
             abort(403, 'Unauthorized action.');
         }
+        $business_id = request()->session()->get('user.business_id');
+ 
+        $business_locations = \App\BusinessLocation::where('business_id', $business_id)
+        ->pluck('name', 'id');
 
         $statuses = $this->stockTransferStatuses();
 
@@ -99,6 +103,21 @@ class StockTransferController extends Controller
                         $stock_transfers->where('t2.created_by', request()->session()->get('user.id'));
                     }
 
+                    if (!empty(request()->location_id)) {
+                     // نستخدم transactions.location_id لضمان الفلترة على فرع المصدر
+                      $stock_transfers->where('transactions.location_id', request()->location_id);
+                     }
+                      // ✅ فلتر التاريخ
+                     if (!empty($request->input('start_date')) && !empty($request->input('end_date'))) {
+                    $stock_transfers->whereBetween(
+                        'transactions.transaction_date',
+                        [
+                           $request->input('start_date'),
+                         $request->input('end_date'),
+                       ]
+                      );
+                            } 
+
                     $stock_transfers->select(
                         'transactions.id',
                         'transactions.transaction_date',
@@ -113,7 +132,7 @@ class StockTransferController extends Controller
                         'transactions.status'
                     )->groupBy('transactions.id');
 
-
+        
 
             return Datatables::of($stock_transfers)
                 ->addColumn('action', function ($row) use ($edit_days) {
@@ -171,7 +190,7 @@ class StockTransferController extends Controller
                 ->make(true);
         }
 
-        return view('stock_transfer.index')->with(compact('statuses'));
+        return view('stock_transfer.index')->with(compact('statuses', 'business_locations'));
     }
 
     /**
@@ -179,27 +198,32 @@ class StockTransferController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function create()
-    {
-        if (! auth()->user()->can('stock_transfer.create') && ! $this->userCanAccessStockTransfer()) {
-            abort(403, 'Unauthorized action.');
-        }
-
-        $business_id = request()->session()->get('user.business_id');
-
-        //Check if subscribed or not
-        if (! $this->moduleUtil->isSubscribed($business_id)) {
-            return $this->moduleUtil->expiredResponse(action([\App\Http\Controllers\StockTransferController::class, 'index']));
-        }
-
-        $business_locations = BusinessLocation::forDropdown($business_id);
-
-        $statuses = $this->stockTransferStatuses();
-
-        return view('stock_transfer.create')
-                ->with(compact('business_locations', 'statuses'));
+public function create()
+{
+    // التحقق من الصلاحية
+    if (!auth()->user()->can('stock_transfer.create') && !$this->userCanAccessStockTransfer()) {
+        abort(403, 'Unauthorized action.');
     }
 
+    $business_id = request()->session()->get('user.business_id');
+
+    // التحقق من الاشتراك
+    if (!empty($this->moduleUtil) && !$this->moduleUtil->isSubscribed($business_id)) {
+        return $this->moduleUtil->expiredResponse(
+            action([\App\Http\Controllers\StockTransferController::class, 'index'])
+        );
+    }
+
+    // جلب المواقع
+    $business_locations = BusinessLocation::forDropdown($business_id);
+
+    // جلب الحالات
+    $statuses = $this->stockTransferStatuses();
+
+    // تمرير البيانات للـ view
+    return view('stock_transfer.create')
+        ->with(compact('business_locations', 'statuses'));
+}
     private function stockTransferStatuses()
     {
         return [
@@ -215,285 +239,448 @@ class StockTransferController extends Controller
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\Response
      */
-   public function store(Request $request)
-    {
-        if (! auth()->user()->can('stock_transfer.create')) {
-            abort(403, 'Unauthorized action.');
+public function store(Request $request)
+{
+    if (! auth()->user()->can('stock_transfer.create')) {
+        abort(403, 'Unauthorized action.');
+    }
+        ini_set('max_execution_time', 600); // 10 دقائق
+    ini_set('memory_limit', '512M');
+    ini_set('post_max_size', '100M');
+    ini_set('upload_max_filesize', '100M');
+
+    try {
+        $business_id   = $request->session()->get('user.business_id');
+        $user_id       = $request->session()->get('user.id');
+        $status        = $request->input('status');
+        $existing_ref  = trim((string) $request->input('ref_no', ''));
+        $is_last_chunk = filter_var($request->input('is_last_chunk'), FILTER_VALIDATE_BOOLEAN);
+
+        if (! $this->moduleUtil->isSubscribed($business_id)) {
+            return $this->moduleUtil->expiredResponse(
+                action([\App\Http\Controllers\StockTransferController::class, 'index'])
+            );
         }
 
-        try {
-            $business_id = $request->session()->get('user.business_id');
+        DB::beginTransaction();
 
-            //Check if subscribed or not
-            if (! $this->moduleUtil->isSubscribed($business_id)) {
-                return $this->moduleUtil->expiredResponse(action([\App\Http\Controllers\StockTransferController::class, 'index']));
+        // ============================================================
+        // 1. جلب أو إنشاء الـ Transactions
+        // ============================================================
+        $sell_transfer     = null;
+        $purchase_transfer = null;
+
+        if (!empty($existing_ref)) {
+            $sell_transfer = Transaction::where('business_id', $business_id)
+                ->where('type', 'sell_transfer')
+                ->where('ref_no', $existing_ref)
+                ->first();
+
+            if ($sell_transfer) {
+                $purchase_transfer = Transaction::where('transfer_parent_id', $sell_transfer->id)
+                    ->where('type', 'purchase_transfer')
+                    ->first();
             }
+        }
 
-            DB::beginTransaction();
+        if (!$sell_transfer) {
+            // إنشاء transactions جديدين
+            $input_data = $request->only([
+                'location_id', 'ref_no', 'transaction_date',
+                'additional_notes', 'shipping_charges', 'final_total'
+            ]);
 
-            $input_data = $request->only(['location_id', 'ref_no', 'transaction_date', 'additional_notes', 'shipping_charges', 'final_total']);
-            $status = $request->input('status');
-            $user_id = $request->session()->get('user.id');
-
-            $input_data['total_before_tax'] = $input_data['final_total'];
-
-            $input_data['type'] = 'sell_transfer';
-            $input_data['business_id'] = $business_id;
-            $input_data['created_by'] = $user_id;
+            $input_data['total_before_tax'] = $input_data['final_total'] ?? 0;
+            $input_data['type']             = 'sell_transfer';
+            $input_data['business_id']      = $business_id;
+            $input_data['created_by']       = $user_id;
             $input_data['transaction_date'] = $this->productUtil->uf_date($input_data['transaction_date'], true);
-            $input_data['shipping_charges'] = $this->productUtil->num_uf($input_data['shipping_charges']);
-            $input_data['payment_status'] = 'paid';
-            $input_data['status'] = $status == 'completed' ? 'final' : $status;
+            $input_data['shipping_charges'] = $this->productUtil->num_uf($input_data['shipping_charges'] ?? 0);
+            $input_data['payment_status']   = 'paid';
+            $input_data['status']           = $status == 'completed' ? 'final' : $status;
 
-            //Update reference count
             $ref_count = $this->productUtil->setAndGetReferenceCount('stock_transfer');
-            //Generate reference number
             if (empty($input_data['ref_no'])) {
                 $input_data['ref_no'] = $this->productUtil->generateReferenceNumber('stock_transfer', $ref_count);
             }
 
-            $products = $request->input('products');
-            $sell_lines = [];
-            $purchase_lines = [];
-
-            if (! empty($products)) {
-                foreach ($products as $product) {
-                    $sell_line_arr = [
-                        'product_id' => $product['product_id'],
-                        'variation_id' => $product['variation_id'],
-                        'quantity' => $this->productUtil->num_uf($product['quantity']),
-                        'item_tax' => 0,
-                        'line_total_tax' => 0,
-                        'tax_id' => null, ];
-
-                    if (! empty($product['product_unit_id'])) {
-                        $sell_line_arr['product_unit_id'] = $product['product_unit_id'];
-                    }
-                    if (! empty($product['sub_unit_id'])) {
-                        $sell_line_arr['sub_unit_id'] = $product['sub_unit_id'];
-                    }
-
-                    $purchase_line_arr = $sell_line_arr;
-
-                    if (! empty($product['base_unit_multiplier'])) {
-                        $sell_line_arr['base_unit_multiplier'] = $product['base_unit_multiplier'];
-                    }
-
-                    $sell_line_arr['unit_price'] = $this->productUtil->num_uf($product['unit_price']);
-                    $sell_line_arr['unit_price_inc_tax'] = $sell_line_arr['unit_price'];
-
-                    $purchase_line_arr['purchase_price'] = $sell_line_arr['unit_price'];
-                    $purchase_line_arr['purchase_price_inc_tax'] = $sell_line_arr['unit_price'];
-
-                    if (! empty($product['lot_no_line_id'])) {
-                        //Add lot_no_line_id to sell line
-                        $sell_line_arr['lot_no_line_id'] = $product['lot_no_line_id'];
-
-                        //Copy lot number and expiry date to purchase line
-                        $lot_details = PurchaseLine::find($product['lot_no_line_id']);
-                        $purchase_line_arr['lot_number'] = $lot_details->lot_number;
-                        $purchase_line_arr['mfg_date'] = $lot_details->mfg_date;
-                        $purchase_line_arr['exp_date'] = $lot_details->exp_date;
-                    }
-
-                    if (! empty($product['base_unit_multiplier'])) {
-                        $purchase_line_arr['quantity'] = $purchase_line_arr['quantity'] * $product['base_unit_multiplier'];
-                        $purchase_line_arr['purchase_price'] = $purchase_line_arr['purchase_price'] / $product['base_unit_multiplier'];
-                        $purchase_line_arr['purchase_price_inc_tax'] = $purchase_line_arr['purchase_price_inc_tax'] / $product['base_unit_multiplier'];
-                    }
-
-                    if (isset($purchase_line_arr['sub_unit_id']) && $purchase_line_arr['sub_unit_id'] == $purchase_line_arr['product_unit_id']) {
-                        unset($purchase_line_arr['sub_unit_id']);
-                    }
-                    unset($purchase_line_arr['product_unit_id']);
-
-                    $sell_lines[] = $sell_line_arr;
-                    $purchase_lines[] = $purchase_line_arr;
-                }
-            }
-
-            //Create Sell Transfer transaction
             $sell_transfer = Transaction::create($input_data);
 
-            //Create Purchase Transfer at transfer location
-            $input_data['type'] = 'purchase_transfer';
-            $input_data['location_id'] = $request->input('transfer_location_id');
-            $input_data['transfer_parent_id'] = $sell_transfer->id;
-            $input_data['status'] = $status == 'completed' ? 'received' : $status;
+            $purchase_input                       = $input_data;
+            $purchase_input['type']               = 'purchase_transfer';
+            $purchase_input['location_id']        = $request->input('transfer_location_id');
+            $purchase_input['transfer_parent_id'] = $sell_transfer->id;
+            $purchase_input['status']             = $status == 'completed' ? 'received' : $status;
 
-            $purchase_transfer = Transaction::create($input_data);
-
-            //Sell Product from first location
-            if (! empty($sell_lines)) {
-                $this->transactionUtil->createOrUpdateSellLines($sell_transfer, $sell_lines, $input_data['location_id'], false, null, [], false);
-            }
-
-            //Purchase product in second location
-            if (! empty($purchase_lines)) {
-                $purchase_transfer->purchase_lines()->createMany($purchase_lines);
-            }
-
-            //Decrease product stock from sell location
-            //And increase product stock at purchase location
-            if ($status == 'completed') {
-                foreach ($products as $product) {
-                    if ($product['enable_stock']) {
-                        $decrease_qty = $this->productUtil
-                                    ->num_uf($product['quantity']);
-                        if (! empty($product['base_unit_multiplier'])) {
-                            $decrease_qty = $decrease_qty * $product['base_unit_multiplier'];
-                        }
-
-                        $this->productUtil->decreaseProductQuantity(
-                            $product['product_id'],
-                            $product['variation_id'],
-                            $sell_transfer->location_id,
-                            $decrease_qty
-                        );
-
-                        $this->productUtil->updateProductQuantity(
-                            $purchase_transfer->location_id,
-                            $product['product_id'],
-                            $product['variation_id'],
-                            $decrease_qty,
-                            0,
-                            null,
-                            false
-                        );
-                    }
-                }
-
-                //Adjust stock over selling if found
-                $this->productUtil->adjustStockOverSelling($purchase_transfer);
-
-                //Map sell lines with purchase lines
-                $business = ['id' => $business_id,
-                    'accounting_method' => $request->session()->get('business.accounting_method'),
-                    'location_id' => $sell_transfer->location_id,
-                ];
-                $this->transactionUtil->mapPurchaseSell($business, $sell_transfer->sell_lines, 'purchase');
-            }
-
-            $this->transactionUtil->activityLog($sell_transfer, 'added');
-
-            event( new StockTransferCreatedOrModified($sell_transfer, 'added'));
-
-            $output = ['success' => 1,
-                'msg' => __('lang_v1.stock_transfer_added_successfully'),
-            ];
-
-            DB::commit();
-        } catch (\Exception $e) {
-            DB::rollBack();
-            \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());
-
-            $output = ['success' => 0,
-                'msg' => $e->getMessage(),
-            ];
+            $purchase_transfer = Transaction::create($purchase_input);
         }
 
-        return redirect('stock-transfers')->with('status', $output);
-    }
+        // ============================================================
+        // 2. معالجة المنتجات - إضافة جديدة فقط بدون حذف القديم
+        // ============================================================
+        $products = $request->input('products', []);
 
+        $sell_lines     = [];
+        $purchase_lines = [];
 
-      public function import(Request $request)
-{
-    try {
-        $request->validate([
-            'file' => 'required|max:2048', 
-            'location_id' => 'required'
+        foreach ($products as $product) {
+            // حماية من القيم الفارغة أو المفاتيح المختلفة
+            $qty        = isset($product['quantity']) && $product['quantity'] !== '' && $product['quantity'] !== null
+                            ? $product['quantity']
+                            : ($product['qty'] ?? 1);
+
+            $unit_price = isset($product['unit_price']) && $product['unit_price'] !== '' && $product['unit_price'] !== null
+                            ? $product['unit_price']
+                            : ($product['price'] ?? 0);
+
+            $sell_line_arr = [
+                'product_id'     => $product['product_id'],
+                'variation_id'   => $product['variation_id'],
+                'quantity'       => $this->productUtil->num_uf($qty),
+                'item_tax'       => 0,
+                'line_total_tax' => 0,
+                'tax_id'         => null,
+            ];
+
+            if (!empty($product['product_unit_id'])) {
+                $sell_line_arr['product_unit_id'] = $product['product_unit_id'];
+            }
+            if (!empty($product['sub_unit_id'])) {
+                $sell_line_arr['sub_unit_id'] = $product['sub_unit_id'];
+            }
+
+            $purchase_line_arr = $sell_line_arr;
+
+            if (!empty($product['base_unit_multiplier'])) {
+                $sell_line_arr['base_unit_multiplier'] = $product['base_unit_multiplier'];
+            }
+
+            $sell_line_arr['unit_price']         = $this->productUtil->num_uf($unit_price);
+            $sell_line_arr['unit_price_inc_tax']  = $sell_line_arr['unit_price'];
+            $purchase_line_arr['purchase_price']         = $sell_line_arr['unit_price'];
+            $purchase_line_arr['purchase_price_inc_tax'] = $sell_line_arr['unit_price'];
+
+            if (!empty($product['lot_no_line_id'])) {
+                $sell_line_arr['lot_no_line_id'] = $product['lot_no_line_id'];
+                $lot_details = PurchaseLine::find($product['lot_no_line_id']);
+                if ($lot_details) {
+                    $purchase_line_arr['lot_number'] = $lot_details->lot_number;
+                    $purchase_line_arr['mfg_date']   = $lot_details->mfg_date;
+                    $purchase_line_arr['exp_date']   = $lot_details->exp_date;
+                }
+            }
+
+            if (!empty($product['base_unit_multiplier'])) {
+                $multiplier = (float) $product['base_unit_multiplier'];
+                $purchase_line_arr['quantity']               = $purchase_line_arr['quantity'] * $multiplier;
+                $purchase_line_arr['purchase_price']         = $purchase_line_arr['purchase_price'] / $multiplier;
+                $purchase_line_arr['purchase_price_inc_tax'] = $purchase_line_arr['purchase_price_inc_tax'] / $multiplier;
+            }
+
+            if (
+                isset($purchase_line_arr['sub_unit_id'], $purchase_line_arr['product_unit_id']) &&
+                $purchase_line_arr['sub_unit_id'] == $purchase_line_arr['product_unit_id']
+            ) {
+                unset($purchase_line_arr['sub_unit_id']);
+            }
+            unset($purchase_line_arr['product_unit_id']);
+
+            $sell_lines[]     = $sell_line_arr;
+            $purchase_lines[] = $purchase_line_arr;
+        }
+
+        // ✅ إضافة السطور الجديدة فقط - بدون استخدام createOrUpdateSellLines
+        if (!empty($sell_lines)) {
+            $formatted = [];
+            foreach ($sell_lines as $line) {
+                $formatted[] = new \App\TransactionSellLine($line);
+            }
+            $sell_transfer->sell_lines()->saveMany($formatted);
+        }
+
+        if (!empty($purchase_lines)) {
+            $purchase_transfer->purchase_lines()->createMany($purchase_lines);
+        }
+
+        // ============================================================
+        // 3. تحديث المخزون — فقط في آخر دفعة + completed
+        // ============================================================
+        if ($is_last_chunk && $status == 'completed') {
+            $sell_transfer->load('sell_lines.product');
+
+            foreach ($sell_transfer->sell_lines as $sell_line) {
+                if ($sell_line->product && $sell_line->product->enable_stock) {
+                    $decrease_qty = $sell_line->quantity;
+
+                    $this->productUtil->decreaseProductQuantity(
+                        $sell_line->product_id,
+                        $sell_line->variation_id,
+                        $sell_transfer->location_id,
+                        $decrease_qty
+                    );
+
+                    $this->productUtil->updateProductQuantity(
+                        $purchase_transfer->location_id,
+                        $sell_line->product_id,
+                        $sell_line->variation_id,
+                        $decrease_qty,
+                        0, null, false
+                    );
+                }
+            }
+
+            $this->productUtil->adjustStockOverSelling($purchase_transfer);
+
+            $business = [
+                'id'                => $business_id,
+                'accounting_method' => $request->session()->get('business.accounting_method'),
+                'location_id'       => $sell_transfer->location_id,
+            ];
+           $this->transactionUtil->mapPurchaseSell($business, $sell_transfer->sell_lines, 'purchase');
+        }
+
+        // ============================================================
+        // 4. في آخر دفعة — سجّل النشاط وأطلق الحدث
+        // ============================================================
+        if ($is_last_chunk) {
+            $this->transactionUtil->activityLog($sell_transfer, 'added');
+            event(new StockTransferCreatedOrModified($sell_transfer, 'added'));
+            session()->forget('next_stock_transfer_ref');
+        }
+
+        DB::commit();
+
+        // حساب إجمالي الأصناف للتأكيد
+        $total_lines = $sell_transfer->sell_lines()->count();
+        
+        return response()->json([
+            'success' => 1,
+            'msg'     => $is_last_chunk
+                ? __('lang_v1.stock_transfer_added_successfully') . " (إجمالي $total_lines صنف)"
+                : "تم حفظ الدفعة بنجاح (إجمالي $total_lines صنف)",
+            'ref_no'  => $sell_transfer->ref_no,
         ]);
 
-        $file = $request->file('file');
-        // استخدام السطح البيني Excel لقراءة الملف
+    } catch (\Exception $e) {
+        DB::rollBack();
+        \Log::emergency(
+            'StockTransfer store | File:' . $e->getFile() .
+            ' Line:' . $e->getLine() .
+            ' Msg:' . $e->getMessage()
+        );
+
+        return response()->json([
+            'success' => 0,
+            'msg'     => 'حدث خطأ: ' . $e->getMessage(),
+        ]);
+    }
+}
+/**
+ * =====================================================================
+ * دالة importProducts - StockTransferController
+ * 
+ * ترجع:
+ *  - products_raw         : كل المنتجات
+ *  - products_sufficient  : المنتجات الكافية فقط (للإضافة للجدول)
+ *  - products_insufficient: المنتجات الغير كافية (للتصدير إكسل في JS)
+ *  - html_sufficient      : HTML صفوف المنتجات الكافية فقط
+ * =====================================================================
+ */
+public function importProducts(Request $request)
+{
+    try {
+        $business_id = $request->session()->get('user.business_id');
+        $location_id = $request->input('location_id');
+
+        $request->validate([
+            'file'        => 'required|max:10240',
+            'location_id' => 'required',
+        ]);
+
+        $file         = $request->file('file');
         $parsed_array = \Excel::toArray([], $file);
 
         if (empty($parsed_array) || empty($parsed_array[0])) {
-             throw new \Exception("الملف المرفوع فارغ.");
+            return response()->json(['success' => false, 'msg' => 'الملف فارغ']);
         }
 
-        $imported_data = array_splice($parsed_array[0], 1); // تخطي سطر العنوان
-        $business_id = auth()->user()->business_id;
-        $location_id = $request->input('location_id');
-        $row_index = (int)$request->input('row_count', 0);
+        $rows      = array_slice($parsed_array[0], 1);
+        $row_index = (int) $request->input('row_index', 0);
+        $skipped   = 0;
+        
+        $custom_labels = json_decode(session('business.custom_labels'), true);
+        $p_labels      = $custom_labels['product'] ?? []; 
 
-        $html = '';
-        foreach ($imported_data as $value) {
-            // تخطي الأسطر الفارغة تماماً في ملف الإكسل
-            if (empty($value[0]) && empty($value[1])) {
-                continue;
-            }
+        $products_sufficient   = [];
+        $products_insufficient = [];
+        $html_sufficient       = '';
 
-            // تنظيف ومعالجة الـ SKU
-            $sku = trim(strval($value[0]));
-            if (strpos($sku, '.') !== false) { 
-                $sku = explode('.', $sku)[0]; 
-            }
+        foreach ($rows as $row) {
+            if (!isset($row[0]) || trim((string) $row[0]) === '') continue;
 
-            // استعلام شامل يجلب (المنتج، التنوع، الوحدة، والكمية المتوفرة في المخزن لهذا الفرع)
-            $product = \App\Variation::where('variations.sub_sku', $sku)
+            $sku = trim((string) $row[0]);
+            $qty = (isset($row[1]) && is_numeric($row[1]) && (float)$row[1] > 0)
+                   ? (float) $row[1] : 1;
+
+            // جلب كل البيانات في query واحد — بدون findOrFail
+            $variation = \App\Variation::where('variations.sub_sku', $sku)
                 ->join('products as p', 'p.id', '=', 'variations.product_id')
                 ->join('units as u', 'u.id', '=', 'p.unit_id')
+                ->join('product_variations as pv', 'pv.id', '=', 'variations.product_variation_id')
                 ->leftJoin('variation_location_details as vld', function ($join) use ($location_id) {
                     $join->on('variations.id', '=', 'vld.variation_id')
                          ->where('vld.location_id', '=', $location_id);
                 })
                 ->where('p.business_id', $business_id)
+                ->where('p.is_inactive', 0)
                 ->select([
                     'variations.id as variation_id',
                     'p.id as product_id',
                     'p.name as product_name',
-                    'variations.sub_sku',
+                    'p.type as product_type',
                     'p.enable_stock',
-                    'p.unit_id', // هام جداً لجلب الوحدات الفرعية
-                    'u.short_name as unit',
+                    'p.unit_id',
+                    'p.product_custom_field1',  // ✅ أضف
+                    'p.product_custom_field2',  // ✅ أضف
+                    'p.product_custom_field3',  // ✅ أضف
                     'u.allow_decimal as unit_allow_decimal',
-                    'variations.dpp_inc_tax as last_purchased_price',
-                    \DB::raw('COALESCE(vld.qty_available, 0) as qty_available')
-                ])->first();
+                    'variations.sub_sku',
+                    'variations.name as variation_name',
+                    'pv.name as product_variation',
+                    'variations.default_purchase_price',
+                    'variations.dpp_inc_tax',
+                    \DB::raw('COALESCE(vld.qty_available, 0) as qty_available'),
+                ])
+                ->first();
 
-            // إذا لم يتم العثور على المنتج، تخطاه أو يمكنك إرجاع خطأ حسب رغبتك
-            if (!$product) {
-                continue; 
+            if (!$variation) {
+                $skipped++;
+                continue;
             }
 
-            // تنسيق الكمية المتوفرة للعرض
-            $product->formatted_qty_available = $this->productUtil->num_f($product->qty_available);
+             $unit_price    = (float) ($variation->dpp_inc_tax );
+            $qty_available = (float) $variation->qty_available;
 
-            // معالجة القيم القادمة من الإكسل (الكمية والسعر)
-            $quantity = isset($value[1]) && is_numeric($value[1]) ? (float)$value[1] : 1;
-            
-            // السعر: إذا كان موجود في الإكسل نأخذه، وإلا نعتمد سعر الشراء الافتراضي
-            $price = isset($value[2]) && is_numeric($value[2]) ? (float)$value[2] : $product->last_purchased_price;
+            $product_data = [
+                'product_id'          => (int) $variation->product_id,
+                'variation_id'        => (int) $variation->variation_id,
+                'sub_sku'             => $variation->sub_sku,
+                'product_name'        => $variation->product_name,
+                'variation_name'      => $variation->variation_name,
+                'product_type'        => $variation->product_type,
+                'quantity'            => $qty,
+                'unit_price'          => $unit_price,
+                'enable_stock'        => (bool) $variation->enable_stock,
+                'qty_available'       => $qty_available,
+                'product_unit_id'     => (int) $variation->unit_id,
+                'unit_allow_decimal'  => (bool) $variation->unit_allow_decimal,
+                'sub_unit_id'         => null,
+                'base_unit_multiplier'=> null,
+                'lot_no_line_id'      => null,
+            ];
 
-           // *** السطر الأهم لحل مشكلة السعر 0 ***
-            $product->default_purchase_price = $price;
+            // -------------------------------------------------------
+            // فصل: كافية أم لا؟
+            // -------------------------------------------------------
+            $is_sufficient = !$variation->enable_stock || ($qty <= $qty_available);
 
-            $sub_units = $this->productUtil->getSubUnits($business_id, $product->unit_id);
-            // بناء السطر باستخدام الـ Blade المخصص لجدول الأسطر
-            $html .= view('stock_transfer.partials.product_table_row', [
-                'product' => $product,
-                'row_index' => $row_index,
-                'quantity' => $quantity,
-                'purchase_price' => $price,
-                'sub_units' => $sub_units,
-            ])->render();
+            if ($is_sufficient) {
+                $products_sufficient[] = $product_data;
 
-            // زيادة العداد لضمان استقلال الـ IDs في الجدول الأمامي
-            $row_index++; 
+                // بناء HTML لهذا الصف
+                $product_label = htmlspecialchars($variation->product_name);
+                if ($variation->product_type == 'variable') {
+                    $product_label .= ' - ' . htmlspecialchars($variation->variation_name);
+                }
+                $max_qty  = $variation->enable_stock ? $qty_available : '';
+                $max_rule = $variation->enable_stock ? 'data-rule-max-value="' . $max_qty . '"' : '';
+                $line_total = round($qty * $unit_price, 4);
+
+          
+// بناء أعمدة الحقول المخصصة
+$cf_html = '';
+if (!empty($p_labels['custom_field_3'])) {
+    $cf_html .= '<td class="text-center custom-field-3">' . htmlspecialchars($variation->product_custom_field3 ?? '-') . '</td>';
+}
+if (!empty($p_labels['custom_field_1'])) {
+    $cf_html .= '<td class="text-center custom-field-1">' . htmlspecialchars($variation->product_custom_field1 ?? '-') . '</td>';
+}
+if (!empty($p_labels['custom_field_2'])) {
+    $cf_html .= '<td class="text-center custom-field-2">' . htmlspecialchars($variation->product_custom_field2 ?? '-') . '</td>';
+}
+
+$html_sufficient .= '
+<tr class="product_row" data-imported="1">
+    <td>
+        ' . $product_label . '
+        <br><small class="text-primary"><strong>' . htmlspecialchars($variation->sub_sku) . '</strong></small>
+        <input type="hidden" name="products[' . $row_index . '][product_id]"   class="product_id"   value="' . $variation->product_id . '">
+        <input type="hidden" name="products[' . $row_index . '][variation_id]" class="variation_id" value="' . $variation->variation_id . '">
+        <input type="hidden" name="products[' . $row_index . '][enable_stock]" class="enable_stock" value="' . ($variation->enable_stock ? '1' : '0') . '">
+        <input type="hidden" name="products[' . $row_index . '][product_unit_id]" value="' . $variation->unit_id . '">
+        <input type="hidden" class="hidden_base_unit_price" value="' . $unit_price . '">
+        <input type="hidden" class="base_unit_multiplier" name="products[' . $row_index . '][base_unit_multiplier]" value="1">
+    </td>
+    ' . $cf_html . '
+    <td>
+        <input type="text"
+            class="form-control product_quantity input_number"
+            name="products[' . $row_index . '][quantity]"
+            value="' . $qty . '"
+            ' . $max_rule . '
+            data-qty_available="' . $max_qty . '"
+            data-rule-required="true">
+    </td>
+    <td class="show_price_with_permission">
+        <input type="text"
+            name="products[' . $row_index . '][unit_price]"
+            class="form-control product_unit_price input_number"
+            value="' . $unit_price . '">
+    </td>
+    <td class="show_price_with_permission">
+        <input type="text" readonly
+            name="products[' . $row_index . '][price]"
+            class="form-control product_line_total"
+            value="' . $line_total . '">
+    </td>
+    <td class="text-center">
+        <i class="fa fa-trash remove_product_row cursor-pointer" aria-hidden="true"></i>
+    </td>
+</tr>';
+                $row_index++;
+
+            } else {
+                // غير كافية — للتصدير إكسل في الـ JS فقط
+                $products_insufficient[] = $product_data;
+            }
         }
 
-        if (empty($html)) {
-            throw new \Exception("لم يتم العثور على منتجات مطابقة في الملف.");
+        if (empty($products_sufficient) && empty($products_insufficient)) {
+            return response()->json([
+                'success' => false,
+                'msg'     => 'لم يتم العثور على منتجات مطابقة. تأكد من صحة الباركود (SKU)',
+            ]);
         }
 
-        return response()->json(['success' => true, 'html' => $html]);
+        return response()->json([
+            'success'               => true,
+            'html_sufficient'       => $html_sufficient,          // HTML الكافية فقط — للجدول
+            'products_sufficient'   => $products_sufficient,      // بيانات الكافية — للحفظ
+            'products_insufficient' => $products_insufficient,    // بيانات الغير كافية — للإكسل
+            'new_row_index'         => $row_index,
+            'skipped'               => $skipped,
+        ]);
 
     } catch (\Exception $e) {
-        \Log::emergency("Error Stock Adjustment Import: " . $e->getMessage());
-        return response()->json(['success' => false, 'msg' => $e->getMessage()]);
+        \Log::error('importProducts: ' . $e->getMessage() . ' | ' . $e->getFile() . ':' . $e->getLine());
+        return response()->json([
+            'success' => false,
+            'msg'     => 'حدث خطأ: ' . $e->getMessage(),
+        ]);
     }
 }
+/////             $sku = trim(strval($value[0]));
+
     /**
      * Display the specified resource.
      *
@@ -998,7 +1185,8 @@ class StockTransferController extends Controller
             ];
         }
 
-        return redirect('stock-transfers')->with('status', $output);
+      //// old  return redirect('stock-transfers')->with('status', $output);
+      return response()->json($output);
     }
 
     /**

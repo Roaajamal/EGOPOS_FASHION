@@ -35,14 +35,18 @@ class QuantityEntryController extends Controller
     /**
      * Display a listing of the resource.
      */
-     public function index()
+     public function index(Request $request)
 {
-    if (!auth()->user()->can('quantity_entry.view') && !auth()->user()->can('quantity_entry.create')) {
+    if (!auth()->user()->can('quantity_entry.view')) {
         abort(403, 'Unauthorized action.');
     }
 
+    $business_id = request()->session()->get('user.business_id');
+        $business_locations = BusinessLocation::where('business_id', $business_id)
+        ->pluck('name', 'id'); 
+         
     if (request()->ajax()) {
-        $business_id = request()->session()->get('user.business_id');
+
 
         $quantity_entry = Transaction::join(
             'business_locations AS BL',
@@ -65,6 +69,22 @@ class QuantityEntryController extends Controller
         )
         ->groupBy('transactions.id')
         ->orderBy('transactions.transaction_date', 'desc');
+
+        // ✅ فلتر الفرع
+    if ($request->filled('location_id')) {
+        $quantity_entry->where('transactions.location_id', $request->input('location_id'));
+    }
+
+    // ✅ فلتر التاريخ
+    if (!empty($request->input('start_date')) && !empty($request->input('end_date'))) {
+    $quantity_entry->whereBetween(
+        'transactions.transaction_date',
+        [
+            $request->input('start_date'),
+            $request->input('end_date'),
+        ]
+        );
+       }
 
         // فلترة المواقع المسموحة
         $permitted_locations = auth()->user()->permitted_locations();
@@ -104,14 +124,14 @@ class QuantityEntryController extends Controller
     ->make(true);
     }
 
-    return view('quantity_entry.index');
+    return view('quantity_entry.index', compact('business_locations')); 
 }
 
     
     public function create()
 {
     // التأكد من الصلاحية
-    if (! auth()->user()->can('purchase.create')) {
+    if (! auth()->user()->can('quantity_entry.create')) {
         abort(403, 'Unauthorized action.');
     }
 
@@ -125,9 +145,8 @@ class QuantityEntryController extends Controller
     return view('quantity_entry.create', compact('business_locations', 'user'));
 }
  
-      public function show($id)
+  public function show($id)
 {
-    // تغيير الصلاحية لتناسب إدخال الكميات
     if (! auth()->user()->can('quantity_entry.view')) {
         abort(403, 'Unauthorized action.');
     }
@@ -135,104 +154,53 @@ class QuantityEntryController extends Controller
     $business_id = request()->session()->get('user.business_id');
 
     $quantity_entry = Transaction::where('transactions.business_id', $business_id)
-                ->where('transactions.id', $id)
-                ->where('transactions.type', 'add_quantity') // النوع الجديد
-                ->with([
-                    'purchase_lines', // العلاقة الصحيحة لعمليات الإدخال والشراء
-                    'location', 
-                    'business', 
-                    'purchase_lines.product', 
-                    'purchase_lines.variations', 
-                    'purchase_lines.variations.product_variation'
-                ])
-                ->firstOrFail();
+        ->where('transactions.id', $id)
+        ->where('transactions.type', 'add_quantity')
+        ->with([
+            'location',
+            'business',
+            'purchase_lines',
+            'purchase_lines.product',
+            'purchase_lines.variations',
+            'purchase_lines.variations.product_variation'
+        ])
+        ->firstOrFail();
 
-        $total_quantity = $quantity_entry->purchase_lines->sum('quantity');
+    $total_quantity = $quantity_entry->purchase_lines->sum('quantity');
 
-          return view('quantity_entry.show') // مسار الملف الجديد
-            ->with(compact('quantity_entry', 'total_quantity'));
+    return view('quantity_entry.show')
+        ->with(compact('quantity_entry', 'total_quantity'));
 }
 
 
 public function store(Request $request)
 {
+    // معالجة البيانات القادمة (سواء كانت JSON أو Array)
     $products_input = $request->input('products');
-    if (is_string($products_input)) {
-        $products_data = json_decode($products_input, true);
-    } else {
-        $products_data = $products_input;
-    }
+    $products_data = is_string($products_input) ? json_decode($products_input, true) : $products_input;
 
-    // التحقق من وجود بيانات
     if (empty($products_data)) {
         return response()->json(['success' => false, 'msg' => 'قائمة المنتجات فارغة']);
     }
-    $is_last_chunk = $request->input('is_last_chunk') == 1;
 
-    DB::beginTransaction();
     try {
-        // 1. جلب أو إنشاء المعاملة بحالة 'draft'
-        $transaction = Transaction::where('ref_no', $request->ref_no)->first();
-        if (!$transaction) {
-            $transaction = Transaction::create([
-                'business_id' => auth()->user()->business_id,
-                'location_id' => $request->location_id,
-                'type' => 'add_quantity',
-                'status' => 'draft', // الحالة مبدئياً مسودة
-                'ref_no' => $request->ref_no,
-                'transaction_date' => Carbon::createFromFormat('m/d/Y H:i', $request->transaction_date),
-                'final_total' => 0,
-                'created_by' => auth()->id(),
-            ]);
-        }
+        $business_id = auth()->user()->business_id;
+        
+        // تجهيز مصفوفة البيانات لإرسالها للـ Util
+        $data = [
+            'ref_no' => $request->ref_no,
+            'location_id' => $request->location_id,
+            'transaction_date' => \Carbon\Carbon::createFromFormat('m/d/Y H:i', $request->transaction_date),
+            'products' => $products_data,
+            'is_last_chunk' => $request->input('is_last_chunk') == 1,
+        ];
 
-        // 2. إدخال الأسطر فقط في purchase_lines (بدون تحديث المخزون الآن)
-        foreach ($products_data as $product) {
-            DB::table('purchase_lines')->insert([
-                'transaction_id' => $transaction->id,
-                'product_id' => $product['product_id'],
-                'variation_id' => $product['variation_id'],
-                'quantity' => $product['quantity'],
-                'purchase_price' => $product['purchase_price'],
-                'created_at' => now(),
-            ]);
-            $transaction->final_total += ($product['quantity'] * $product['purchase_price']);
-        }
-        $transaction->save();
+        $this->productUtil->createAddQuantityTransaction($business_id, $data);
 
-        // 3. إذا كانت هذه هي الدفعة الأخيرة.. نقوم بتحديث المخزون للجميع!
-        if ($is_last_chunk) {
-            $all_lines = DB::table('purchase_lines')->where('transaction_id', $transaction->id)->get();
-            
-            foreach ($all_lines as $line) {
-                // تحديث المخزون الفعلي هنا
-                $affected = DB::table('variation_location_details')
-                    ->where('variation_id', $line->variation_id)
-                    ->where('location_id', $transaction->location_id)
-                    ->increment('qty_available', $line->quantity);
-
-                if ($affected == 0) {
-                    DB::table('variation_location_details')->insert([
-                        'product_id' => $line->product_id,
-                        'variation_id' => $line->variation_id,
-                        'location_id' => $transaction->location_id,
-                        'qty_available' => $line->quantity
-                    ]);
-                }
-            }
-            // تحويل الحالة إلى مستلمة (نهائية)
-            $transaction->status = 'received';
-            $transaction->save();
-            
-        }
-
-        //  تسجيل النشاط
-        $this->transactionUtil->activityLog($transaction, 'added');
-        DB::commit();
         return response()->json(['success' => true]);
 
     } catch (\Exception $e) {
-        DB::rollBack();
+        \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
         return response()->json(['success' => false, 'msg' => $e->getMessage()]);
     }
 }
@@ -268,7 +236,11 @@ public function store(Request $request)
                 'products.name',
                 'variations.id as variation_id',
                 'variations.sub_sku',
-                'variations.dpp_inc_tax'
+                'variations.dpp_inc_tax',
+                'products.product_custom_field1',
+                'products.product_custom_field2',
+                'products.product_custom_field3'
+                
                 
             )
             ->limit(20)
@@ -283,6 +255,8 @@ public function store(Request $request)
                 'product_id' => $product->product_id,
                 'variation_id' => $product->variation_id,
                 'dpp_inc_tax' => $product->dpp_inc_tax,
+                'sub_sku'      => $product->sub_sku, // ✅ أضف هذا
+                'name'         => $product->name
             ];
         }
 
@@ -338,103 +312,128 @@ public function store(Request $request)
 {
     try {
         $request->validate([
-            'file' => 'required', 
+            'file'        => 'required',
             'location_id' => 'required'
         ]);
 
-        $file = $request->file('file');
+        $file      = $request->file('file');
         $extension = strtolower($file->getClientOriginalExtension());
-        
+
         if (!in_array($extension, ['xlsx', 'xls', 'csv'])) {
-            return response()->json([
-                'success' => false,
-                'msg' => 'نوع الملف غير مدعوم.'
-            ]);
+            return response()->json(['success' => false, 'msg' => 'نوع الملف غير مدعوم.']);
         }
 
         $parsed_array = Excel::toArray([], $file);
 
         if (empty($parsed_array) || empty($parsed_array[0])) {
-             throw new \Exception("الملف المرفوع فارغ.");
+            throw new \Exception("الملف المرفوع فارغ.");
         }
 
-        // تخطي سطر العنوان
         $imported_data = array_splice($parsed_array[0], 1);
+        $business_id   = auth()->user()->business_id;
+        $row_count     = (int) $request->input('row_count', 0);
 
-        $business_id = auth()->user()->business_id;
-        $row_count  = $request->input('row_count', 0);
+        // جمع كل الـ SKUs دفعة واحدة
+        $all_skus = [];
+        foreach ($imported_data as $value) {
+            if (!empty($value[0])) {
+                $all_skus[] = trim(strval($value[0]));
+            }
+        }
 
-        $rows = [];
+        // جلب كل المنتجات دفعة واحدة
+        $variations = Variation::whereIn('variations.sub_sku', $all_skus)
+            ->join('products', 'products.id', '=', 'variations.product_id')
+            ->where('products.business_id', $business_id)
+            ->select(
+                'variations.*',
+                'products.name as product_name',
+                'products.product_custom_field1',
+                'products.product_custom_field2',
+                'products.product_custom_field3',
+                'products.unit_id'
+            )
+            ->get()
+            ->keyBy('sub_sku');
+
+        $rows                  = [];
+        $products_insufficient = [];
+
         foreach ($imported_data as $key => $value) {
-            $row_index = $key + 1;
+            if (empty($value[0]) && empty($value[1])) continue;
 
-            // التحقق من أن السطر ليس فارغاً تماماً
-            if (empty($value[0]) && empty($value[1])) {
+            $sku      = trim(strval($value[0]));
+            $variation = $variations->get($sku);
+
+            if (!$variation) {
+                $products_insufficient[] = [
+                    'sub_sku'      => $sku,
+                    'product_name' => null,
+                    'qty'          => $value[1] ?? 0,
+                    'reason'       => 'المنتج غير موجود في النظام'
+                ];
                 continue;
             }
 
-            // تنظيف الـ SKU
-            $sku = trim(strval($value[0]));
-            if (strpos($sku, '.') !== false) {
-                $sku = explode('.', $sku)[0]; 
+            $quantity = isset($value[1]) && is_numeric($value[1]) && (float)$value[1] > 0
+                ? (float)$value[1] : 0;
+
+            if ($quantity <= 0) {
+                $products_insufficient[] = [
+                    'sub_sku'      => $variation->sub_sku,
+                    'product_name' => $variation->product_name,
+                    'qty'          => $value[1] ?? 0,
+                    'reason'       => 'الكمية غير صالحة'
+                ];
+                continue;
             }
 
-            // البحث عن الـ Variation
-            $variation = Variation::where('sub_sku', $sku)
-                ->join('products', 'products.id', '=', 'variations.product_id')
-                ->where('products.business_id', $business_id)
-                ->select('variations.*')
-                ->first();
-
-            if (!$variation) {
-                $variation = Variation::where('sub_sku', 'LIKE', '%' . $sku . '%')
-                    ->join('products', 'products.id', '=', 'variations.product_id')
-                    ->where('products.business_id', $business_id)
-                    ->select('variations.*')
-                    ->first();
-            }
-
-            if (!$variation) {
-                throw new \Exception("المنتج SKU: {$sku} غير موجود في السطر {$row_index}");
-            }
-
-            $product = Product::where('id', $variation->product_id)
-                ->where('business_id', $business_id)
-                ->first();
-
-            // --- معالجة القيم الرقمية بشكل آمن ---
-            $quantity = isset($value[1]) && is_numeric($value[1]) ? (float)$value[1] : 0;
-           $price = isset($value[2]) && is_numeric($value[2]) && (float)$value[2] > 0 
-         ? (float)$value[2] 
-         : $variation->dpp_inc_tax;
+            $price = isset($value[2]) && is_numeric($value[2]) && (float)$value[2] > 0
+                ? (float)$value[2]
+                : $variation->dpp_inc_tax;
 
             $rows[] = [
-                'product'    => $product,
-                'variation'  => $variation,
-                'quantity'   => $quantity,
-                'price'      => $price,
-                'row_count'  => $row_count++
+                'variation' => $variation,
+                'quantity'  => $quantity,
+                'price'     => $price,
+                'row_count' => $row_count++
             ];
         }
 
+        // بناء الـ HTML
         $html = '';
         foreach ($rows as $row) {
+            // بناء كائن product من بيانات الـ variation المدمجة
+            $product = (object)[
+                'id'                    => $row['variation']->product_id,
+                'name'                  => $row['variation']->product_name,
+                'product_custom_field1' => $row['variation']->product_custom_field1,
+                'product_custom_field2' => $row['variation']->product_custom_field2,
+                'product_custom_field3' => $row['variation']->product_custom_field3,
+            ];
+
             $html .= view('quantity_entry.partials.quantity_entry_row', [
-                'product'    => $row['product'],
-                'variation'  => $row['variation'],
-                'row_count'  => $row['row_count'],
-                'quantity'   => $row['quantity'],
-                'purchase_price' => $row['price']
+                'product'        => $product,
+                'variation'      => $row['variation'],
+                'row_count'      => $row['row_count'],
+                'quantity'       => $row['quantity'],
+                'purchase_price' => $row['price'],
             ])->render();
         }
 
-        return response()->json(['success' => true, 'html' => $html]);
+        return response()->json([
+            'success'               => true,
+            'html'                  => $html,
+            'imported_count'        => count($rows),
+            'skipped_count'         => count($products_insufficient),
+            'products_insufficient' => $products_insufficient,
+        ]);
 
     } catch (\Exception $e) {
+        \Log::error('Import Error: ' . $e->getMessage());
         return response()->json(['success' => false, 'msg' => $e->getMessage()]);
     }
 }
-
     public function updateProductStock(Request $request)
     {
      $request->validate([
@@ -481,6 +480,7 @@ public function store(Request $request)
 
         // إعداد العناوين والمعلومات الإضافية إذا لزم الأمر
         $print_title = $quantity_entry->ref_no;
+         $total_quantity = $quantity_entry->purchase_lines->sum('quantity');
 
         $output = [
             'success' => 1,
@@ -489,7 +489,7 @@ public function store(Request $request)
         ];
 
         // هنا نقوم بعمل رندر لملف عرض مخصص للطباعة (أو نفس ملف show)
-        $output['receipt']['html_content'] = view('quantity_entry.partials.print', compact('quantity_entry'))->render();
+        $output['receipt']['html_content'] = view('quantity_entry.partials.print', compact('quantity_entry','total_quantity'))->render();
 
     } catch (\Exception $e) {
         \Log::emergency('File:'.$e->getFile().'Line:'.$e->getLine().'Message:'.$e->getMessage());

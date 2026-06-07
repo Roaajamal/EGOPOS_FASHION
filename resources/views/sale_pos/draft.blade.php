@@ -47,7 +47,7 @@
     @component('components.widget', ['class' => 'box-primary'])
         @slot('tool')
             <div class="box-tools">
-                <a class="tw-dw-btn tw-bg-gradient-to-r tw-from-indigo-600 tw-to-blue-500 tw-font-bold tw-text-white tw-border-none tw-rounded-full pull-right"
+                <a class="tw-dw-btn tw-dw-btn-primary tw-text-white tw-font-bold tw-rounded-full pull-right"
                     href="{{action([\App\Http\Controllers\SellController::class, 'create'], ['status' => 'draft'])}}">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -82,9 +82,10 @@
                 
                 {{-- أعمدة العرض المجمل --}}
                 <th>@lang('lang_v1.total_items')</th>
-                <th>{{__('product.total_of_quantity')}} </th>
+               <th>{{__('lang_v1.total')}} </th>
                 
                 <th>@lang('lang_v1.added_by')</th>
+                <th>@lang('lang_v1.seller_name')</th>
                 <th>@lang('lang_v1.status')</th>
                 <th>@lang('messages.action')</th>
             </tr>
@@ -141,31 +142,29 @@ $(document).ready( function(){
             "orderable": false,
             "searchable": false
         } ],
-       columns: [
-   { data: 'transaction_date', name: 'transaction_date' },
-        { data: 'invoice_no', name: 'invoice_no'},
-        { data: 'conatct_name', name: 'conatct_name'},
-        { data: 'mobile', name: 'conatct.mobile'},
-        { data: 'business_location', name: 'bl.name'},
-        
-        // تفصيلي (Index 4-11)
-        { data: 'product_name', name: 'p.name', visible: false, defaultContent: '-'},
-        { data: 'sku', name: 'v.sub_sku', visible: false, defaultContent: '-'},
-        { data: 'quantity', name: 'tsl.quantity', visible: false, defaultContent: '0'},
-        { data: 'unit_price', name: 'tsl.unit_price', visible: false, defaultContent: '0'},
-        { data: 'line_discount', name: 'tsl.line_discount_amount', visible: false, defaultContent: '0'},
-        { data: 'tax', name: 'tsl.item_tax', visible: false, defaultContent: '0'},
-        { data: 'unit_price_inc_tax', name: 'tsl.unit_price_inc_tax', visible: false, defaultContent: '0'},
-        { data: 'subtotal', name: 'subtotal', visible: false, searchable: false, defaultContent: '0'},
-        
-        // مجمل (Index 12-13)
-        { data: 'total_items', name: 'total_items', searchable: false, defaultContent: '0'},
-        { data: 'total_quantity', name: 'total_quantity', searchable: false, defaultContent: '0'},
-        
-        { data: 'added_by', name: 'added_by'},
-        { data: 'draft_status', name: 'draft_status', searchable: false, defaultContent: ''},
-        // الخيارات في النهاية (Index 16)
-        { data: 'action', name: 'action', orderable: false, searchable: false}
+      columns: [
+    { data: 'transaction_date', name: 'transaction_date' },
+    { data: 'invoice_no', name: 'invoice_no'},
+    { data: 'conatct_name', name: 'conatct_name'},
+    { data: 'contact_mobile', name: 'contacts.mobile'}, 
+    { data: 'business_location', name: 'bl.name'},
+    
+    { data: 'product_name', name: 'p.name', visible: false, defaultContent: '-', searchable: false},
+    { data: 'sku', name: 'v.sub_sku', visible: false, defaultContent: '-', searchable: false},
+    { data: 'quantity', name: 'tsl.quantity', visible: false, defaultContent: '0', searchable: false},
+    { data: 'unit_price', name: 'tsl.unit_price', visible: false, defaultContent: '0', searchable: false},
+    { data: 'line_discount', name: 'tsl.line_discount_amount', visible: false, defaultContent: '0', searchable: false},
+    { data: 'tax', name: 'tsl.item_tax', visible: false, defaultContent: '0', searchable: false},
+    { data: 'unit_price_inc_tax', name: 'tsl.unit_price_inc_tax', visible: false, defaultContent: '0', searchable: false},
+    { data: 'subtotal', name: 'subtotal', visible: false, searchable: false, defaultContent: '0'},
+    
+    { data: 'total_items', name: 'total_items', searchable: false, defaultContent: '0'},
+    { data: 'total_price', name: 'total_price', searchable: false, defaultContent: '0'},
+    
+    { data: 'added_by', name: 'added_by'},
+     { data: 'seller_name', name: 'agent.first_name' },
+    { data: 'draft_status', name: 'draft_status', searchable: false, defaultContent: ''},
+    { data: 'action', name: 'action', orderable: false, searchable: false}
 ],
   "fnDrawCallback": function (oSettings) {
     __currency_convert_recursively($('#sell_table'));
