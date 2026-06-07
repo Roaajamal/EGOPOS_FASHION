@@ -97,6 +97,18 @@
                                         #ego_features_panel .ego-offers button:hover{background:#f59e0b;color:#fff}
                                         #ego_features_panel .ego-offers button.ego-offer-clear{border-color:#ef4444;background:#fef2f2;color:#b91c1c}
                                         #ego_features_panel .ego-offers button.ego-offer-clear:hover{background:#ef4444;color:#fff}
+                                        /* 🆕 شريط أزرار الدفع السريعة (يشبه الصورة) */
+                                        #ego_features_panel .ego-paybar{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:14px}
+                                        @media (max-width:991px){#ego_features_panel .ego-paybar{grid-template-columns:repeat(2,1fr)}}
+                                        #ego_features_panel .ego-pay{border:none;border-radius:12px;padding:14px 8px;font-weight:800;font-size:14px;color:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;transition:.15s}
+                                        #ego_features_panel .ego-pay i{font-size:18px}
+                                        #ego_features_panel .ego-pay:hover{transform:translateY(-2px);filter:brightness(1.05)}
+                                        #ego_features_panel .ego-pay-cash{background:#16a34a}
+                                        #ego_features_panel .ego-pay-card{background:#2563eb}
+                                        #ego_features_panel .ego-pay-credit{background:#0891b2}
+                                        #ego_features_panel .ego-pay-multi{background:#0f172a}
+                                        #ego_features_panel .ego-pay-disc{background:#f59e0b}
+                                        #ego_features_panel .ego-pay-cancel{background:#dc2626}
                                     </style>
 
                                     <div class="ego-grid">
@@ -165,6 +177,17 @@
                                                 <button type="button" class="ego_offer ego-offer-clear" data-type="fixed" data-val="0"><i class="fas fa-times"></i> إلغاء الخصم</button>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    {{-- 🆕 شريط أزرار الدفع السريعة (كاش/بطاقة/عملاء/طرق أخرى/خصم/إلغاء) --}}
+                                    {{-- كل زر يستدعي زر النظام الموجود فعلاً، ولا يكرّر أي وظيفة --}}
+                                    <div class="ego-paybar">
+                                        <button type="button" class="ego-pay ego-pay-cash" data-ego-target='[data-pay_method="cash"]'><i class="fas fa-money-bill-wave"></i> كاش</button>
+                                        <button type="button" class="ego-pay ego-pay-card" data-ego-target='[data-pay_method="card"]'><i class="fas fa-credit-card"></i> بطاقة الائتمان</button>
+                                        <button type="button" class="ego-pay ego-pay-credit" data-ego-target='[data-pay_method="credit_sale"]'><i class="fas fa-user-friends"></i> عملاء (آجل)</button>
+                                        <button type="button" class="ego-pay ego-pay-multi" data-ego-target='#pos-finalize'><i class="fas fa-money-check-alt"></i> طرق دفع أخرى</button>
+                                        <button type="button" class="ego-pay ego-pay-disc" id="ego_pay_discount"><i class="fas fa-percent"></i> الخصم</button>
+                                        <button type="button" class="ego-pay ego-pay-cancel" data-ego-target='#pos-cancel'><i class="fas fa-times-circle"></i> إلغاء</button>
                                     </div>
                                 </div>
 
@@ -286,6 +309,24 @@
                                         }, 400);
                                     });
                                     $('#ego_price_check_modal').on('shown.bs.modal', function(){ $('#ego_price_check_search').val('').focus(); $('#ego_price_check_results').html(''); });
+
+                                    // ---------- أزرار الدفع السريعة: تستدعي أزرار النظام الموجودة فعلاً ----------
+                                    $('#ego_features_panel').on('click', '.ego-pay[data-ego-target]', function(){
+                                        var sel = $(this).data('ego-target');
+                                        var $btn = $(sel).filter(':visible').first();
+                                        if (!$btn.length) { $btn = $(sel).first(); }
+                                        if ($btn.length && $btn[0]) { $btn[0].click(); }
+                                        else if (typeof toastr !== 'undefined') { toastr.error('هذا الخيار غير مفعّل في الإعدادات'); }
+                                    });
+                                    // زر "الخصم": ينقل التركيز إلى لوحة الخصومات الجديدة
+                                    $('#ego_pay_discount').on('click', function(){
+                                        var el = document.getElementById('ego_disc_value');
+                                        if (el) { el.scrollIntoView({behavior:'smooth', block:'center'}); el.focus(); }
+                                    });
+                                    // إخفاء أي زر دفع سريع هدفه غير موجود (مُعطّل من الإعدادات/الصلاحيات)
+                                    $('.ego-pay[data-ego-target]').each(function(){
+                                        if (!$($(this).data('ego-target')).length) { $(this).hide(); }
+                                    });
 
                                     // منع زر Enter داخل حقول المزايا من إرسال فاتورة البيع بالخطأ
                                     $('#ego_features_panel, #ego_price_check_modal').on('keydown', 'input', function(e){
