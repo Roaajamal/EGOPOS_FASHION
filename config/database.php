@@ -58,10 +58,10 @@ return [
             'prefix_indexes' => true,
             'strict' => false,
             'engine' => null,
-         'options' => extension_loaded('pdo_mysql') ? array_filter([
-       PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-   // Pdo\Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'), 
-]) : [],
+         // 🆕 يُستدعى ثابت SSL_CA فقط عند ضبط الشهادة فعلاً، مع توافق PHP 8.4+ (يزيل تحذير Deprecated)
+         'options' => extension_loaded('pdo_mysql') && env('MYSQL_ATTR_SSL_CA') ? [
+       (PHP_VERSION_ID >= 80400 ? \Pdo\Mysql::ATTR_SSL_CA : \PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+] : [],
             //'dump' => [ 'dump_binary_path' => 'D:\laragon\bin\mysql\mysql-8.0.30-winx64\bin'] 
             // Uncomment above line for windows & provide path to mysql dump binary for backup to work
         ],
