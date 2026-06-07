@@ -60,6 +60,283 @@
                                     @include('sale_pos.partials.pos_form_totals')
                                     @include('sale_pos.partials.payment_modal')
                                 </div>
+
+                                {{-- ============================================================= --}}
+                                {{-- 🆕 قسم المزايا الجديدة (فحص السعر • حساب الباقي • الخصومات والعروض) --}}
+                                {{-- أُضيف بالكامل داخل نفس الملف دون تعديل أي كود قديم. خلفية بيضاء وأيقونات ملوّنة. --}}
+                                {{-- ============================================================= --}}
+                                <div id="ego_features_panel" class="tw-mt-3" style="direction: rtl;">
+                                    <style>
+                                        /* 🆕 تنسيقات قسم المزايا الجديدة فقط (لا يؤثر على باقي الشاشة) */
+                                        #ego_features_panel .ego-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+                                        @media (max-width:991px){#ego_features_panel .ego-grid{grid-template-columns:1fr}}
+                                        #ego_features_panel .ego-card{background:#fff;border:1px solid #e6eaef;border-radius:16px;padding:12px;box-shadow:0 4px 14px rgba(17,17,26,.06);display:flex;flex-direction:column}
+                                        #ego_features_panel .ego-title{font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px;margin-bottom:10px;color:#1f2937}
+                                        #ego_features_panel .ego-input{width:100%;border:1px solid #d1d5db;border-radius:10px;padding:8px 10px;font-size:16px;text-align:center;font-weight:700;background:#fff}
+                                        #ego_features_panel .ego-pricecheck-btn{width:100%;border:none;border-radius:12px;padding:12px;font-weight:800;font-size:15px;color:#fff;background:linear-gradient(135deg,#6366f1,#4f46e5);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+                                        #ego_features_panel .ego-due{background:#0f172a;color:#fff;border-radius:12px;padding:10px;text-align:center;margin-top:12px}
+                                        #ego_features_panel .ego-due .v{font-size:22px;font-weight:800}
+                                        #ego_features_panel .ego-keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+                                        #ego_features_panel .ego-key{border:none;border-radius:10px;padding:10px 0;font-size:16px;font-weight:700;background:#f1f5f9;color:#0f172a;cursor:pointer;transition:.15s}
+                                        #ego_features_panel .ego-key:hover{background:#e2e8f0}
+                                        #ego_features_panel .ego-key.ego-clear{background:#fee2e2;color:#b91c1c}
+                                        #ego_features_panel .ego-key.ego-back{background:#fef3c7;color:#92400e}
+                                        #ego_features_panel .ego-quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+                                        #ego_features_panel .ego-quick button{border:1px solid #34d399;background:#ecfdf5;color:#047857;border-radius:999px;padding:4px 12px;font-weight:700;cursor:pointer;font-size:13px}
+                                        #ego_features_panel .ego-quick button:hover{background:#34d399;color:#fff}
+                                        #ego_features_panel .ego-change{background:#ecfdf5;border:1px dashed #10b981;border-radius:12px;padding:10px;text-align:center;margin-top:8px}
+                                        #ego_features_panel .ego-change .v{font-size:22px;font-weight:800;color:#047857}
+                                        #ego_features_panel .ego-toggle{display:flex;gap:6px;margin-bottom:8px}
+                                        #ego_features_panel .ego-toggle button{flex:1;border:1px solid #d1d5db;background:#fff;border-radius:10px;padding:6px;font-weight:700;cursor:pointer}
+                                        #ego_features_panel .ego-toggle button.active{background:#2563eb;color:#fff;border-color:#2563eb}
+                                        #ego_features_panel .ego-disc-quick{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+                                        #ego_features_panel .ego-disc-quick button{border:1px solid #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:999px;padding:4px 12px;font-weight:700;cursor:pointer;font-size:13px}
+                                        #ego_features_panel .ego-disc-quick button:hover{background:#3b82f6;color:#fff}
+                                        #ego_features_panel .ego-offers{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+                                        #ego_features_panel .ego-offers button{border:1px solid #f59e0b;background:#fffbeb;color:#b45309;border-radius:10px;padding:6px 10px;font-weight:700;cursor:pointer;font-size:13px}
+                                        #ego_features_panel .ego-offers button:hover{background:#f59e0b;color:#fff}
+                                        #ego_features_panel .ego-offers button.ego-offer-clear{border-color:#ef4444;background:#fef2f2;color:#b91c1c}
+                                        #ego_features_panel .ego-offers button.ego-offer-clear:hover{background:#ef4444;color:#fff}
+                                        /* 🆕 شريط أزرار الدفع السريعة (يشبه الصورة) */
+                                        #ego_features_panel .ego-paybar{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:14px}
+                                        @media (max-width:991px){#ego_features_panel .ego-paybar{grid-template-columns:repeat(2,1fr)}}
+                                        #ego_features_panel .ego-pay{border:none;border-radius:12px;padding:14px 8px;font-weight:800;font-size:14px;color:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;transition:.15s}
+                                        #ego_features_panel .ego-pay i{font-size:18px}
+                                        #ego_features_panel .ego-pay:hover{transform:translateY(-2px);filter:brightness(1.05)}
+                                        #ego_features_panel .ego-pay-cash{background:#16a34a}
+                                        #ego_features_panel .ego-pay-card{background:#2563eb}
+                                        #ego_features_panel .ego-pay-credit{background:#0891b2}
+                                        #ego_features_panel .ego-pay-multi{background:#0f172a}
+                                        #ego_features_panel .ego-pay-disc{background:#f59e0b}
+                                        #ego_features_panel .ego-pay-cancel{background:#dc2626}
+                                    </style>
+
+                                    <div class="ego-grid">
+                                        {{-- بطاقة 1: فحص السعر + المبلغ المستحق --}}
+                                        <div class="ego-card">
+                                            <div class="ego-title"><i class="fas fa-tags" style="color:#6366f1"></i> فحص السعر</div>
+                                            <button type="button" class="ego-pricecheck-btn" data-toggle="modal" data-target="#ego_price_check_modal">
+                                                <i class="fas fa-search-dollar"></i> فحص سعر قطعة
+                                            </button>
+                                            <div class="ego-due">
+                                                <div style="font-size:13px;opacity:.85"><i class="fas fa-receipt"></i> المبلغ المستحق</div>
+                                                <div class="v"><span id="ego_due_amount">0.00</span></div>
+                                            </div>
+                                        </div>
+
+                                        {{-- بطاقة 2: حساب الباقي --}}
+                                        <div class="ego-card">
+                                            <div class="ego-title"><i class="fas fa-calculator" style="color:#10b981"></i> حساب الباقي</div>
+                                            <input type="text" id="ego_paid_amount" class="ego-input" placeholder="المبلغ المدفوع" autocomplete="off" inputmode="decimal">
+                                            <div class="ego-keypad">
+                                                <button type="button" class="ego-key" data-k="7">7</button>
+                                                <button type="button" class="ego-key" data-k="8">8</button>
+                                                <button type="button" class="ego-key" data-k="9">9</button>
+                                                <button type="button" class="ego-key" data-k="4">4</button>
+                                                <button type="button" class="ego-key" data-k="5">5</button>
+                                                <button type="button" class="ego-key" data-k="6">6</button>
+                                                <button type="button" class="ego-key" data-k="1">1</button>
+                                                <button type="button" class="ego-key" data-k="2">2</button>
+                                                <button type="button" class="ego-key" data-k="3">3</button>
+                                                <button type="button" class="ego-key" data-k="0">0</button>
+                                                <button type="button" class="ego-key" data-k=".">.</button>
+                                                <button type="button" class="ego-key ego-back" data-k="back"><i class="fas fa-backspace"></i></button>
+                                            </div>
+                                            <div class="ego-quick">
+                                                <button type="button" data-amt="5">5</button>
+                                                <button type="button" data-amt="10">10</button>
+                                                <button type="button" data-amt="20">20</button>
+                                                <button type="button" data-amt="50">50</button>
+                                                <button type="button" data-amt="100">100</button>
+                                                <button type="button" class="ego-key ego-clear" data-k="clear" style="border-radius:999px;padding:4px 12px;font-size:13px"><i class="fas fa-eraser"></i> مسح</button>
+                                            </div>
+                                            <div class="ego-change">
+                                                <div style="font-size:13px;color:#065f46"><i class="fas fa-hand-holding-usd"></i> الباقي للعميل</div>
+                                                <div class="v"><span id="ego_change_amount">0.00</span></div>
+                                            </div>
+                                        </div>
+
+                                        {{-- بطاقة 3: الخصومات والعروض --}}
+                                        <div class="ego-card">
+                                            <div class="ego-title"><i class="fas fa-percent" style="color:#f59e0b"></i> الخصومات والعروض</div>
+                                            <div class="ego-toggle">
+                                                <button type="button" id="ego_disc_pct" class="active" data-type="percentage"><i class="fas fa-percentage"></i> نسبة %</button>
+                                                <button type="button" id="ego_disc_fixed" data-type="fixed"><i class="fas fa-coins"></i> مبلغ ثابت</button>
+                                            </div>
+                                            <input type="text" id="ego_disc_value" class="ego-input" placeholder="قيمة الخصم" autocomplete="off" inputmode="decimal">
+                                            <div class="ego-disc-quick">
+                                                <button type="button" class="ego_disc_quick" data-val="5">5%</button>
+                                                <button type="button" class="ego_disc_quick" data-val="10">10%</button>
+                                                <button type="button" class="ego_disc_quick" data-val="15">15%</button>
+                                                <button type="button" class="ego_disc_quick" data-val="20">20%</button>
+                                            </div>
+                                            <div style="font-size:12px;color:#6b7280;margin-top:12px"><i class="fas fa-gift" style="color:#ef4444"></i> عروض جاهزة</div>
+                                            <div class="ego-offers">
+                                                <button type="button" class="ego_offer" data-type="percentage" data-val="25">عرض 25%</button>
+                                                <button type="button" class="ego_offer" data-type="percentage" data-val="50">تخفيضات 50%</button>
+                                                <button type="button" class="ego_offer ego-offer-clear" data-type="fixed" data-val="0"><i class="fas fa-times"></i> إلغاء الخصم</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {{-- 🆕 شريط أزرار الدفع السريعة (كاش/بطاقة/عملاء/طرق أخرى/خصم/إلغاء) --}}
+                                    {{-- كل زر يستدعي زر النظام الموجود فعلاً، ولا يكرّر أي وظيفة --}}
+                                    <div class="ego-paybar">
+                                        <button type="button" class="ego-pay ego-pay-cash" data-ego-target='[data-pay_method="cash"]'><i class="fas fa-money-bill-wave"></i> كاش</button>
+                                        <button type="button" class="ego-pay ego-pay-card" data-ego-target='[data-pay_method="card"]'><i class="fas fa-credit-card"></i> بطاقة الائتمان</button>
+                                        <button type="button" class="ego-pay ego-pay-credit" data-ego-target='[data-pay_method="credit_sale"]'><i class="fas fa-user-friends"></i> عملاء (آجل)</button>
+                                        <button type="button" class="ego-pay ego-pay-multi" data-ego-target='#pos-finalize'><i class="fas fa-money-check-alt"></i> طرق دفع أخرى</button>
+                                        <button type="button" class="ego-pay ego-pay-disc" id="ego_pay_discount"><i class="fas fa-percent"></i> الخصم</button>
+                                        <button type="button" class="ego-pay ego-pay-cancel" data-ego-target='#pos-cancel'><i class="fas fa-times-circle"></i> إلغاء</button>
+                                    </div>
+                                </div>
+
+                                {{-- 🆕 نافذة فحص السعر (للعرض فقط — لا تضيف القطعة للسلة) --}}
+                                <div class="modal fade" id="ego_price_check_modal" tabindex="-1" role="dialog" aria-hidden="true">
+                                    <div class="modal-dialog" role="document" style="direction:rtl">
+                                        <div class="modal-content" style="border-radius:16px;overflow:hidden">
+                                            <div class="modal-header" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff">
+                                                <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="color:#fff;opacity:.9"><span aria-hidden="true">&times;</span></button>
+                                                <h4 class="modal-title"><i class="fas fa-search-dollar"></i> فحص سعر قطعة (بدون بيع)</h4>
+                                            </div>
+                                            <div class="modal-body">
+                                                <input type="text" id="ego_price_check_search" class="ego-input" placeholder="اكتب اسم القطعة أو الباركود..." autocomplete="off" style="margin-bottom:12px">
+                                                <div id="ego_price_check_results" style="max-height:340px;overflow-y:auto"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- ============================================================= --}}
+                                {{-- 🆕 سكربت المزايا الجديدة — كود جديد بالكامل، لا يعدّل أي دالة قديمة. --}}
+                                {{-- يعيد فقط استخدام دوال النظام القديمة (pos_total_row / __read_number / /products/list). --}}
+                                {{-- ============================================================= --}}
+                                <script>
+                                (function egoWaitJQ(){
+                                    if (typeof window.jQuery === 'undefined') { return setTimeout(egoWaitJQ, 60); }
+                                    var $ = window.jQuery;
+
+                                    // قراءة/كتابة رقمية آمنة (تستخدم دوال النظام إن وُجدت)
+                                    function egoReadNum($el){ try { if (typeof __read_number === 'function') return __read_number($el); } catch(e){} var v = parseFloat(($el.val()||'').toString().replace(/,/g,'')); return isNaN(v)?0:v; }
+                                    function egoWriteNum($el, val){ try { if (typeof __write_number === 'function'){ __write_number($el, val); return; } } catch(e){} $el.val(val); }
+                                    function egoFmt(n){ n = Math.round(n*100)/100; return n.toFixed(2); }
+                                    function egoParse(str){ var v = parseFloat((str||'').toString().replace(/,/g,'')); return isNaN(v)?0:v; }
+
+                                    // ---------- المبلغ المستحق + الباقي ----------
+                                    function egoGetDue(){ return egoReadNum($('#final_total_input')); }
+                                    function egoUpdateDue(){ $('#ego_due_amount').text(egoFmt(egoGetDue())); egoCalcChange(); }
+                                    function egoCalcChange(){
+                                        var due = egoGetDue();
+                                        var paid = egoParse($('#ego_paid_amount').val());
+                                        var change = paid - due;
+                                        var $c = $('#ego_change_amount');
+                                        $c.text(egoFmt(change));
+                                        $c.css('color', change < 0 ? '#b91c1c' : '#047857');
+                                    }
+
+                                    // الإجمالي يتحدّث عبر pos_total_row القديمة؛ نراقب span#total_payable لرصد التغيّر
+                                    $(document).on('change keyup', '#final_total_input', egoUpdateDue);
+                                    if (window.MutationObserver){
+                                        var tp = document.getElementById('total_payable');
+                                        if (tp){ new MutationObserver(egoUpdateDue).observe(tp, {childList:true, characterData:true, subtree:true}); }
+                                    }
+                                    setInterval(egoUpdateDue, 1200); // احتياطي خفيف
+
+                                    // كيباد المدفوع
+                                    $('#ego_paid_amount').on('input', egoCalcChange);
+                                    $('#ego_features_panel').on('click', '.ego-key', function(){
+                                        var k = $(this).data('k'); var $inp = $('#ego_paid_amount');
+                                        if (k === 'clear') { $inp.val(''); }
+                                        else if (k === 'back') { $inp.val(($inp.val()||'').slice(0,-1)); }
+                                        else { $inp.val(($inp.val()||'') + k); }
+                                        egoCalcChange();
+                                    });
+                                    $('#ego_features_panel').on('click', '.ego-quick button[data-amt]', function(){
+                                        var $inp = $('#ego_paid_amount');
+                                        $inp.val(egoParse($inp.val()) + egoParse($(this).data('amt')));
+                                        egoCalcChange();
+                                    });
+
+                                    // ---------- الخصومات والعروض (تعيد استخدام pos_total_row القديمة) ----------
+                                    var egoDiscType = 'percentage';
+                                    function egoSetType(t){ egoDiscType = t; $('#ego_disc_pct').toggleClass('active', t==='percentage'); $('#ego_disc_fixed').toggleClass('active', t==='fixed'); }
+                                    function egoApplyDiscount(type, val){
+                                        egoSetType(type);
+                                        $('#discount_type').val(type);            // حقل النظام القديم
+                                        egoWriteNum($('#discount_amount'), val);   // حقل النظام القديم
+                                        $('#discount_amount').trigger('change');   // يطلق pos_total_row القديمة
+                                        setTimeout(egoUpdateDue, 120);
+                                    }
+                                    $('#ego_disc_pct').on('click', function(){ egoSetType('percentage'); });
+                                    $('#ego_disc_fixed').on('click', function(){ egoSetType('fixed'); });
+                                    $('#ego_disc_value').on('change', function(){ egoApplyDiscount(egoDiscType, egoParse($(this).val())); });
+                                    $('#ego_features_panel').on('click', '.ego_disc_quick', function(){ var v = egoParse($(this).data('val')); $('#ego_disc_value').val(v); egoApplyDiscount('percentage', v); });
+                                    $('#ego_features_panel').on('click', '.ego_offer', function(){ var t = $(this).data('type'); var v = egoParse($(this).data('val')); $('#ego_disc_value').val(v); egoApplyDiscount(t, v); });
+
+                                    // ---------- فحص السعر (يعرض فقط من /products/list دون إضافة للسلة) ----------
+                                    var egoPCTimer = null;
+                                    $('#ego_price_check_search').on('keyup', function(){
+                                        var term = $(this).val();
+                                        clearTimeout(egoPCTimer);
+                                        if (term.length < 2){ $('#ego_price_check_results').html(''); return; }
+                                        egoPCTimer = setTimeout(function(){
+                                            var price_group = $('#price_group').length ? $('#price_group').val() : '';
+                                            var search_fields = [];
+                                            $('.search_fields:checked').each(function(i){ search_fields[i] = $(this).val(); });
+                                            $('#ego_price_check_results').html('<div style="text-align:center;padding:20px;color:#6b7280"><i class="fas fa-spinner fa-spin"></i> جاري البحث...</div>');
+                                            $.getJSON('/products/list', {
+                                                price_group: price_group,
+                                                location_id: $('#location_id').val(),
+                                                term: term,
+                                                not_for_selling: 0,
+                                                search_fields: search_fields
+                                            }, function(data){
+                                                if (!data || !data.length){ $('#ego_price_check_results').html('<div style="text-align:center;padding:20px;color:#b91c1c">لا توجد نتائج</div>'); return; }
+                                                var html = '';
+                                                data.forEach(function(it){
+                                                    var price = it.variation_group_price ? it.variation_group_price : it.selling_price;
+                                                    var name = it.name + (it.type === 'variable' && it.variation ? ' - ' + it.variation : '');
+                                                    var stock = (it.enable_stock == 1)
+                                                        ? '<span style="color:' + (it.qty_available > 0 ? '#047857' : '#b91c1c') + '">المتوفر: ' + (it.qty_available || 0) + '</span>'
+                                                        : '<span style="color:#6b7280">غير محدود</span>';
+                                                    html += '<div style="display:flex;justify-content:space-between;align-items:center;border:1px solid #eef2f7;border-radius:12px;padding:10px;margin-bottom:8px">'
+                                                          +   '<div><div style="font-weight:700">' + name + '</div><div style="font-size:12px;color:#6b7280">' + (it.sub_sku || '') + ' • ' + stock + '</div></div>'
+                                                          +   '<div style="font-weight:800;font-size:18px;color:#4f46e5">' + price + '</div>'
+                                                          + '</div>';
+                                                });
+                                                $('#ego_price_check_results').html(html);
+                                            }).fail(function(){ $('#ego_price_check_results').html('<div style="text-align:center;padding:20px;color:#b91c1c">تعذّر جلب البيانات</div>'); });
+                                        }, 400);
+                                    });
+                                    $('#ego_price_check_modal').on('shown.bs.modal', function(){ $('#ego_price_check_search').val('').focus(); $('#ego_price_check_results').html(''); });
+
+                                    // ---------- أزرار الدفع السريعة: تستدعي أزرار النظام الموجودة فعلاً ----------
+                                    $('#ego_features_panel').on('click', '.ego-pay[data-ego-target]', function(){
+                                        var sel = $(this).data('ego-target');
+                                        var $btn = $(sel).filter(':visible').first();
+                                        if (!$btn.length) { $btn = $(sel).first(); }
+                                        if ($btn.length && $btn[0]) { $btn[0].click(); }
+                                        else if (typeof toastr !== 'undefined') { toastr.error('هذا الخيار غير مفعّل في الإعدادات'); }
+                                    });
+                                    // زر "الخصم": ينقل التركيز إلى لوحة الخصومات الجديدة
+                                    $('#ego_pay_discount').on('click', function(){
+                                        var el = document.getElementById('ego_disc_value');
+                                        if (el) { el.scrollIntoView({behavior:'smooth', block:'center'}); el.focus(); }
+                                    });
+                                    // إخفاء أي زر دفع سريع هدفه غير موجود (مُعطّل من الإعدادات/الصلاحيات)
+                                    $('.ego-pay[data-ego-target]').each(function(){
+                                        if (!$($(this).data('ego-target')).length) { $(this).hide(); }
+                                    });
+
+                                    // منع زر Enter داخل حقول المزايا من إرسال فاتورة البيع بالخطأ
+                                    $('#ego_features_panel, #ego_price_check_modal').on('keydown', 'input', function(e){
+                                        if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); }
+                                    });
+
+                                    // تحديث أولي بعد جاهزية الصفحة
+                                    $(function(){ setTimeout(egoUpdateDue, 300); });
+                                })();
+                                </script>
                             </div>
                         </div>
                     </div>

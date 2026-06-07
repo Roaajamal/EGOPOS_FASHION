@@ -51,6 +51,11 @@
 					
 
 					<button type="button" class="btn btn-default bg-white btn-flat pos_add_quick_product" data-href="{{action([\App\Http\Controllers\ProductController::class, 'quickAdd'])}}" data-container=".quick_add_product_modal"><i class="fa fa-plus-circle text-primary fa-lg"></i></button>
+
+					{{-- 🆕 زر فحص السعر (يفتح نافذة فحص السعر بدون بيع) --}}
+					<button type="button" class="btn btn-default bg-white btn-flat" id="ego_price_check_open" data-toggle="modal" data-target="#ego_price_check_modal" title="فحص سعر قطعة دون بيعها">
+						<i class="fas fa-search-dollar fa-lg" style="color:#6366f1"></i>
+					</button>
 				</span>
 			</div>
 		</div>
