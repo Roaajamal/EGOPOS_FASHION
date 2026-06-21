@@ -660,15 +660,19 @@ document.addEventListener('DOMContentLoaded', function() {
         // ========== نفس طريقة initQZ من الكود العامل مع إضافة الأمان ==========
         async function initQZ() {
             try {
+                // 🆕 لا تُعِد الاتصال إن كان قائماً فعلاً (يمنع خطأ "An open connection already exists")
+                if (qz.websocket.isActive()) { return true; }
                 setupSecurity();
-                
-                qz.api.setPromiseType(function (resolver) { 
-                    return new Promise(resolver); 
+
+                qz.api.setPromiseType(function (resolver) {
+                    return new Promise(resolver);
                 });
-                
+
                 await qz.websocket.connect();
                 return true;
             } catch (e) {
+                // 🆕 إن كان الخطأ أن الاتصال قائم مسبقاً، اعتبره ناجحاً وأكمل (الطباعة/فتح الدرج تعمل)
+                if (e && ('' + (e.message || e)).indexOf('already exists') !== -1) { return true; }
                 console.warn('❌ لا يمكن الاتصال بـ QZ Tray:', e);
                 updateStatus("غير متصل", "error");
                 return false;
@@ -725,15 +729,19 @@ document.addEventListener('DOMContentLoaded', function() {
         // ========== فتح درج الكاش ==========
         async function initQZ() {
             try {
+                // 🆕 لا تُعِد الاتصال إن كان قائماً فعلاً (يمنع خطأ "An open connection already exists")
+                if (qz.websocket.isActive()) { return true; }
                 setupSecurity();
-                
-                qz.api.setPromiseType(function (resolver) { 
-                    return new Promise(resolver); 
+
+                qz.api.setPromiseType(function (resolver) {
+                    return new Promise(resolver);
                 });
-                
+
                 await qz.websocket.connect();
                 return true;
             } catch (e) {
+                // 🆕 إن كان الخطأ أن الاتصال قائم مسبقاً، اعتبره ناجحاً وأكمل (الطباعة/فتح الدرج تعمل)
+                if (e && ('' + (e.message || e)).indexOf('already exists') !== -1) { return true; }
                 console.warn('❌ لا يمكن الاتصال بـ QZ Tray:', e);
                 updateStatus("غير متصل", "error");
                 return false;

@@ -11,6 +11,9 @@ use App\BusinessLocation;
 use App\Product;
 use App\Variation;
 use App\ProductOffer;
+use App\ProductOfferBundle;
+use App\ProductOfferBundleItem;
+use App\ProductAltBarcode;
 use App\Utils\BusinessUtil;
 use App\Utils\ProductUtil;
 use App\Imports\ProductOffersImport;
@@ -93,18 +96,30 @@ class ProductOfferController extends Controller
                        $this->businessUtil->num_f($row->offer_price) . '</span>';
             })
             ->editColumn('price_type', function ($row) {
+                // 🆕 تسميات عربية واضحة
                 $types = [
-                    'fixed' => __('lang_v1.fixed'),
-                    'percentage' => __('lang_v1.percentage'),
-                    'override' => __('lang_v1.override_price')
+                    'fixed'      => 'سعر ثابت للقطعة',
+                    'percentage' => 'نسبة خصم %',
+                    'override'   => 'سعر إجمالي للكمية',
                 ];
                 return $types[$row->price_type] ?? $row->price_type;
             })
+            // 🆕 تواريخ بصيغة عربية نظيفة (توقيت الأردن) بدل صيغة UTC الغريبة
+            ->editColumn('start_date', function ($row) {
+                return !empty($row->start_date)
+                    ? \Carbon\Carbon::parse($row->start_date)->timezone('Asia/Amman')->format('Y-m-d')
+                    : '';
+            })
+            ->editColumn('end_date', function ($row) {
+                return !empty($row->end_date)
+                    ? \Carbon\Carbon::parse($row->end_date)->timezone('Asia/Amman')->format('Y-m-d')
+                    : '';
+            })
             ->editColumn('is_active', function ($row) {
                 if ($row->is_active) {
-                    return '<span class="label label-success">'.__('lang_v1.active').'</span>';
+                    return '<span class="label label-success">فعّال</span>';
                 } else {
-                    return '<span class="label label-danger">'.__('lang_v1.inactive').'</span>';
+                    return '<span class="label label-danger">غير فعّال</span>';
                 }
             })
             ->rawColumns(['action', 'product', 'offer_price', 'is_active'])
@@ -629,5 +644,401 @@ class ProductOfferController extends Controller
             'success' => true,
             'has_offer' => false
         ]);
+    }
+
+    // ============================================
+    // 📦 6. مجموعة عروض (حزم) - Bundles
+    // ============================================
+
+    public function getBundlesData()
+    {
+        if (!auth()->user()->can('product.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = request()->session()->get('user.business_id');
+
+        $bundles = ProductOfferBundle::where('product_offer_bundles.business_id', $business_id)
+            ->leftJoin('business_locations as bl', 'product_offer_bundles.location_id', '=', 'bl.id')
+            ->with(['items.variation.product'])
+            ->select('product_offer_bundles.*', 'bl.name as location_name');
+
+        return DataTables::of($bundles)
+            ->addColumn('products', function ($row) {
+                $parts = [];
+                foreach ($row->items as $item) {
+                    if (empty($item->variation)) { continue; }
+                    $pname = optional($item->variation->product)->name;
+                    $vname = $item->variation->name;
+                    $label = $pname;
+                    if (!empty($vname) && $vname != 'DUMMY') {
+                        $label .= ' - ' . $vname;
+                    }
+                    $parts[] = '<span class="label label-default" style="display:inline-block;margin:2px;font-size:12px;">'
+                        . e($label) . ' × ' . $this->businessUtil->num_f($item->quantity) . '</span>';
+                }
+                return implode(' ', $parts);
+            })
+            ->editColumn('bundle_price', function ($row) {
+                return '<span class="display_currency">' . $this->businessUtil->num_f($row->bundle_price) . '</span>';
+            })
+            ->editColumn('location_name', function ($row) {
+                return $row->location_name ?: 'كل الفروع';
+            })
+            ->editColumn('is_active', function ($row) {
+                return $row->is_active
+                    ? '<span class="label label-success">فعّال</span>'
+                    : '<span class="label label-danger">غير فعّال</span>';
+            })
+            ->addColumn('action', function ($row) {
+                return '<div class="btn-group">'
+                    . '<button class="btn btn-xs btn-primary edit-bundle-btn" data-id="'.$row->id.'"><i class="fa fa-edit"></i></button> '
+                    . '<button class="btn btn-xs btn-danger delete-bundle-btn" data-id="'.$row->id.'"><i class="fa fa-trash"></i></button>'
+                    . '</div>';
+            })
+            ->rawColumns(['products', 'bundle_price', 'location_name', 'is_active', 'action'])
+            ->make(true);
+    }
+
+    public function editBundle($id)
+    {
+        if (!auth()->user()->can('product.update')) {
+            abort(403, 'Unauthorized action.');
+        }
+        $business_id = request()->session()->get('user.business_id');
+        $bundle = ProductOfferBundle::where('business_id', $business_id)
+            ->with(['items.variation.product'])
+            ->find($id);
+        if (!$bundle) {
+            return response()->json(['success' => false, 'msg' => 'الحزمة غير موجودة']);
+        }
+        $items = [];
+        foreach ($bundle->items as $it) {
+            $pname = optional(optional($it->variation)->product)->name;
+            $vname = optional($it->variation)->name;
+            $sku   = optional($it->variation)->sub_sku;
+            $label = $pname . (!empty($vname) && $vname != 'DUMMY' ? ' - ' . $vname : '') . ($sku ? ' (' . $sku . ')' : '');
+            $items[] = [
+                'variation_id' => $it->variation_id,
+                'quantity'     => $it->quantity,
+                'label'        => $label,
+            ];
+        }
+        return response()->json(['success' => true, 'bundle' => $bundle, 'items' => $items]);
+    }
+
+    public function updateBundle(Request $request, $id)
+    {
+        if (!auth()->user()->can('product.update')) {
+            abort(403, 'Unauthorized action.');
+        }
+        try {
+            $business_id = request()->session()->get('user.business_id');
+            $bundle = ProductOfferBundle::where('business_id', $business_id)->find($id);
+            if (!$bundle) {
+                return response()->json(['success' => false, 'msg' => 'الحزمة غير موجودة']);
+            }
+
+            $validator = Validator::make($request->all(), [
+                'bundle_price' => 'required|numeric|min:0',
+                'items'        => 'required|array|min:2',
+                'items.*.variation_id' => 'required',
+                'items.*.quantity'     => 'required|numeric|min:0.001',
+                'start_date'   => 'nullable|date',
+                'end_date'     => 'nullable|date|after_or_equal:start_date',
+            ], [], ['items' => 'المنتجات']);
+            if ($validator->fails()) {
+                return response()->json(['success' => false, 'msg' => implode('<br>', $validator->errors()->all())]);
+            }
+
+            DB::beginTransaction();
+            $bundle->update([
+                'location_id' => $request->filled('location_id') ? $request->location_id : null,
+                'name'        => $request->name,
+                'bundle_price'=> $request->bundle_price,
+                'start_date'  => $request->start_date,
+                'end_date'    => $request->end_date,
+                'is_active'   => $request->is_active ?? 1,
+            ]);
+            // أعد بناء عناصر الحزمة
+            $bundle->items()->delete();
+            foreach ($request->items as $item) {
+                $variation = Variation::where('id', $item['variation_id'])
+                    ->whereHas('product', function ($q) use ($business_id) { $q->where('business_id', $business_id); })->first();
+                if (!$variation) { continue; }
+                ProductOfferBundleItem::create([
+                    'bundle_id'    => $bundle->id,
+                    'variation_id' => $item['variation_id'],
+                    'quantity'     => $item['quantity'],
+                ]);
+            }
+            if ($bundle->items()->count() < 2) {
+                DB::rollBack();
+                return response()->json(['success' => false, 'msg' => 'يجب اختيار منتجين مختلفين على الأقل للحزمة']);
+            }
+            DB::commit();
+            return response()->json(['success' => true, 'msg' => 'تم تحديث مجموعة العروض بنجاح']);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
+            return response()->json(['success' => false, 'msg' => __('messages.something_went_wrong')]);
+        }
+    }
+
+    public function storeBundle(Request $request)
+    {
+        if (!auth()->user()->can('product.create')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        try {
+            $business_id = request()->session()->get('user.business_id');
+
+            $validator = Validator::make($request->all(), [
+                'bundle_price' => 'required|numeric|min:0',
+                'items'        => 'required|array|min:2',
+                'items.*.variation_id' => 'required',
+                'items.*.quantity'     => 'required|numeric|min:0.001',
+                'start_date'   => 'nullable|date',
+                'end_date'     => 'nullable|date|after_or_equal:start_date',
+            ], [], [
+                'items' => 'المنتجات',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'msg' => implode('<br>', $validator->errors()->all())
+                ]);
+            }
+
+            DB::beginTransaction();
+
+            $bundle = ProductOfferBundle::create([
+                'business_id' => $business_id,
+                'location_id' => $request->filled('location_id') ? $request->location_id : null,
+                'name'        => $request->name,
+                'bundle_price'=> $request->bundle_price,
+                'start_date'  => $request->start_date,
+                'end_date'    => $request->end_date,
+                'is_active'   => $request->is_active ?? 1,
+                'notes'       => $request->notes,
+                'created_by'  => auth()->id(),
+            ]);
+
+            foreach ($request->items as $item) {
+                // التحقق أن المنتج يتبع للنشاط
+                $variation = Variation::where('id', $item['variation_id'])
+                    ->whereHas('product', function ($q) use ($business_id) {
+                        $q->where('business_id', $business_id);
+                    })->first();
+                if (!$variation) { continue; }
+
+                ProductOfferBundleItem::create([
+                    'bundle_id'    => $bundle->id,
+                    'variation_id' => $item['variation_id'],
+                    'quantity'     => $item['quantity'],
+                ]);
+            }
+
+            if ($bundle->items()->count() < 2) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'msg' => 'يجب اختيار منتجين مختلفين على الأقل للحزمة'
+                ]);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'msg' => 'تمت إضافة مجموعة العروض بنجاح'
+            ]);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'msg' => __('messages.something_went_wrong')
+            ]);
+        }
+    }
+
+    public function destroyBundle($id)
+    {
+        if (!auth()->user()->can('product.delete')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        try {
+            $business_id = request()->session()->get('user.business_id');
+            $bundle = ProductOfferBundle::where('business_id', $business_id)->find($id);
+
+            if ($bundle) {
+                $bundle->items()->delete();
+                $bundle->delete();
+                return ['success' => true, 'msg' => 'تم حذف مجموعة العروض'];
+            }
+            return ['success' => false, 'msg' => __('messages.something_went_wrong')];
+        } catch (\Exception $e) {
+            \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
+            return ['success' => false, 'msg' => __('messages.something_went_wrong')];
+        }
+    }
+
+    // ============================================
+    // ▮ 7. الباركود البديل - Alternative barcodes
+    // ============================================
+
+    public function getAltBarcodesData()
+    {
+        if (!auth()->user()->can('product.view')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $business_id = request()->session()->get('user.business_id');
+
+        $rows = ProductAltBarcode::where('product_alt_barcodes.business_id', $business_id)
+            ->leftJoin('variations as v', 'product_alt_barcodes.variation_id', '=', 'v.id')
+            ->leftJoin('products as p', 'v.product_id', '=', 'p.id')
+            ->select('product_alt_barcodes.*', 'p.name as product_name', 'v.name as variation_name', 'v.sub_sku');
+
+        return DataTables::of($rows)
+            ->editColumn('product', function ($row) {
+                $name = $row->product_name;
+                if (!empty($row->variation_name) && $row->variation_name != 'DUMMY') {
+                    $name .= ' - ' . $row->variation_name;
+                }
+                return e($name) . '<br><small class="text-muted">' . e($row->sub_sku) . '</small>';
+            })
+            ->editColumn('alt_barcode', function ($row) {
+                return '<span class="label label-info" style="font-size:13px;">' . e($row->alt_barcode) . '</span>';
+            })
+            ->addColumn('action', function ($row) {
+                return '<div class="btn-group">'
+                    . '<button class="btn btn-xs btn-primary edit-alt-btn" data-id="'.$row->id.'" data-code="'.e($row->alt_barcode).'"><i class="fa fa-edit"></i></button> '
+                    . '<button class="btn btn-xs btn-danger delete-alt-btn" data-id="'.$row->id.'"><i class="fa fa-trash"></i></button>'
+                    . '</div>';
+            })
+            ->rawColumns(['product', 'alt_barcode', 'action'])
+            ->make(true);
+    }
+
+    public function updateAltBarcode(Request $request, $id)
+    {
+        if (!auth()->user()->can('product.update')) {
+            abort(403, 'Unauthorized action.');
+        }
+        try {
+            $business_id = request()->session()->get('user.business_id');
+            $row = ProductAltBarcode::where('business_id', $business_id)->find($id);
+            if (!$row) {
+                return response()->json(['success' => false, 'msg' => 'الباركود غير موجود']);
+            }
+            $code = trim($request->input('alt_barcode', ''));
+            if ($code === '') {
+                return response()->json(['success' => false, 'msg' => 'أدخل الباركود']);
+            }
+            // تأكد أن الباركود غير مستخدم لسطر آخر
+            $exists = ProductAltBarcode::where('business_id', $business_id)
+                ->where('alt_barcode', $code)->where('id', '!=', $id)->exists();
+            if ($exists) {
+                return response()->json(['success' => false, 'msg' => 'هذا الباركود مستخدم مسبقاً']);
+            }
+            $row->update(['alt_barcode' => $code]);
+            return response()->json(['success' => true, 'msg' => 'تم تحديث الباركود البديل']);
+        } catch (\Exception $e) {
+            \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
+            return response()->json(['success' => false, 'msg' => __('messages.something_went_wrong')]);
+        }
+    }
+
+    public function storeAltBarcode(Request $request)
+    {
+        if (!auth()->user()->can('product.create')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        try {
+            $business_id = request()->session()->get('user.business_id');
+
+            $validator = Validator::make($request->all(), [
+                'variation_id' => 'required',
+                'barcodes'     => 'required|array|min:1',
+                'barcodes.*'   => 'required|string|max:191',
+            ], [], [
+                'barcodes' => 'الباركود',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'msg' => implode('<br>', $validator->errors()->all())
+                ]);
+            }
+
+            $variation = Variation::where('id', $request->variation_id)
+                ->whereHas('product', function ($q) use ($business_id) {
+                    $q->where('business_id', $business_id);
+                })->first();
+
+            if (!$variation) {
+                return response()->json(['success' => false, 'msg' => __('lang_v1.variation_not_found')]);
+            }
+
+            $added = 0; $skipped = 0;
+            foreach ($request->barcodes as $code) {
+                $code = trim($code);
+                if ($code === '') { continue; }
+
+                // تخطّي إن كان مستخدماً مسبقاً (بديل أو الـ SKU الأصلي)
+                $exists = ProductAltBarcode::where('business_id', $business_id)
+                    ->where('alt_barcode', $code)->exists();
+                if ($exists) { $skipped++; continue; }
+
+                ProductAltBarcode::create([
+                    'business_id'  => $business_id,
+                    'variation_id' => $request->variation_id,
+                    'alt_barcode'  => $code,
+                    'created_by'   => auth()->id(),
+                ]);
+                $added++;
+            }
+
+            return response()->json([
+                'success' => true,
+                'msg' => 'تم حفظ الباركود البديل (أُضيف: ' . $added . '، تم تخطّي مكرر: ' . $skipped . ')'
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'msg' => __('messages.something_went_wrong')
+            ]);
+        }
+    }
+
+    public function destroyAltBarcode($id)
+    {
+        if (!auth()->user()->can('product.delete')) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        try {
+            $business_id = request()->session()->get('user.business_id');
+            $row = ProductAltBarcode::where('business_id', $business_id)->find($id);
+
+            if ($row) {
+                $row->delete();
+                return ['success' => true, 'msg' => 'تم حذف الباركود البديل'];
+            }
+            return ['success' => false, 'msg' => __('messages.something_went_wrong')];
+        } catch (\Exception $e) {
+            \Log::emergency("File:" . $e->getFile() . "Line:" . $e->getLine() . "Message:" . $e->getMessage());
+            return ['success' => false, 'msg' => __('messages.something_went_wrong')];
+        }
     }
 }

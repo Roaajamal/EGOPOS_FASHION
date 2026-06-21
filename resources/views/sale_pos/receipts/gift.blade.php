@@ -1,9 +1,16 @@
  @php 
     $design_name = 'gift';
     $bid = $receipt_details->business_id ?? session()->get('user.business_id');
-    $layout = \App\InvoiceLayout::where('business_id', $bid)
+    // 🆕 استخدم تصميم gift إن وُجد، وإلا أبقِ القالب الممرّر من الكنترولر (الافتراضي)
+    //    حتى لا تطلع فاتورة الهدية قصاصة صغيرة فارغة بدون ترويسة/شعار/عناوين
+    $gift_layout = \App\InvoiceLayout::where('business_id', $bid)
                                 ->where('design', $design_name)
                                 ->first();
+    if (!empty($gift_layout)) {
+        $layout = $gift_layout;
+    } elseif (empty($layout)) {
+        $layout = \App\InvoiceLayout::where('business_id', $bid)->first();
+    }
 
     $logo_base64 = null;
     if(!empty($layout->logo)) {

@@ -1557,6 +1557,20 @@ $custom_field3_values = Product::where('business_id', $business_id)
             $check_qty = request()->input('check_qty', false);
             $price_group_id = request()->input('price_group', null);
             $business_id = request()->session()->get('user.business_id');
+
+            // 🆕 الباركود البديل: إن طابَق المصطلح باركوداً بديلاً، حوّله إلى SKU المنتج الأصلي
+            //     (إضافة لا تمسّ منطق البحث؛ تعمل فقط حين يكون المصطلح باركوداً بديلاً مسجّلاً)
+            if (!empty($search_term)) {
+                $ego_alt = \App\ProductAltBarcode::where('business_id', $business_id)
+                    ->where('alt_barcode', $search_term)
+                    ->first();
+                if ($ego_alt) {
+                    $ego_sub_sku = \App\Variation::where('id', $ego_alt->variation_id)->value('sub_sku');
+                    if (!empty($ego_sub_sku)) {
+                        $search_term = $ego_sub_sku;
+                    }
+                }
+            }
             $not_for_selling = request()->get('not_for_selling', null);
             $price_group_id = request()->input('price_group', '');
             $product_types = request()->get('product_types', []);

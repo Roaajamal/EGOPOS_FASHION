@@ -432,6 +432,14 @@
 	<td class="{{$hide_tax}}">
 		<input type="text" style="width: auto" name="products[{{$row_count}}][unit_price_inc_tax]" class="form-control pos_unit_price_inc_tax input_number" value="{{@num_format($unit_price_inc_tax)}}" @if(!$edit_price) readonly @endif @if(!empty($pos_settings['enable_msp'])) data-rule-min-value="{{$unit_price_inc_tax}}" data-msg-min-value="{{__('lang_v1.minimum_selling_price_error_msg', ['price' => @num_format($unit_price_inc_tax)])}}" @endif>
 	</td>
+	{{-- 🆕 خلية الخصم (نقطة البيع فقط): تعرض مبلغ خصم العرض/الحزمة وتخزّنه، دون تعديل سعر القطعة --}}
+	@if(empty($is_direct_sell))
+	<td class="text-center ego-discount-col v-center">
+		<span class="ego-line-discount-display" style="font-weight:700;color:#dc2626">{{ @num_format($discount_amount * $product->quantity_ordered) }}</span>
+		<input type="hidden" name="products[{{$row_count}}][line_discount_type]" class="ego-line-discount-type" value="fixed">
+		<input type="hidden" name="products[{{$row_count}}][line_discount_amount]" class="ego-line-discount-amount" value="{{ @num_format($discount_amount) }}">
+	</td>
+	@endif
 	@if(!empty($common_settings['enable_product_warranty']) && !empty($is_direct_sell))
 		<td>
 			{!! Form::select("products[$row_count][warranty_id]", $warranties, $warranty_id, ['placeholder' => __('messages.please_select'), 'class' => 'form-control']); !!}
@@ -449,73 +457,10 @@
 		<i class="fa fa-times text-danger pos_remove_row cursor-pointer" aria-hidden="true"></i>
 	</td>
 </tr>
-<script>// كود JavaScript لتطبيق العرض عند تغيير الكمية
-$(document).on('change', '.pos_quantity', function() {
-    var row = $(this).closest('tr');
-    updateProductPriceWithOffer(row);
-});
-
-// دالة لتحديث السعر بناءً على العرض
-function updateProductPriceWithOffer(row) {
-    var variation_id = row.find('.row_variation_id').val();
-    var quantity = parseFloat(row.find('.pos_quantity').val()) || 1;
-    var location_id = $('#location_id').val();
-    
-    if (!variation_id || !location_id) return;
-    
-    // إظهار تحميل بسيط
-    row.css('opacity', '0.7');
-    
-    // إرسال طلب AJAX
-    $.ajax({
-        url: '/update-price-offer',
-        method: 'POST',
-        data: {
-            variation_id: variation_id,
-            quantity: quantity,
-            location_id: location_id,
-            _token: $('meta[name="csrf-token"]').attr('content')
-        },
-        success: function(response) {
-            row.css('opacity', '1');
-            
-            if (response.success && response.final_price) {
-                var finalPrice = parseFloat(response.final_price);
-                
-                // تحديث حقل السعر
-                var priceField = row.find('.pos_unit_price_inc_tax');
-                if (priceField.length === 0) {
-                    priceField = row.find('.pos_unit_price');
-                }
-                
-                // تحديث القيمة
-                priceField.val(finalPrice.toFixed(2));
-                
-                // تشغيل event change لتحريك النظام
-                priceField.trigger('change');
-                
-                // تحديث المجموع الفرعي مباشرة
-                var lineTotal = quantity * finalPrice;
-                row.find('.pos_line_total').val(lineTotal.toFixed(2));
-                row.find('.pos_line_total_text').text(lineTotal.toFixed(2));
-                
-                // تحديث الإجمالي
-                if (typeof pos_total_row === 'function') {
-                    pos_total_row();
-                }
-            }
-        },
-        error: function() {
-            row.css('opacity', '1');
-        }
-    });
-}
-
-// كود إضافي: تحديث جميع المنتجات عند تغيير الموقع
-$(document).on('change', '#location_id, #select_location_id', function() {
-    setTimeout(function() {
-        $('tr.product_row').each(function() {
-            updateProductPriceWithOffer($(this));
-        });
-    }, 1000);
-});</script>
+<script>
+// 🆕 تم إلغاء تعديل السعر التلقائي للعرض من هنا.
+//    العروض الآن تُطبَّق كـ "خصم لكل سطر" عبر المحرّك الموحّد egoApplyOffers في create.blade.php
+//    (لا يُعدَّل سعر القطعة شامل الضريبة، ويظهر مبلغ الخصم في عمود "الخصم").
+//    إشعار المحرّك بإضافة صف جديد ليُعيد حساب الخصومات فوراً:
+if (typeof window.egoOffersSchedule === 'function') { window.egoOffersSchedule(); }
+</script>

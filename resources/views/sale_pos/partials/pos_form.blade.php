@@ -215,8 +215,12 @@
 	<div class="col-sm-12 pos_product_div">
 		<input type="hidden" name="sell_price_tax" id="sell_price_tax" value="{{$business_details->sell_price_tax}}">
 
+		{{-- 🆕 طريقة إضافة المنتج (كان مفقوداً من شاشة البيع فتوقّف الإعداد):
+		     1 = زيادة الكمية على نفس السطر عند تكرار المنتج، 0 = سطر جديد لكل إضافة --}}
+		<input type="hidden" id="item_addition_method" value="{{ $business_details->item_addition_method }}">
+
 		<!-- Keeps count of product rows -->
-		<input type="hidden" id="product_row_count" 
+		<input type="hidden" id="product_row_count"
 			value="0">
 		@php
 			$hide_tax = '';
@@ -252,6 +256,10 @@
 					@endif
 					<th class="text-center tw-text-sm md:!tw-text-base tw-font-bold col-md-2 {{$hide_tax}}">
 						@lang('sale.price_inc_tax')
+					</th>
+					{{-- 🆕 عمود الخصم (عروض الكمية/الحزم تظهر هنا، السعر يبقى كما هو) --}}
+					<th class="text-center tw-text-sm md:!tw-text-base tw-font-bold ego-discount-col">
+						الخصم
 					</th>
 					<th class="text-center tw-text-sm md:!tw-text-base tw-font-bold col-md-2">
 						@lang('sale.subtotal')

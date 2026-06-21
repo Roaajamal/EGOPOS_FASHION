@@ -323,6 +323,28 @@ Route::group(['middleware' => ['web', 'auth', 'language']], function () {
     Route::get('product-offers/active-offers', [\App\Http\Controllers\ProductOfferController::class, 'getActiveOffersForLocation'])
         ->name('product-offers.active-offers');
     
+    // 🆕 مجموعة عروض (حزم) - Bundles
+    Route::get('product-offers/bundles/get-data', [\App\Http\Controllers\ProductOfferController::class, 'getBundlesData'])
+        ->name('product-offers.bundles.get-data');
+    Route::post('product-offers/bundles', [\App\Http\Controllers\ProductOfferController::class, 'storeBundle'])
+        ->name('product-offers.bundles.store');
+    Route::get('product-offers/bundles/{id}/edit', [\App\Http\Controllers\ProductOfferController::class, 'editBundle'])
+        ->name('product-offers.bundles.edit');
+    Route::put('product-offers/bundles/{id}', [\App\Http\Controllers\ProductOfferController::class, 'updateBundle'])
+        ->name('product-offers.bundles.update');
+    Route::delete('product-offers/bundles/{id}', [\App\Http\Controllers\ProductOfferController::class, 'destroyBundle'])
+        ->name('product-offers.bundles.destroy');
+
+    // 🆕 الباركود البديل - Alternative barcodes
+    Route::get('product-offers/alt-barcodes/get-data', [\App\Http\Controllers\ProductOfferController::class, 'getAltBarcodesData'])
+        ->name('product-offers.alt-barcodes.get-data');
+    Route::post('product-offers/alt-barcodes', [\App\Http\Controllers\ProductOfferController::class, 'storeAltBarcode'])
+        ->name('product-offers.alt-barcodes.store');
+    Route::put('product-offers/alt-barcodes/{id}', [\App\Http\Controllers\ProductOfferController::class, 'updateAltBarcode'])
+        ->name('product-offers.alt-barcodes.update');
+    Route::delete('product-offers/alt-barcodes/{id}', [\App\Http\Controllers\ProductOfferController::class, 'destroyAltBarcode'])
+        ->name('product-offers.alt-barcodes.destroy');
+
     // 10. تعديل عرض (AJAX)
     Route::get('product-offers/{id}/edit', [\App\Http\Controllers\ProductOfferController::class, 'edit'])
         ->name('product-offers.edit');
@@ -471,6 +493,9 @@ use Illuminate\Support\Facades\Route;
 
 include_once 'install_r.php';
 Route::post('/update-price-offer', [SellPosController::class, 'updatePriceWithOffer'])->name('update.price.offer');
+// 🆕 تكامل العروض مع نقطة البيع
+Route::get('/pos/resolve-alt-barcode', [SellPosController::class, 'resolveAltBarcode'])->name('pos.resolve-alt-barcode');
+Route::post('/pos/calc-offers', [SellPosController::class, 'calcOffers'])->name('pos.calc-offers');
 Route::middleware(['setData'])->group(function () {
     Route::get('/', function () {
         return auth()->check() ? redirect('/home') : redirect('/login');

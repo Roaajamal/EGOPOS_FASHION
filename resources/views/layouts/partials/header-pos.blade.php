@@ -29,41 +29,45 @@
         class="tw-flex tw-flex-col md:tw-flex-row tw-items-center tw-justify-between tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-bg-white tw-rounded-xl tw-mx-0 tw-mt-1 tw-mb-0 md:tw-mb-0 tw-p-3">
         <div class="tw-w-full md:tw-w-1/3">
             <div class="tw-flex tw-items-center tw-gap-2">
-                <p><strong>@lang('sale.location'): &nbsp;</strong></p>
-                <div style="width: 28%">
-                    @if (empty($transaction->location_id))
-                        @if (count($business_locations) > 1)
-                            {!! Form::select(
-                                'select_location_id',
-                                $business_locations,
-                                $default_location->id ?? null,
-                                ['class' => 'form-control input-sm', 'id' => 'select_location_id', 'required', 'autofocus'],
-                                $bl_attributes,
-                            ) !!}
+                {{-- 🆕 بوكس الفرع منسّق مع التاريخ ورقم الفاتورة (التسمية على استقامة القائمة) --}}
+                <div class="tw-flex tw-items-center tw-gap-2" style="background:#0d9488;border-radius:10px;padding:5px 12px;box-shadow:0 2px 8px rgba(13,148,136,.15)">
+                    <i class="fa fa-store text-white" style="font-size:14px;opacity:.9"></i>
+                    <span class="text-white" style="font-size:12px;font-weight:700;white-space:nowrap">@lang('sale.location'):</span>
+                    <div style="min-width:120px">
+                        @if (empty($transaction->location_id))
+                            @if (count($business_locations) > 1)
+                                {!! Form::select(
+                                    'select_location_id',
+                                    $business_locations,
+                                    $default_location->id ?? null,
+                                    ['class' => 'form-control input-sm', 'id' => 'select_location_id', 'required', 'autofocus', 'style' => 'height:30px;border-radius:8px;font-weight:600'],
+                                    $bl_attributes,
+                                ) !!}
+                            @else
+                                <span class="text-white" style="font-weight:700">{{ $default_location->name }}</span>
+                            @endif
                         @else
-                            {{ $default_location->name }}
+                            <span class="text-white" style="font-weight:700">{{ $transaction->location->name }}</span>
                         @endif
-                    @else
-                    {{ $transaction->location->name }}
-                    @endif
+                    </div>
                 </div>
-                <div
-                    class="tw-hidden md:tw-block tw-bg-[#646EE4] hover:tw-bg-[#414aac] tw-py-1.5 tw-px-2 tw-rounded-md">
-                     &nbsp; <span
-                        class="curr_datetime text-white tw-font-semibold">{{ @format_datetime('now') }}</span>
+                {{-- 🆕 بوكس التاريخ منسّق ومصغّر --}}
+                <div class="tw-hidden md:tw-flex tw-items-center tw-gap-2" style="background:#475569;border-radius:10px;padding:5px 12px;box-shadow:0 2px 8px rgba(0,0,0,.12)">
+                    <i class="fa fa-clock text-white" style="font-size:14px;opacity:.9"></i>
+                    <span class="curr_datetime text-white" style="font-size:12px;font-weight:600">{{ @format_datetime('now') }}</span>
                     <i class="fa fa-keyboard hover-q text-white" aria-hidden="true" data-container="body"
                         data-toggle="popover" data-placement="bottom" data-content="@include('sale_pos.partials.keyboard_shortcuts_details')"
-                        data-html="true" data-trigger="hover" data-original-title="" title=""></i>
+                        data-html="true" data-trigger="hover" data-original-title="" title="" style="opacity:.8;cursor:pointer"></i>
                 </div>
 
                  <!--   invoice number  006  -->
                @if(!empty($pos_settings['enable_invoice_number']))
               <div class="col-sm-4">
-        <div class="well well-sm" style="padding: 5px 10px; margin-bottom: 5px;">
-            <strong>@lang('sale.invoice_number'): </strong>
-            <span id="next_invoice_no_display" class="text-success" style="font-size: 1em; font-weight: bold;">
-                {{ $next_invoice_no }}
-            </span>
+        {{-- 🆕 بوكس رقم الفاتورة مصغّر ومنسّق مع التاريخ --}}
+        <div style="display:inline-flex;align-items:center;gap:8px;background:#2563eb;color:#fff;border-radius:10px;padding:5px 12px;box-shadow:0 2px 8px rgba(37,99,235,.2);direction:rtl">
+            <i class="fas fa-file-invoice" style="font-size:15px;opacity:.9"></i>
+            <span style="font-size:12px;font-weight:600;opacity:.9">@lang('sale.invoice_number'):</span>
+            <span id="next_invoice_no_display" style="font-size:13px;font-weight:800;color:#fff">{{ $next_invoice_no }}</span>
         </div>
     </div>
 @endif
