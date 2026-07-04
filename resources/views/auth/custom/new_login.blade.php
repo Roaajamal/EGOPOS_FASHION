@@ -94,6 +94,22 @@
                 <img src="/img/egopos-logo.png" class="tw-h-16 tw-ml-10" onerror="this.src='{{ asset('img/egopos-logo.png') }}'">
             </div>
 
+            {{-- 🆕 تنبيه انتهاء الاشتراك على شاشة الدخول --}}
+            @php
+                $egoExpired = false; $egoExpEnd = null;
+                try {
+                    $egoAct = \App\EgoActivation::orderByDesc('id')->first();
+                    if ($egoAct) { $egoExpEnd = $egoAct->end_date; $egoExpired = \Carbon\Carbon::parse($egoAct->end_date)->endOfDay()->isPast(); }
+                } catch (\Throwable $e) {}
+            @endphp
+            @if($egoExpired)
+            <div style="width:100%;background:#fef2f2;border:1.5px solid #fecaca;color:#b91c1c;border-radius:12px;padding:14px 16px;margin-bottom:16px;text-align:center;font-weight:800">
+                <i class="fas fa-lock"></i> انتهى اشتراك النظام وبحاجة للتجديد
+                @if($egoExpEnd)<div style="font-weight:600;font-size:13px;margin-top:4px">انتهى بتاريخ {{ \Carbon\Carbon::parse($egoExpEnd)->format('d-m-Y') }}</div>@endif
+                <div style="font-weight:600;font-size:12px;margin-top:4px">سجّل الدخول كمدير للتجديد.</div>
+            </div>
+            @endif
+
             <form id="authForm" action="{{ route('login') }}" method="POST" class="tw-space-y-5 tw-w-full tw-flex tw-flex-col tw-items-start">
                 @csrf
                 <div class="tw-text-left tw-w-full">

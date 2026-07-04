@@ -34,7 +34,7 @@
                          style="width: {{ empty($pos_settings['hide_product_suggestion']) ? '60%' : '100%' }}; flex-shrink: 0; box-sizing: border-box;">
                         
                         {{-- أضفنا min-height: 75vh و display: flex لتوزيع العناصر داخلياً بالطول الكامل --}}
-                        <div class="tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-rounded-2xl tw-bg-white tw-p-2" style="height: calc(100vh - 24px); min-height: calc(100vh - 24px); display: flex; flex-direction: column;">
+                        <div class="tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-rounded-2xl tw-bg-white tw-p-2" style="height: calc(100vh - 96px); max-height: calc(100vh - 96px); display: flex; flex-direction: column;">
                             <div class="box-body pb-0 tw-flex-1" style="display: flex; flex-direction: column; height: 100%;">
                                 {!! Form::hidden('location_id', $default_location->id ?? null, ['id' => 'location_id']) !!}
                                 {!! Form::hidden('sub_type', isset($sub_type) ? $sub_type : null) !!}
@@ -52,8 +52,34 @@
                                 @endif
 
                                
+                                {{-- 🆕 تبويبات تعدّد السلال (سلة 1 / سلة 2 / +) — لقطة/استرجاع من جهة العميل --}}
+                                <div id="ego_cart_tabs">
+                                    <button type="button" id="ego_cart_add" title="سلة جديدة"><i class="fas fa-plus"></i></button>
+                                    <div id="ego_cart_tablist"></div>
+                                </div>
+
                                 <div class="pos-form-container" id="ego_cart_scroll" style="flex: 1 1 auto; min-height: 0; width: 100%; overflow-y: auto; overflow-x: hidden;">
                                     @include('sale_pos.partials.pos_form')
+                                </div>
+                                {{-- 🆕 أزرار تحكم بتمرير السلة (بدل السكرول الجانبي) --}}
+                                <div id="ego_cart_scroll_ctrl">
+                                    <button type="button" class="ego-scroll-btn" data-dir="up" title="أعلى"><i class="fas fa-caret-up"></i></button>
+                                    <button type="button" class="ego-scroll-btn" data-dir="down" title="أسفل"><i class="fas fa-caret-down"></i></button>
+                                </div>
+
+                                {{-- 🆕 صف إجراءات السلة أسفل المنتجات: ⋮ (العروض/النقاط) | خصم | ملاحظة | توصيل --}}
+                                <div id="ego_cart_actions">
+                                    <span class="ego-more-wrap" style="position:relative;display:inline-flex">
+                                        <button type="button" id="ego_more_btn" class="ego-ca-more" title="استرداد نقاط / كشف حساب / مصاريف"><i class="fas fa-ellipsis-v"></i></button>
+                                        {{-- 🆕 قائمة منسدلة بنفس مكان الزر (لا نافذة بمنتصف الصفحة) --}}
+                                        <div id="ego_more_dropdown" class="ego-more-dd"></div>
+                                    </span>
+                                    @if(empty($pos_settings['disable_discount']))
+                                    <button type="button" class="ego-ca-btn ego-ca-toggleable ego-ca-discount" data-toggle="modal" data-target="#ego_discount_modal"><i class="fas fa-percent"></i> خصم</button>
+                                    @endif
+                                    <button type="button" id="ego_btn_note" class="ego-ca-btn ego-ca-toggleable ego-ca-note" data-toggle="modal" data-target="#ego_note_modal"><i class="fas fa-sticky-note"></i> ملاحظة</button>
+                                    <button type="button" class="ego-ca-btn ego-ca-toggleable ego-ca-shipping" data-toggle="modal" data-target="#posShippingModal"><i class="fas fa-truck"></i> توصيل</button>
+                                    <button type="button" class="ego-ca-btn ego-ca-cancel" data-ego-target="#pos-cancel"><i class="fas fa-times-circle"></i> إلغاء</button>
                                 </div>
 
                                 <div class="pos-totals-section" style="margin-top: auto; flex-shrink: 0; width: 100%; background: #fff; padding-top: 10px;">
@@ -68,36 +94,29 @@
                                         <div class="ego-tot-row"><span>المجموع</span><b id="ego_t_sub">0.00</b></div>
                                         <div class="ego-tot-row ego-tot-disc"><span>الخصم / التوفير</span><b id="ego_t_disc">0.00</b></div>
                                         <div class="ego-tot-row"><span>الإجمالي</span><b id="ego_t_total">0.00</b></div>
+                                        {{-- 🆕 المدفوع والباقي فوق المستحق (نُقلا من الكيباد) --}}
+                                        <div class="ego-tot-row ego-tot-paid"><span><i class="fas fa-money-bill-wave"></i> المدفوع</span><input type="text" id="ego_paid_amount" placeholder="0.00" autocomplete="off" inputmode="decimal"></div>
+                                        <div class="ego-tot-row ego-tot-change"><span><i class="fas fa-hand-holding-usd"></i> الباقي</span><b id="ego_change_amount">0.00</b></div>
                                         <div class="ego-tot-row ego-tot-due"><span>المستحق</span><b class="ego-due-val">0.00</b></div>
                                     </div>
                                 </div>
 
-                                {{-- 🆕 صندوق المدفوع + الكيباد — يُنقل ليظهر أسفل المنتجات (يمين) --}}
+                                {{-- 🆕 صندوق طرق الدفع — يُنقل داخل نافذة التسديد عبر JS (data-dismiss يُغلق النافذة ثم يُنفّذ الدفع) --}}
                                 <div id="ego_keypad_box">
-                                    <div class="ego-kb-head">
-                                        <div class="ego-kb-paid"><span class="lbl"><i class="fas fa-money-bill-wave"></i> المدفوع</span><input type="text" id="ego_paid_amount" placeholder="0.00" autocomplete="off" inputmode="decimal"></div>
-                                        <div class="ego-kb-change"><span class="lbl"><i class="fas fa-hand-holding-usd"></i> الباقي</span><b id="ego_change_amount">0.00</b></div>
-                                    </div>
-                                    <div class="ego-kb-quick">
-                                        <button type="button" data-amt="5">5</button>
-                                        <button type="button" data-amt="10">10</button>
-                                        <button type="button" data-amt="20">20</button>
-                                        <button type="button" data-amt="50">50</button>
-                                        <button type="button" data-amt="100">100</button>
-                                        <button type="button" class="ego-key ego-clear" data-k="clear"><i class="fas fa-eraser"></i> مسح</button>
-                                    </div>
                                     <div class="ego-kb-pay">
-                                        <button type="button" class="ego-pay ego-pay-cash" id="ego_btn_cash"><i class="fas fa-money-bill-wave"></i> كاش</button>
-                                        <button type="button" class="ego-pay ego-pay-card" data-ego-target='[data-pay_method="card"]'><i class="fas fa-credit-card"></i> بطاقة</button>
-                                        <button type="button" class="ego-pay ego-pay-credit" data-ego-target='[data-pay_method="credit_sale"]'><i class="fas fa-user-friends"></i> آجل</button>
-                                        <button type="button" class="ego-pay ego-pay-multi" data-ego-target='#pos-finalize'><i class="fas fa-money-check-alt"></i> طرق أخرى</button>
+                                        <button type="button" class="ego-pay ego-pay-cash" id="ego_btn_cash" data-dismiss="modal"><i class="fas fa-money-bill-wave"></i> كاش</button>
+                                        <button type="button" class="ego-pay ego-pay-card" data-dismiss="modal"><i class="fas fa-credit-card"></i> بطاقة</button>
+                                        <button type="button" class="ego-pay ego-pay-credit" data-ego-target='[data-pay_method="credit_sale"]' data-dismiss="modal"><i class="fas fa-user-friends"></i> ذمم</button>
+                                        <button type="button" class="ego-pay ego-pay-multi" data-ego-target='#pos-finalize' data-dismiss="modal"><i class="fas fa-money-check-alt"></i> دفع متعدد</button>
                                     </div>
                                 </div>
 
                                 {{-- 🆕 شريط أسفل الصفحة: ملاحظة (يمين) • أسهم تتحكّم بتمرير المنتجات (وسط) • عدّاد كنص (يسار) --}}
                                 <div id="ego_cart_bar">
-                                    <button type="button" id="ego_btn_note" class="ego-cb-note" data-toggle="modal" data-target="#ego_note_modal"><i class="fas fa-sticky-note"></i> ملاحظة</button>
-                                    <img src="/img/sst-logo.png" alt="SST" class="ego-cb-logo">
+                                    {{-- 🆕 (أُزيلت ملاحظة من هنا — انتقلت لصف الإجراءات أسفل المنتجات) --}}
+                                    {{-- 🆕 زر التسديد: يفتح نافذة الدفع (تحوي المجاميع + أزرار الدفع) --}}
+                                    <button type="button" id="ego_btn_checkout" class="ego-cb-pay"><i class="fas fa-cash-register"></i> تسديد</button>
+                                    {{-- 🆕 (أُزيل شعار SST من هنا — انتقل إلى الشريط العلوي) --}}
                                     <div class="ego-cb-counts">
                                         <span>عدد الأسطر: <b id="ego_lines_count">0</b></span>
                                         <span>إجمالي الكمية: <b id="ego_qty_count">0</b></span>
@@ -118,13 +137,22 @@
                                         #ego_pay_wrap > #ego_keypad_box{flex:1.2;min-width:280px;margin-top:0}
 @if(empty($pos_settings['hide_product_suggestion']))
                                         /* 🆕 ترتيب الصفحة (فقط عند إظهار اقتراح المنتجات): المنتجات يميناً، السلة يساراً */
-                                        #pos_side_column{order:0 !important; overflow:visible !important; width:44% !important}
-                                        #pos_main_column{order:1 !important; width:56% !important}
-                                        #pos_side_column > div:first-child{height:calc(100vh - 24px) !important; min-height:calc(100vh - 24px) !important}
+                                        /* 🆕 السلة (pos_main_column) يمين، والأصناف (pos_side_column) يسار */
+                                        #pos_side_column{order:1 !important; overflow:visible !important; width:44% !important}
+                                        #pos_main_column{order:0 !important; width:56% !important}
+                                        /* 🆕 إزالة الفراغ العلوي ليبدأ المحتوى من أعلى الصفحة */
+                                        .content.no-print{padding-top:4px !important}
+                                        #pos_flexible_container{margin-top:0 !important}
+                                        #pos_main_column, #pos_side_column{margin-top:0 !important}
+                                        #pos_side_column > div:first-child{height:calc(100vh - 96px) !important; max-height:calc(100vh - 96px) !important}
                                         /* عند ضغط "إخفاء المنتجات": السلة تمتد على كامل الصفحة */
                                         body.ego-cart-full #pos_side_column{display:none !important}
                                         body.ego-cart-full #pos_main_column{width:100% !important}
                                         @media (max-width:1100px){#pos_side_column{width:42% !important}#pos_main_column{width:58% !important}}
+                                        /* 🆕 منع تمرير الصفحة نهائياً — كل شيء في view واحد (التمرير داخلي فقط) */
+                                        html, body{overflow:hidden !important; height:100% !important}
+                                        .content.no-print{overflow:hidden !important}
+                                        #pos_side_column > div:first-child{overflow-y:auto !important}
 @endif
 
                                         /* 🆕 صندوق الكيباد + المدفوع أسفل المنتجات (يمين) */
@@ -146,14 +174,18 @@
                                         #ego_keypad_box .ego-kb-quick button:hover{background:#34d399;color:#fff}
                                         #ego_keypad_box .ego-kb-quick .ego-clear{border-color:#fca5a5;background:#fee2e2;color:#b91c1c}
                                         /* طرق الدفع داخل صندوق الكيباد */
-                                        #ego_keypad_box .ego-kb-pay{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:10px}
-                                        #ego_keypad_box .ego-kb-pay .ego-pay{border:1px solid #e6eaef;background:#fff;border-radius:10px;padding:8px 6px;font-weight:800;font-size:13px;color:#334155;cursor:pointer;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:8px;transition:.15s}
-                                        #ego_keypad_box .ego-kb-pay .ego-pay i{font-size:20px}
+                                        #ego_keypad_box .ego-kb-pay{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:0}
+                                        /* 🆕 أزرار طرق الدفع أكبر */
+                                        #ego_keypad_box .ego-kb-pay .ego-pay{border:1px solid #e6eaef;background:#fff;border-radius:14px;padding:22px 10px;font-weight:800;font-size:17px;color:#334155;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:.15s}
+                                        #ego_keypad_box .ego-kb-pay .ego-pay i{font-size:30px}
                                         #ego_keypad_box .ego-kb-pay .ego-pay:hover{background:#f8fafc;transform:translateY(-1px)}
                                         #ego_keypad_box .ego-kb-pay .ego-pay-cash i{color:#16a34a}
                                         #ego_keypad_box .ego-kb-pay .ego-pay-card i{color:#2563eb}
                                         #ego_keypad_box .ego-kb-pay .ego-pay-credit i{color:#0891b2}
                                         #ego_keypad_box .ego-kb-pay .ego-pay-multi i{color:#0f172a}
+                                        #ego_keypad_box .ego-kb-pay .ego-pay-cancelbtn{color:#dc2626;border-color:#fecaca}
+                                        #ego_keypad_box .ego-kb-pay .ego-pay-cancelbtn i{color:#dc2626}
+                                        #ego_keypad_box .ego-kb-pay .ego-pay-cancelbtn:hover{background:#fef2f2}
 
                                         /* عناصر داخل النوافذ المنبثقة */
                                         .ego-modal .modal-content{border-radius:16px;overflow:hidden}
@@ -181,8 +213,13 @@
                                         .ego-modal .ego-offers button:hover{background:#f59e0b;color:#fff}
                                         .ego-modal .ego-offers button.ego-offer-clear{border-color:#ef4444;background:#fef2f2;color:#b91c1c}
 
-                                        /* 🆕 القائمة الجانبية المنظّمة الثابتة على يمين الشاشة */
-                                        #ego_side_panel{position:fixed;top:8px;right:6px;width:212px;max-height:calc(100vh - 16px);overflow-y:auto;z-index:1035;display:flex;flex-direction:column;gap:10px;direction:rtl;padding-bottom:8px}
+                                        /* 🆕 القائمة الجانبية تُنقل داخل نافذة "العمليات" (بدل ثبوتها يمين الشاشة) */
+                                        #ego_side_panel{display:none;}                         /* مخفية حتى تُنقل للنافذة */
+                                        body.ego-side-on #scrollable-container{padding-right:0 !important;}
+                                        #ego_ops_body #ego_side_panel{display:flex !important;position:static !important;width:100% !important;max-height:none !important;right:auto !important;top:auto !important;z-index:auto !important;}
+                                        /* زر "العمليات" (☰) داخل الشريط العلوي بجانب إغلاق الكاش */
+                                        #ego_ops_btn.ego-ops-topbar{border:2px solid #e2e8f0;border-radius:8px;width:auto;min-width:38px;height:38px;padding:0 12px;font-weight:800;font-size:16px;color:#4f46e5;background:#fff;box-shadow:rgba(17,17,26,.1) 0px 0px 16px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;margin:0 4px}
+                                        #ego_ops_btn.ego-ops-topbar:hover{background:#f5f3ff;border-color:#c7d2fe}
                                         #ego_side_panel::-webkit-scrollbar{width:6px}
                                         #ego_side_panel::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:6px}
                                         #ego_side_panel .ego-sp-section{background:#fff;border:1px solid #e6eaef;border-radius:14px;padding:10px;box-shadow:0 4px 12px rgba(17,17,26,.06)}
@@ -213,6 +250,9 @@
                                         #ego_side_panel .ego-pay-credit i{color:#0891b2}
                                         #ego_side_panel .ego-pay-multi i{color:#0f172a}
                                         #ego_side_panel .ego-op-draft i{color:#0ea5e9}
+                                        /* 🆕 إخفاء الخصم القديم بالكامل (الزر + صف "الخصم (-)") — استُبدل بزر "خصم" الجديد المرتبط بإعداد تعطيل الخصم */
+                                        #pos-edit-discount{display:none !important}
+                                        .pos-totals-section td:has(#total_discount){display:none !important}
                                         #ego_side_panel .ego-op-gift i{color:#db2777}
                                         #ego_side_panel .ego-op-reserve i{color:#ea580c}
                                         #ego_side_panel .ego-op-disc i{color:#f59e0b}
@@ -239,26 +279,99 @@
                                         #ego_side_panel .ego-op-ledger i{color:#9333ea}
                                         @media (max-width:1200px){#ego_side_panel{width:142px}}
 
-                                        /* دفع مساحة على يمين الشاشة حتى لا تغطّي القائمة المحتوى + إخفاء الشريط السفلي القديم */
-                                        body.ego-side-on #scrollable-container{padding-right:228px !important}
-                                        @media (max-width:1200px){body.ego-side-on #scrollable-container{padding-right:154px !important}}
-                                        body.ego-side-on .pos-form-actions{display:none !important}
+                                        /* 🆕 نُخفي شريط أزرار النظام السفلي دائماً (مفصول عن ego-side-on الذي كان يحجز الفراغ) */
+                                        .pos-form-actions{display:none !important}
 
                                         /* 🆕 شريط أسفل الصفحة (ملاحظة يمين / عدّاد يسار) */
+                                        /* 🆕 نُبقي شريط السلة (ملاحظة/تسديد/العمليات/العدّادات) ظاهراً، ونُخفي غلاف الدفع المخصّص فقط (المجاميع في نافذة الدفع) */
+                                        #ego_pay_wrap { display:none !important; }
                                         #ego_cart_bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 6px;border-top:1px solid #eef2f7;margin-top:6px}
                                         #ego_cart_bar .ego-cb-note{border:none;background:#16a34a;color:#fff;border-radius:10px;padding:8px 18px;font-weight:800;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px}
                                         #ego_cart_bar .ego-cb-note:hover{filter:brightness(1.07)}
+                                        /* 🆕 زر التسديد — أخضر وعريض (يملأ السطر) */
+                                        #ego_cart_bar .ego-cb-pay{flex:1 1 auto;justify-content:center;border:none;background:#0d9488;color:#fff;border-radius:12px;padding:15px 30px;font-weight:800;font-size:19px;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 5px 14px rgba(13,148,136,.32)}
+                                        #ego_cart_bar .ego-cb-pay:hover{filter:brightness(1.06)}
+                                        /* 🆕 درج الكاش + طباعة الفاتورة — بنمط ملاحظة (نظيف) في السطر السفلي */
+                                        #ego_cart_bar .ego-cb-extra{width:auto !important;max-height:none !important;border:1.5px solid #e2e8f0 !important;background:#fff !important;color:#334155 !important;border-radius:10px !important;padding:9px 14px !important;font-weight:800 !important;font-size:13px !important;cursor:pointer;display:flex !important;flex-direction:row !important;align-items:center;justify-content:center !important;gap:6px;margin:0 !important;box-shadow:none !important}
+                                        #ego_cart_bar .ego-cb-extra:hover{background:#f8fafc !important;border-color:#cbd5e1 !important}
+                                        #ego_cart_bar .ego-cb-extra i{color:#0d9488 !important;font-size:15px !important}
+                                        /* 🆕 صف إجراءات السلة (⋮ / خصم / ملاحظة / توصيل) أسفل المنتجات */
+                                        #ego_cart_actions{display:flex;flex-direction:row;justify-content:flex-start;align-items:center;gap:8px;padding:8px 4px;border-top:1px solid #eef2f7;direction:rtl;flex-wrap:wrap}
+                                        #ego_cart_actions .ego-ca-btn, #ego_cart_actions .ego-ca-more{border:1.5px solid #e2e8f0;background:#fff;color:#334155;border-radius:10px;padding:8px 14px;font-weight:800;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:.15s}
+                                        #ego_cart_actions .ego-ca-btn:hover, #ego_cart_actions .ego-ca-more:hover{background:#f8fafc;border-color:#cbd5e1}
+                                        #ego_cart_actions .ego-ca-more{padding:8px 12px;color:#334155;font-size:16px}
+                                        /* 🆕 أزرار السلة القابلة للإظهار عبر ⋮ (مخفية افتراضياً) */
+                                        #ego_cart_actions .ego-ca-toggleable{display:none !important}
+                                        #ego_cart_actions .ego-ca-toggleable.ego-on{display:flex !important}
+                                        #ego_more_dropdown .ego-more-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-radius:8px;font-weight:800;font-size:14px;color:#334155;cursor:pointer}
+                                        #ego_more_dropdown .ego-more-toggle:hover{background:#f5f3ff}
+                                        #ego_more_dropdown .ego-more-sep{border-top:1px solid #eef2f7;margin:6px 4px 2px;padding-top:6px;font-size:11px;font-weight:800;color:#94a3b8}
+                                        #ego_cart_actions .ego-ca-btn i{color:#0d9488}
+                                        /* 🆕 إخفاء خصم/عرض + إلغاء + قسم الخصومات الفارغ من نافذة العمليات */
+                                        #ego_side_panel .ego-op-disc, #ego_side_panel .ego-op-cancel, #ego_sp_discounts{display:none !important;}
+                                        /* 🆕 زر إظهار/إخفاء المنتجات — صغير */
+                                        #ego_side_panel #ego_toggle_products.ego-op-small{width:auto !important;display:inline-flex !important;align-items:center;gap:6px;padding:7px 14px !important;font-size:12px !important;border-radius:10px !important;margin-top:6px}
+                                        /* 🆕 زر إلغاء في صف الإجراءات (أحمر) */
+                                        #ego_cart_actions .ego-ca-cancel{color:#dc2626;border-color:#fecaca}
+                                        #ego_cart_actions .ego-ca-cancel i{color:#dc2626}
+                                        #ego_cart_actions .ego-ca-cancel:hover{background:#fef2f2;border-color:#fca5a5}
+                                        /* 🆕 قائمة ⋮ المنسدلة (تفتح بنفس مكان الزر للأعلى) */
+                                        #ego_more_dropdown{position:absolute;bottom:100%;right:0;margin-bottom:6px;display:none;flex-direction:column;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 10px 30px rgba(2,6,23,.18);padding:8px;min-width:190px;z-index:9999}
+                                        #ego_more_dropdown.open{display:flex}
+                                        #ego_more_dropdown .ego-more-item{display:flex !important;width:100% !important;align-items:center;justify-content:flex-start;gap:8px;border:none !important;background:#fff !important;color:#334155 !important;border-radius:8px !important;padding:10px 12px !important;font-weight:800 !important;font-size:14px !important;cursor:pointer;margin:0 !important;box-shadow:none !important;max-height:none !important;text-align:right}
+                                        #ego_more_dropdown .ego-more-item:hover{background:#f5f3ff !important}
+                                        #ego_more_dropdown .ego-more-item i{font-size:16px;color:#0d9488 !important;width:20px;text-align:center}
+                                        /* أزرار الدفع داخل نافذة التسديد */
+                                        /* 🆕 طرق الدفع بتنسيق موحّد (نفس اللون والشكل لكل الأزرار) */
+                                        #ego_pay_modal_methods .ego-kb-pay{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+                                        #ego_pay_modal_methods .ego-pay{border:1.5px solid #e2e8f0;background:#fff;border-radius:14px;padding:20px 10px;font-weight:800;font-size:16px;color:#334155;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:.15s}
+                                        #ego_pay_modal_methods .ego-pay i{font-size:26px;color:#0d9488}     /* أيقونة موحّدة اللون */
+                                        #ego_pay_modal_methods .ego-pay:hover{background:#f0fdfa;border-color:#0d9488;transform:translateY(-1px)}
+                                        /* زر طباعة الفاتورة داخل نافذة الدفع */
+                                        #ego_pay_modal_print{width:100%;margin-top:14px;border:1.5px solid #cbd5e1;background:#f8fafc;color:#334155;border-radius:12px;padding:12px;font-weight:800;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+                                        #ego_pay_modal_print:hover{background:#eef2f7}
                                         #ego_cart_bar .ego-cb-toggle{border:1px solid #cbd5e1;background:#f8fafc;color:#334155;border-radius:10px;padding:8px 14px;font-weight:800;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
                                         #ego_cart_bar .ego-cb-toggle:hover{background:#e2e8f0}
                                         #ego_cart_bar .ego-cb-toggle i{color:#2563eb}
                                         #ego_cart_bar .ego-cb-logo{height:80px;width:auto;object-fit:contain;opacity:.97}
                                         #ego_cart_bar .ego-cb-counts{display:flex;gap:18px;font-size:15px;font-weight:700;color:#334155}
                                         #ego_cart_bar .ego-cb-counts b{font-size:18px;color:#0f172a}
+                                        /* 🆕 شريط أيقونات جانبي (الصنف/العلامات/المميزة) بجانب شبكة المنتجات */
+                                        .ego-prod-wrap{display:flex;flex-direction:row-reverse;gap:10px;align-items:stretch;width:100%;flex:1 1 auto;min-height:0}
+                                        /* 🆕 عمود المنتجات يملأ الارتفاع والتمرير داخله (بلا فراغ أسفل الصور) */
+                                        #pos_side_column > div:first-child{display:flex !important;flex-direction:column !important;overflow:hidden !important}
+                                        .ego-prod-wrap > .row:not(.tw-mb-1){flex:1 1 auto !important;min-height:0;overflow-y:auto;align-content:flex-start}
+                                        .ego-prod-wrap > .row.tw-mb-1{flex:0 0 70px;max-width:70px;display:flex;flex-direction:column;gap:8px;margin:0}
+                                        .ego-prod-wrap > .row.tw-mb-1 > div{width:70px !important;max-width:70px !important;padding:0 !important;margin:0 !important;float:none !important}
+                                        .ego-prod-wrap > .row.tw-mb-1 > #product_service_div{display:none !important}
+                                        .ego-prod-wrap > .row:not(.tw-mb-1){flex:1 1 auto;margin:0}
+                                        /* الأزرار الثلاثة كأيقونات مربعة بنص صغير تحتها */
+                                        .ego-prod-wrap #product_category_div .tw-dw-drawer-content > label,
+                                        .ego-prod-wrap #product_brand_div .tw-dw-drawer-content > label,
+                                        .ego-prod-wrap #ego_featured_tab{
+                                            width:68px !important;height:62px !important;min-height:62px !important;border-radius:14px !important;
+                                            font-size:9px !important;line-height:1.1 !important;font-weight:800 !important;
+                                            display:flex !important;flex-direction:column !important;align-items:center !important;justify-content:center !important;
+                                            gap:4px !important;padding:5px 3px !important;white-space:normal !important;text-align:center !important;
+                                        }
+                                        .ego-prod-wrap #product_category_div svg,
+                                        .ego-prod-wrap #product_brand_div svg{width:24px !important;height:24px !important;margin:0 !important}
+                                        .ego-prod-wrap #ego_featured_tab i{font-size:22px !important;margin:0 !important}
+                                        /* 🆕 تحسين شكل السايد الجانبي للأصناف/العلامات (أنظف بطابع تركوازي) */
+                                        .tw-dw-drawer-side .tw-dw-menu{background:#ffffff !important;padding:20px !important;box-shadow:-10px 0 28px rgba(2,6,23,.10) !important;border-radius:18px 0 0 18px}
+                                        .tw-dw-drawer-side .category_heading, .tw-dw-drawer-side h3{color:#0d9488 !important;-webkit-text-fill-color:#0d9488 !important;background:none !important}
+                                        .tw-dw-drawer-side .tw-dw-card{border:1.5px solid #e6eaef !important;border-radius:14px !important;transition:.18s !important;box-shadow:0 2px 6px rgba(17,17,26,.05) !important}
+                                        .tw-dw-drawer-side .main-category-div:hover .tw-dw-card, .tw-dw-drawer-side .product_category:hover .tw-dw-card, .tw-dw-drawer-side .product_brand:hover .tw-dw-card{border-color:#0d9488 !important;box-shadow:0 8px 18px rgba(13,148,136,.18) !important;transform:translateY(-2px)}
+                                        .tw-dw-drawer-side .tw-dw-btn-accent, .tw-dw-drawer-side .tw-dw-btn-primary{border-color:#0d9488 !important;color:#0d9488 !important}
+                                        .ego-drawer-search{border:1.5px solid #e2e8f0 !important;border-radius:10px !important}
+                                        .close-side-bar-category, .close-side-bar-brand{background:#fef2f2 !important;border-color:#fecaca !important;color:#dc2626 !important}
                                         /* 🆕 تصميم احترافي لبطاقات المنتجات والتبويبات */
                                         #product_list_body, #featured_products_box{gap:8px !important}
-                                        #product_list_body .product_box, #featured_products_box .product_box{background:#fff;border:1px solid #e6eaef;border-radius:12px;overflow:hidden;cursor:pointer;transition:.18s;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(17,17,26,.05);height:100%}
+                                        #product_list_body .product_box, #featured_products_box .product_box{background:#fff;border:1px solid #e6eaef;border-radius:12px;overflow:hidden;cursor:pointer;transition:.18s;display:flex;flex-direction:column;box-shadow:0 2px 6px rgba(17,17,26,.05);height:100%;min-height:150px}
                                         #product_list_body .product_box:hover, #featured_products_box .product_box:hover{transform:translateY(-2px);box-shadow:0 8px 18px rgba(37,99,235,.16);border-color:#93c5fd}
-                                        #product_list_body .image-container, #featured_products_box .image-container{width:100%;height:80px;background-color:#f8fafc !important;background-size:contain !important;border-bottom:1px solid #f1f5f9}
+                                        #product_list_body .image-container, #featured_products_box .image-container{width:100%;flex:1 1 auto;height:auto !important;min-height:82px;background-color:#f8fafc !important;background-size:contain !important;background-repeat:no-repeat !important;background-position:center !important;border-bottom:1px solid #f1f5f9}
+                                        /* 🆕 إخفاء رسالة "لا يوجد منتجات لعرضها" */
+                                        #product_list_body #no_products_found + .col-md-12, #featured_products_box #no_products_found + .col-md-12{display:none !important}
                                         #product_list_body .text_div, #featured_products_box .text_div{padding:5px 5px 7px;text-align:center;display:flex;flex-direction:column;gap:2px;flex:1}
                                         #product_list_body .text_div .text:first-child, #featured_products_box .text_div .text:first-child{font-weight:800 !important;color:#1f2937 !important;font-size:11px !important;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:28px}
                                         #product_list_body .text_div small.text-muted, #featured_products_box .text_div small.text-muted{color:#94a3b8 !important;font-size:10px !important}
@@ -283,7 +396,9 @@
                                         /* تمرير عمودي واضح جنب المنتجات */
                                         #ego_cart_scroll .table-responsive{overflow:visible !important;border:0 !important}
                                         /* 🆕 سلة بتمرير عمودي واحد واضح فقط (بدون أفقي، وبدون سكرول مزدوج) */
-                                        #ego_cart_scroll{max-height:calc(100vh - 250px) !important;overflow-y:scroll !important;overflow-x:hidden !important;scrollbar-width:auto;scrollbar-color:#64748b #e2e8f0}
+                                        #ego_cart_scroll{max-height:calc(100vh - 250px) !important;overflow-y:scroll !important;overflow-x:hidden !important;overscroll-behavior:contain;scroll-behavior:smooth;scrollbar-width:auto;scrollbar-color:#64748b #e2e8f0}
+                                        /* 🆕 رأس جدول البيع يبقى ثابتاً أثناء تمرير الأسطر */
+                                        #ego_cart_scroll #pos_table thead th{position:sticky;top:0;z-index:3;background:#fff}
                                         #ego_cart_scroll::-webkit-scrollbar{width:20px}
                                         #ego_cart_scroll::-webkit-scrollbar-track{background:#e2e8f0;border-radius:10px}
                                         #ego_cart_scroll::-webkit-scrollbar-thumb{background:#64748b;border-radius:10px;border:3px solid #e2e8f0;min-height:60px}
@@ -318,13 +433,14 @@
                                             #ego_pay_summary .ego-tot-row{font-size:13px}
                                             #ego_pay_summary .ego-tot-row b{font-size:15px}
                                             #ego_pay_summary .ego-tot-due b{font-size:19px}
-                                            #ego_keypad_box .ego-kb-pay .ego-pay{font-size:12px;padding:9px 4px}
+                                            #ego_keypad_box .ego-kb-pay .ego-pay{font-size:15px;padding:16px 6px}
+                                            #ego_keypad_box .ego-kb-pay .ego-pay i{font-size:26px}
                                         }
                                         @media (max-width:992px){
                                             #ego_side_panel{width:144px}
                                             body.ego-side-on #scrollable-container{padding-right:156px !important}
                                             #ego_side_panel .ego-sp-grid{grid-template-columns:1fr}
-                                            #product_list_body .image-container,#featured_products_box .image-container{height:64px}
+                                            #product_list_body .image-container,#featured_products_box .image-container{min-height:64px}
                                         }
 
                                         /* 🆕 ملخص الدفع تحت المنتجات (أكبر وأوضح) */
@@ -350,26 +466,92 @@
                                         #ego_pay_summary .ego-tot-due b{font-size:18px;color:#16a34a}
                                         #ego_pay_summary .ego-tot-change span{font-weight:800;color:#065f46}
                                         #ego_pay_summary .ego-tot-change b{font-size:16px;color:#047857}
+                                        /* 🆕 صف المدفوع (إدخال) فوق المستحق */
+                                        #ego_pay_summary .ego-tot-paid span{font-weight:800;color:#1d4ed8}
+                                        /* 🆕 حقل "المدفوع" مُظلَّل بوضوح، والقيمة تُحدَّد بالأزرق تلقائياً عند التسديد */
+                                        #ego_pay_summary .ego-tot-paid input{width:130px;border:2px solid #2563eb;border-radius:8px;padding:5px 8px;text-align:center;font-size:18px;font-weight:800;color:#1d4ed8;background:#fff;box-shadow:0 0 0 3px rgba(37,99,235,.15)}
+                                        #ego_pay_summary .ego-tot-paid input:focus{outline:none;border-color:#1d4ed8;box-shadow:0 0 0 4px rgba(37,99,235,.3)}
+                                        #ego_pay_summary .ego-tot-paid input::selection{background:#2563eb;color:#fff}
+                                        #ego_pay_summary .ego-tot-paid input::-moz-selection{background:#2563eb;color:#fff}
+                                        #ego_pay_summary .ego-tot-paid{background:#eff6ff;border:2px solid #bfdbfe;border-radius:10px;padding:4px 8px;margin-top:2px}
+                                        #ego_pay_summary .ego-tot-change{background:#ecfdf5;border-radius:8px;padding:3px 6px}
 
-                                        /* 🆕 إخفاء القائمة العلوية (pos-header) وإظهارها عند مرور الماوس بأعلى الشاشة */
-                                        body.ego-pos-autohide .pos-header{position:fixed !important;top:-320px;left:0;right:0;z-index:1040;transition:top .25s ease;box-shadow:0 6px 16px rgba(0,0,0,.18);background:#fff}
+                                        /* 🆕 إخفاء القائمة العلوية (pos-header) وإظهارها بزر ثابت (☰) */
+                                        body.ego-pos-autohide .pos-header{position:fixed !important;top:-400px;left:0;right:0;z-index:1040;transition:top .28s ease;box-shadow:0 6px 16px rgba(0,0,0,.18);background:#fff}
                                         body.ego-pos-autohide .pos-header.ego-show{top:0}
-                                        /* شريط رفيع شفّاف بأعلى الشاشة كمنطقة استشعار لإظهار القائمة */
-                                        #ego_nav_hotzone{position:fixed;top:0;left:0;right:0;height:8px;z-index:1039;background:transparent}
+                                        /* زر ثابت (3 شحطات) أعلى يمين الشاشة لإظهار/إخفاء القائمة العلوية */
+                                        #ego_nav_toggle{position:fixed;top:8px;right:10px;z-index:1050;width:48px;height:42px;border:none;border-radius:12px;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;font-size:19px;cursor:pointer;box-shadow:0 5px 14px rgba(79,70,229,.38);display:flex;align-items:center;justify-content:center}
+                                        #ego_nav_toggle:hover{filter:brightness(1.08)}
+                                        #ego_nav_toggle.active{background:#dc2626;box-shadow:0 5px 14px rgba(220,38,38,.38)}
+
+                                        /* 🆕 المرحلة 1: القائمة الرئيسية (SST + ☰ + المستخدم) في الشريط العلوي */
+                                        #ego_mainmenu_wrap{display:inline-flex;align-items:center;gap:10px;direction:ltr}
+                                        #ego_mainmenu_wrap .ego-mm-logo{font-weight:900;font-size:21px;letter-spacing:1px;background:linear-gradient(135deg,#4f46e5,#0891b2);-webkit-background-clip:text;background-clip:text;color:transparent}
+                                        .ego-mm-menuwrap{position:relative;display:inline-flex}
+                                        #ego_mm_btn,.ego-mm-home,.ego-mm-user{height:38px;border:1.5px solid #e2e8f0;background:#fff;border-radius:10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-weight:800;color:#334155;padding:0 12px;text-decoration:none}
+                                        #ego_mm_btn,.ego-mm-home{width:44px;justify-content:center;font-size:17px}
+                                        .ego-mm-home i{color:#0d9488}
+                                        /* 🆕 توحيد لون زرّي + (إضافة عميل / إضافة منتج) إلى نفس الأخضر */
+                                        .add_new_customer .fa-plus-circle, .pos_add_quick_product .fa-plus-circle{color:#0d9488 !important}
+                                        /* 🆕 توحيد لون زر الحفظ/التحديث في نافذتي التوصيل وإضافة عميل إلى التركوازي */
+                                        #posShippingModalUpdate, .contact_modal button[type="submit"].tw-dw-btn-primary{background:#0d9488 !important;border-color:#0d9488 !important;color:#fff !important}
+                                        #posShippingModalUpdate:hover, .contact_modal button[type="submit"].tw-dw-btn-primary:hover{filter:brightness(1.07)}
+                                        #ego_mm_btn:hover,.ego-mm-user:hover{background:#f8fafc;border-color:#cbd5e1}
+                                        .ego-mm-user i{color:#0d9488;font-size:18px}.ego-mm-user span{font-size:13px}
+                                        .ego-mm-dd{position:absolute;top:100%;left:0;margin-top:6px;display:none;flex-direction:column;min-width:236px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 12px 32px rgba(2,6,23,.18);padding:8px;z-index:99999;direction:rtl}
+                                        .ego-mm-dd.open{display:flex}
+                                        .ego-mm-item{display:flex;align-items:center;gap:10px;border:none;background:#fff;color:#334155;border-radius:8px;padding:11px 12px;font-weight:800;font-size:14px;cursor:pointer;text-align:right;width:100%}
+                                        .ego-mm-item:hover{background:#f5f3ff}
+                                        .ego-mm-item i:first-child{width:20px;text-align:center;color:#0d9488}
+                                        .ego-mm-logout{color:#dc2626}.ego-mm-logout i{color:#dc2626 !important}
+                                        .ego-mm-caret{margin-right:auto;font-size:12px;color:#94a3b8}
+                                        .ego-mm-settings{display:none;flex-direction:column;gap:2px;background:#f8fafc;border-radius:8px;margin:2px 4px;padding:4px}
+                                        .ego-mm-settings.open{display:flex}
+                                        .ego-mm-srow{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;margin:0;font-weight:700;font-size:13px;color:#334155;cursor:pointer}
+                                        .ego-sw{position:relative;display:inline-block;width:42px;height:24px;flex:0 0 42px}
+                                        .ego-sw input{opacity:0;width:0;height:0}
+                                        .ego-sw-slider{position:absolute;inset:0;background:#cbd5e1;border-radius:24px;transition:.2s}
+                                        .ego-sw-slider:before{content:"";position:absolute;width:18px;height:18px;right:3px;top:3px;background:#fff;border-radius:50%;transition:.2s}
+                                        .ego-sw input:checked + .ego-sw-slider{background:#16a34a}
+                                        .ego-sw input:checked + .ego-sw-slider:before{transform:translateX(-18px)}
+                                        #ego_mainmenu_wrap .ego-mm-logo-img{height:58px;width:auto;object-fit:contain}
+                                        /* 🆕 تبويبات تعدّد السلال */
+                                        #ego_cart_tabs{display:flex;align-items:center;gap:8px;padding:6px 4px;border-bottom:1px solid #eef2f7;direction:rtl;flex-wrap:wrap}
+                                        /* 🆕 إخفاء سكرول السلة + أزرار تمرير بسهمين */
+                                        #ego_cart_scroll{scrollbar-width:none;-ms-overflow-style:none}
+                                        #ego_cart_scroll::-webkit-scrollbar{display:none;width:0;height:0}
+                                        #ego_cart_scroll_ctrl{display:flex;gap:10px;justify-content:center;padding:6px 0 2px;flex-shrink:0}
+                                        .ego-scroll-btn{width:54px;height:30px;border:1.5px solid #e2e8f0;background:#fff;border-radius:9px;color:#0d9488;cursor:pointer;font-size:18px;display:inline-flex;align-items:center;justify-content:center;transition:.15s}
+                                        .ego-scroll-btn:hover{background:#f0fdfa;border-color:#0d9488}
+                                        #ego_cart_add{width:36px;height:34px;border:none;border-radius:9px;background:#0d9488;color:#fff;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+                                        #ego_cart_add:hover{filter:brightness(1.08)}
+                                        #ego_cart_tablist{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+                                        .ego-ct-tab{display:flex;align-items:center;gap:8px;background:#f1f5f9;border:1.5px solid #e2e8f0;border-radius:10px;padding:6px 12px;font-weight:800;font-size:13px;color:#475569;cursor:pointer}
+                                        .ego-ct-tab.active{background:#fff;border-color:#16a34a;color:#0f172a;box-shadow:0 2px 8px rgba(22,163,74,.15)}
+                                        .ego-ct-tab .ego-ct-x{color:#94a3b8;font-size:12px;cursor:pointer}
+                                        .ego-ct-tab .ego-ct-x:hover{color:#dc2626}
+                                        /* 🆕 إصلاح ظهور زر التسديد (خاصة في وضع ملء الشاشة) — تثبيت الشريط أسفل عمود السلة */
+                                        #ego_cart_bar{position:sticky;bottom:0;background:#fff;z-index:6}
                                     </style>
 
                                 </div>
 
                                 {{-- 🆕 القائمة الجانبية المنظّمة — تستبدل كل أزرار الأسفل (الكلي/المدفوع/الباقي ثم الدفع ثم العمليات ثم الخصومات) --}}
                                 <div id="ego_side_panel">
-                                    {{-- 1) الخصومات (فوق) --}}
-                                    <div class="ego-sp-section">
+                                    {{-- 1) الخصومات (فوق) — أصبح فارغاً (انتقلت أزراره لصف الإجراءات و⋮) فنُخفيه --}}
+                                    <div class="ego-sp-section" id="ego_sp_discounts">
                                         <div class="ego-sp-title">الخصومات</div>
                                         <div class="ego-sp-grid">
+                                            @if($is_discount_enabled)
                                             <button type="button" class="ego-op ego-op-disc" data-toggle="modal" data-target="#ego_discount_modal"><i class="fas fa-percent"></i> خصم/عرض</button>
+                                            @endif
                                             <button type="button" class="ego-op ego-op-points" id="ego_btn_points" data-toggle="modal" data-target="#posEditDiscountModal"><i class="fas fa-star"></i> استبدال نقاط</button>
+                                            @can('expense.add')
                                             <button type="button" class="ego-op ego-op-expense" id="ego_btn_expense"><i class="fas fa-minus-circle"></i> إضافة مصاريف</button>
+                                            @endcan
+                                            @can('enable_customer_ledger')
                                             <button type="button" class="ego-op ego-op-ledger" id="ego_btn_ledger"><i class="fas fa-book"></i> كشف حساب</button>
+                                            @endcan
                                         </div>
                                     </div>
 
@@ -377,11 +559,15 @@
                                     <div class="ego-sp-section">
                                         <div class="ego-sp-title">العمليات</div>
                                         <div class="ego-sp-grid">
+                                            @if(!Gate::check('disable_draft') || auth()->user()->can('superadmin') || auth()->user()->can('admin'))
                                             <button type="button" class="ego-op ego-op-draft" data-ego-target='#pos-draft'><i class="fas fa-save"></i> مسودة</button>
+                                            @endif
                                             <button type="button" class="ego-op ego-op-gift" id="ego_btn_gift"><i class="fas fa-gift"></i> فاتورة هدية</button>
                                             <button type="button" class="ego-op ego-op-reserve" id="ego_btn_reserve"><i class="fas fa-thumbtack"></i> حجز</button>
                                             <button type="button" class="ego-op ego-op-cancel" data-ego-target='#pos-cancel'><i class="fas fa-times-circle"></i> إلغاء</button>
+                                            @can('enable_search_quantity')
                                             <button type="button" class="ego-op ego-op-stock" id="ego_btn_stock" data-toggle="modal" data-target="#StockSearchModal"><i class="fas fa-boxes"></i> بحث مخزون</button>
+                                            @endcan
                                             <button type="button" class="ego-op ego-op-returns" id="ego_btn_return_barcode" data-toggle="modal" data-target="#returnSearchModal"><i class="fas fa-barcode"></i> إرجاع بالباركود</button>
                                             <button type="button" class="ego-op ego-op-recent" data-ego-target="#recent-transactions"><i class="fas fa-history"></i> العمليات الأخيرة</button>
                                             <button type="button" class="ego-op ego-op-logout" id="ego_btn_logout"><i class="fas fa-sign-out-alt"></i> خروج</button>
@@ -389,10 +575,14 @@
                                     </div>
 
                                     {{-- 🆕 فتح درج الكاش + إرسال الفيزا — أيقونات مستقلة آخر القائمة تستدعي أزرار النظام الأصلية --}}
+                                    @can('open_cash_drawer')
                                     <button type="button" class="ego-op ego-op-drawer" id="ego_btn_drawer" style="width:100%"><i class="fas fa-cash-register"></i> فتح درج الكاش</button>
+                                    @endcan
+                                    @can('sell.send_to_visa')
                                     <button type="button" class="ego-op ego-op-visa" data-ego-target="#pay_card_full" style="width:100%"><i class="fas fa-credit-card"></i> إرسال للفيزا</button>
+                                    @endcan
                                     @if(empty($pos_settings['hide_product_suggestion']))
-                                    <button type="button" class="ego-op ego-op-toggle" id="ego_toggle_products" style="width:100%"><i class="fas fa-th-large"></i> <span class="lbl">إخفاء المنتجات</span></button>
+                                    <button type="button" class="ego-op ego-op-toggle ego-op-small" id="ego_toggle_products"><i class="fas fa-th-large"></i> <span class="lbl">إخفاء المنتجات</span></button>
                                     @endif
                                     {{-- 🆕 زر طباعة الفاتورة (طباعة يدوية عند الطلب — لا طباعة تلقائية) --}}
                                     <button type="button" class="ego-op ego-op-print" id="ego_btn_print" style="width:100%"><i class="fas fa-print"></i> طباعة الفاتورة</button>
@@ -434,14 +624,100 @@
                                 <div class="modal fade ego-modal" id="ego_note_modal" tabindex="-1" role="dialog" aria-hidden="true">
                                     <div class="modal-dialog" role="document" style="direction:rtl">
                                         <div class="modal-content">
-                                            <div class="modal-header" style="background:linear-gradient(135deg,#16a34a,#15803d)">
+                                            <div class="modal-header" style="background:linear-gradient(135deg,#0d9488,#0f766e)">
                                                 <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="color:#fff;opacity:.9"><span aria-hidden="true">&times;</span></button>
                                                 <h4 class="modal-title"><i class="fas fa-sticky-note"></i> ملاحظة الفاتورة</h4>
                                             </div>
                                             <div class="modal-body">
                                                 <textarea id="ego_note_text" class="ego-input" style="text-align:right;height:120px" placeholder="اكتب ملاحظة تظهر مع الفاتورة..."></textarea>
-                                                <button type="button" id="ego_note_save" class="ego-pricecheck-btn" data-dismiss="modal" style="margin-top:12px;width:100%;border:none;border-radius:12px;padding:10px;font-weight:800;color:#fff;background:#16a34a;cursor:pointer"><i class="fas fa-check"></i> حفظ الملاحظة</button>
+                                                <button type="button" id="ego_note_save" class="ego-pricecheck-btn" data-dismiss="modal" style="margin-top:12px;width:100%;border:none;border-radius:12px;padding:10px;font-weight:800;color:#fff;background:#0d9488;cursor:pointer"><i class="fas fa-check"></i> حفظ الملاحظة</button>
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- 🆕 ملخص وردية المستخدم (يفتح بالضغط على اسم المستخدم في الشريط العلوي) --}}
+                                @php
+                                    $egoUserSummary = null;
+                                    try {
+                                        $egoReg = \App\CashRegister::where('user_id', auth()->id())->where('status', 'open')->orderByDesc('id')->first();
+                                        if ($egoReg) {
+                                            $egoRd = app(\App\Utils\CashRegisterUtil::class)->getRegisterDetails($egoReg->id);
+                                            $egoInvCount = \App\Transaction::where('business_id', $egoReg->business_id)
+                                                ->where('created_by', auth()->id())->where('type', 'sell')->where('status', 'final')
+                                                ->where('created_at', '>=', $egoRd->open_time)->count();
+                                            $egoUserSummary = [
+                                                'name' => trim((auth()->user()->first_name ?? '') . ' ' . (auth()->user()->surname ?? '')) ?: (auth()->user()->username ?? 'مستخدم'),
+                                                'open_time' => $egoRd->open_time,
+                                                'invoices' => $egoInvCount,
+                                                'total_sales' => $egoRd->total_sales ?? 0,
+                                                'opening_cash' => $egoRd->cash_in_hand ?? 0,
+                                            ];
+                                        }
+                                    } catch (\Throwable $e) { $egoUserSummary = null; }
+                                @endphp
+                                <style>
+                                    #ego_user_modal .ego-us-row{display:flex;justify-content:space-between;align-items:center;padding:13px 18px;border-bottom:1px solid #f1f5f9;font-size:14px}
+                                    #ego_user_modal .ego-us-row span{color:#64748b;font-weight:600}
+                                    #ego_user_modal .ego-us-row b{color:#0f172a;font-weight:800}
+                                    #ego_user_modal .ego-us-row:last-child{border-bottom:none}
+                                </style>
+                                <button type="button" id="ego_user_modal_open" data-toggle="modal" data-target="#ego_user_modal" style="display:none"></button>
+                                <div class="modal fade ego-modal" id="ego_user_modal" tabindex="-1" role="dialog" aria-hidden="true">
+                                    <div class="modal-dialog" role="document" style="direction:rtl;width:460px;max-width:95%">
+                                        <div class="modal-content" style="border-radius:16px;overflow:hidden">
+                                            <div class="modal-header" style="background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff;text-align:center">
+                                                <button type="button" class="close" data-dismiss="modal" style="color:#fff;opacity:.9"><span aria-hidden="true">&times;</span></button>
+                                                <div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:4px 0">
+                                                    <span style="width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.2);display:inline-flex;align-items:center;justify-content:center"><i class="fas fa-user" style="font-size:24px"></i></span>
+                                                    <h4 class="modal-title" style="margin:0;color:#fff">{{ $egoUserSummary['name'] ?? (optional(auth()->user())->first_name ?? 'مستخدم') }}</h4>
+                                                </div>
+                                            </div>
+                                            <div class="modal-body" style="padding:0">
+                                                <div class="ego-us-row"><span>فاتح الوردية</span><b id="ego_us_name">{{ $egoUserSummary['name'] ?? (optional(auth()->user())->first_name ?? '—') }}</b></div>
+                                                <div class="ego-us-row"><span>التاريخ والوقت</span><b id="ego_us_time">{{ isset($egoUserSummary['open_time']) ? \Carbon\Carbon::parse($egoUserSummary['open_time'])->format('d-m-Y h:i A') : '—' }}</b></div>
+                                                <div class="ego-us-row"><span>عدد الفواتير اليوم</span><b id="ego_us_inv">{{ $egoUserSummary['invoices'] ?? 0 }}</b></div>
+                                                <div class="ego-us-row"><span>إجمالي المبيعات</span><b id="ego_us_sales">@format_currency($egoUserSummary['total_sales'] ?? 0)</b></div>
+                                                <div class="ego-us-row"><span>افتتاحية الكاش</span><b id="ego_us_open">@format_currency($egoUserSummary['opening_cash'] ?? 0)</b></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- 🆕 زر مخفي لفتح نافذة الدفع عبر data-toggle (موثوق مع تعدّد نسخ jQuery) --}}
+                                <button type="button" id="ego_pay_modal_open" data-toggle="modal" data-target="#ego_pay_modal" style="display:none"></button>
+
+                                {{-- 🆕 نافذة الدفع المنبثقة: تظهر الإجمالي/الخصم/المستحق/المدفوع/الباقي بعد اختيار طريقة الدفع --}}
+                                <div class="modal fade ego-modal" id="ego_pay_modal" tabindex="-1" role="dialog" aria-hidden="true">
+                                    <div class="modal-dialog" role="document" style="direction:rtl">
+                                        <div class="modal-content" style="border-radius:16px;overflow:hidden">
+                                            <div class="modal-header" style="background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff">
+                                                <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="color:#fff;opacity:.9"><span aria-hidden="true">&times;</span></button>
+                                                <h4 class="modal-title"><i class="fas fa-cash-register"></i> التسديد والدفع</h4>
+                                            </div>
+                                            <div class="modal-body">
+                                                {{-- هنا يُنقل صندوق المجاميع (#ego_pay_summary) وأزرار الدفع (#ego_keypad_box) تلقائياً عبر JS --}}
+                                                <div id="ego_pay_modal_totals"></div>
+                                                <div id="ego_pay_modal_methods" style="margin-top:14px"></div>
+                                                {{-- 🆕 (أُزيل) زر طباعة الفاتورة من نافذة التسديد — الطباعة متاحة من شريط السلة --}}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- 🆕 زر "العمليات" العائم + زر مخفي لفتح النافذة عبر data-toggle --}}
+                                <button type="button" id="ego_ops_btn"><i class="fas fa-sliders-h"></i> العمليات</button>
+                                <button type="button" id="ego_ops_open" data-toggle="modal" data-target="#ego_ops_modal" style="display:none"></button>
+
+                                {{-- 🆕 نافذة العمليات: تُنقل إليها القائمة الجانبية (خصومات/عمليات/درج/طباعة/هدية/فحص/مرتجعات/حجز) --}}
+                                <div class="modal fade ego-modal" id="ego_ops_modal" tabindex="-1" role="dialog" aria-hidden="true">
+                                    <div class="modal-dialog" role="document" style="direction:rtl">
+                                        <div class="modal-content" style="border-radius:16px;overflow:hidden">
+                                            <div class="modal-header" style="background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff">
+                                                <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="color:#fff;opacity:.9"><span aria-hidden="true">&times;</span></button>
+                                                <h4 class="modal-title"><i class="fas fa-sliders-h"></i> العمليات والخصومات</h4>
+                                            </div>
+                                            <div class="modal-body" id="ego_ops_body"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -450,7 +726,7 @@
                                 <div class="modal fade ego-modal" id="ego_price_check_modal" tabindex="-1" role="dialog" aria-hidden="true">
                                     <div class="modal-dialog" role="document" style="direction:rtl">
                                         <div class="modal-content" style="border-radius:16px;overflow:hidden">
-                                            <div class="modal-header" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff">
+                                            <div class="modal-header" style="background:linear-gradient(135deg,#0d9488,#0f766e);color:#fff">
                                                 <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="color:#fff;opacity:.9"><span aria-hidden="true">&times;</span></button>
                                                 <h4 class="modal-title"><i class="fas fa-search-dollar"></i> فحص سعر قطعة (بدون بيع)</h4>
                                             </div>
@@ -488,14 +764,24 @@
                                     function egoReadText(sel){ var v = parseFloat(($(sel).first().text()||'').toString().replace(/[^0-9.\-]/g,'')); return isNaN(v)?0:v; }
                                     function egoUpdateTotals(){
                                         var hasItems = $('#pos_table tbody tr.product_row').length > 0;
-                                        var sub = hasItems ? egoReadText('.price_total') : 0;
+                                        // 🆕 المجموع الأصلي = مجموع (سعر القطعة شامل الضريبة × الكمية) قبل خصومات العروض.
+                                        //    (سعر القطعة لا يتغيّر بمحرّك العروض، فيبقى المجموع الأصلي صحيحاً ويظهر فرق التوفير بالأحمر)
+                                        var origSub = 0;
+                                        if (hasItems) {
+                                            $('#pos_table tbody tr.product_row').each(function(){
+                                                var unit = egoReadNum($(this).find('input.pos_unit_price_inc_tax'));
+                                                var qty  = egoReadNum($(this).find('input.pos_quantity'));
+                                                origSub += unit * qty;
+                                            });
+                                        }
                                         var total = egoGetDue();
-                                        var sysDisc = hasItems ? egoReadText('#total_discount') : 0;
-                                        // إن لم يُقرأ الخصم من النظام نحسب التوفير = المجموع − الإجمالي
-                                        var disc = sysDisc > 0 ? sysDisc : Math.max(0, sub - total);
-                                        $('#ego_t_sub').text(egoFmt(sub));
+                                        // التوفير = الفرق بين المجموع الأصلي والإجمالي بعد كل الخصومات (عروض + خصم يدوي)
+                                        var disc = Math.max(0, origSub - total);
+                                        $('#ego_t_sub').text(egoFmt(origSub));
                                         $('#ego_t_disc').text(egoFmt(disc));
                                         $('#ego_t_total').text(egoFmt(total));
+                                        // 🆕 زر التسديد يعرض المبلغ المطلوب بدل كلمة "تسديد"
+                                        $('#ego_btn_checkout').html('<i class="fas fa-cash-register"></i> ' + egoFmt(total));
                                     }
                                     function egoUpdateDue(){
                                         var due = egoGetDue();
@@ -590,6 +876,25 @@
                                     $(document).on('click', '.ego_disc_quick', function(){ var v = egoParse($(this).data('val')); $('#ego_disc_value').val(v); egoApplyDiscount('percentage', v); });
                                     $(document).on('click', '.ego_offer', function(){ var t = $(this).data('type'); var v = egoParse($(this).data('val')); $('#ego_disc_value').val(v); egoApplyDiscount(t, v); });
 
+                                    // 🆕 إصلاح: منع بقاء الخصم محفوظاً وتطبيقه على كل البيعات.
+                                    //     نجعل الافتراضي صفراً، ونصفّر خصم الفاتورة عند بدء بيعة جديدة (السلة فارغة).
+                                    function egoResetOrderDiscount(force){
+                                        var $d = $('#discount_amount');
+                                        if (!$d.length) { return; }
+                                        $d.data('default', 0);                 // ليصفّره reset النظام بدل الافتراضي القديم
+                                        $('#discount_type').data('default', 'percentage');
+                                        var cartEmpty = $('#pos_table tbody tr.product_row').length === 0;
+                                        if (force || cartEmpty) {
+                                            egoWriteNum($d, 0);
+                                            $('#discount_type').val('percentage');
+                                            $('#ego_disc_value').val('');
+                                            $d.trigger('change');
+                                            if (typeof pos_total_row === 'function') { try { pos_total_row(); } catch(e){} }
+                                        }
+                                    }
+                                    egoResetOrderDiscount();
+                                    $(window).on('load', function(){ setTimeout(egoResetOrderDiscount, 600); });
+
                                     // ---------- فحص السعر (يعرض فقط من /products/list دون إضافة للسلة) ----------
                                     var egoPCTimer = null;
                                     $('#ego_price_check_search').on('keyup', function(){
@@ -652,6 +957,41 @@
                                         var $cash = $('[data-pay_method="cash"]').first();
                                         if ($cash.length && $cash[0]) { $cash[0].click(); }
                                         else if (typeof toastr !== 'undefined') { toastr.error('الدفع نقداً غير مفعّل في الإعدادات'); }
+                                    });
+
+                                    // 🆕 بطاقة: تُسدَّد مباشرةً مثل الكاش دون إظهار نافذة تفاصيل البطاقة إطلاقاً
+                                    $(document).on('click', '.ego-pay-card', function(e){
+                                        e.preventDefault();
+                                        if ($('#pos_table tbody').find('.product_row').length <= 0){ if(typeof toastr!=='undefined'){ toastr.warning('أضف منتجات أولاً'); } return; }
+                                        try {
+                                            if ($('#is_credit_sale').length){ $('#is_credit_sale').val(0); }
+                                            var total_payable = __read_number($('input#final_total_input'));
+                                            var total_paying  = __read_number($('input#total_paying_input'));
+                                            if (total_payable > total_paying){
+                                                var first_row = $('#payment_rows_div').find('.payment-amount').first();
+                                                __write_number(first_row, __read_number(first_row) + (total_payable - total_paying));
+                                                first_row.trigger('change');
+                                            }
+                                            var dd = $('#payment_rows_div').find('.payment_types_dropdown').first();
+                                            dd.val('card'); dd.change();
+                                        } catch(err){}
+                                        if (typeof pos_form_obj !== 'undefined' && pos_form_obj){ pos_form_obj.submit(); }
+                                    });
+                                    // شبكة أمان: لو فُتحت نافذة تفاصيل البطاقة لأي سبب، تُؤكَّد تلقائياً فوراً (بلا إدخال يدوي)
+                                    $(document).on('shown.bs.modal', '#card_details_modal', function(){
+                                        setTimeout(function(){ var b = document.getElementById('pos-save-card'); if (b) { b.click(); } }, 40);
+                                    });
+
+                                    // 🆕 إرسال للفيزا: تُنهى البيعة تلقائياً (يُضغط "إنهاء البيعة") دون خطوة إضافية
+                                    $(document).on('click', '.ego-op-visa', function(){ window.egoVisaAuto = true; setTimeout(function(){ window.egoVisaAuto = false; }, 7000); });
+                                    $(document).on('shown.bs.modal', '#modal_payment', function(){
+                                        if (!window.egoVisaAuto) { return; }
+                                        window.egoVisaAuto = false;
+                                        setTimeout(function(){
+                                            var dd = $('#modal_payment').find('.payment_types_dropdown').first();
+                                            if (dd.length) { dd.val('card').trigger('change'); }
+                                            var b = document.getElementById('pos-save'); if (b) { b.click(); }
+                                        }, 250);
                                     });
 
                                     // زر "حجز": اسم العميل (إجباري) + اختيار (توصيل/تعليق)، ثم يُحفظ كطلب محجوز غير مدفوع
@@ -777,8 +1117,12 @@
                                                 window.egoOrigPosPrint = window.pos_print;   // نحفظ دالة الطباعة الأصلية
                                                 window.egoPrintOverridden = true;
                                                 window.pos_print = function(receipt){
-                                                    window.egoLastReceipt = receipt;          // نخزّن الفاتورة فقط (بدون طباعة)
-                                                    if (typeof toastr !== 'undefined') { toastr.info('🧾 تمت العملية — اضغط "طباعة الفاتورة" للطباعة'); }
+                                                    window.egoLastReceipt = receipt;          // نخزّن الفاتورة دائماً (للطباعة اليدوية)
+                                                    if (!window.EGO_NO_INSTANT_PRINT) {
+                                                        try { window.egoOrigPosPrint(receipt); } catch(e){}   // 🆕 طباعة فورية بعد كل بيعة
+                                                    } else if (typeof toastr !== 'undefined') {
+                                                        toastr.info('🧾 الطباعة الفورية معطّلة — اضغط "طباعة الفاتورة" للطباعة');
+                                                    }
                                                 };
                                             }
                                         }, 500);
@@ -869,7 +1213,12 @@
                                     window.egoLastSig = '';
                                     function egoApplyOffers(){
                                         var lines = egoCollectLines();
-                                        if (lines.length === 0) { window.egoLastSig = ''; return; }
+                                        if (lines.length === 0) {
+                                            window.egoLastSig = '';
+                                            // 🆕 إن كان خصم عرض مطبّقاً، نُصفّره عند تفريغ السلة (دون المساس بخصم يدوي)
+                                            if (window.egoOfferDiscountActive) { egoApplyDiscount('fixed', 0); window.egoOfferDiscountActive = false; }
+                                            return;
+                                        }
                                         // بصمة السلة (صنف:كمية:سعر) — إن لم تتغيّر لا نعيد الحساب (يمنع الحلقات والطلبات الزائدة)
                                         var sig = lines.map(function(l){ return l.variation_id + ':' + l.quantity + ':' + l.unit_price; }).join('|') + '@' + ($('#location_id').val() || '');
                                         if (sig === window.egoLastSig) { return; }
@@ -891,6 +1240,7 @@
                                                 var qty = parseFloat($tr.find('input.pos_quantity').val()) || 0;
                                                 vidTotalValue[vid] = (vidTotalValue[vid] || 0) + egoReadUnit($tr) * qty;
                                             });
+                                            var totalDiscount = 0; // 🆕 إجمالي توفير العروض → يُطبَّق كخصم طلب
                                             $('#pos_table tbody tr.product_row').each(function(){
                                                 var $tr = $(this);
                                                 var vid = $tr.find('.row_variation_id').val();
@@ -902,22 +1252,26 @@
                                                 // حصة هذا السطر من خصم الصنف
                                                 var D = (parseFloat(info.discount) || 0) * (totalVal > 0 ? (rowValue / totalVal) : 0);
                                                 if (D > rowValue) { D = rowValue; } // الخصم لا يتجاوز قيمة السطر
-                                                // عرض مبلغ الخصم (إجمالي السطر) بلون مميّز للحزمة
+                                                // عرض مبلغ الخصم (للعرض فقط في عمود الخصم بالسلة)
                                                 $tr.find('.ego-line-discount-display').text(D ? D.toFixed(2) : '0').css('color', info.bundle ? '#7c3aed' : '#dc2626');
-                                                // التخزين للداتابيس: خصم لكل قطعة (fixed)
-                                                var perUnit = qty > 0 ? (D / qty) : 0;
-                                                $tr.find('.ego-line-discount-amount').val(perUnit.toFixed(4));
+                                                totalDiscount += D;
+                                                // 🆕 نُصفّر خصم السطر — العرض يُطبَّق كخصم طلب (يظهر بالفاتورة مثل الخصم العادي) والسعر يبقى كاملاً
+                                                $tr.find('.ego-line-discount-amount').val(0);
                                                 $tr.find('.ego-line-discount-type').val('fixed');
-                                                // إجمالي السطر بعد الخصم (السعر يبقى كما هو)
-                                                var lineTotal = rowValue - D;
-                                                if (lineTotal < 0) { lineTotal = 0; }
+                                                $tr.find('input.row_discount_amount').val(0);
+                                                $tr.find('select.row_discount_type').val('fixed');
+                                                var lineTotal = rowValue;
                                                 if (typeof __write_number === 'function') { __write_number($tr.find('input.pos_line_total'), lineTotal, false); }
                                                 else { $tr.find('input.pos_line_total').val(lineTotal.toFixed(2)); }
                                                 $tr.find('span.pos_line_total_text').text((typeof __currency_trans_from_en === 'function') ? __currency_trans_from_en(lineTotal, true) : lineTotal.toFixed(2));
                                             });
+                                            // 🆕 تطبيق إجمالي خصم العروض كـ"خصم طلب" (يُسجَّل في حقل الخصم ويظهر بالفاتورة المطبوعة)
+                                            if (totalDiscount > 0.0001) { egoApplyDiscount('fixed', parseFloat(totalDiscount.toFixed(2))); window.egoOfferDiscountActive = true; }
+                                            else if (window.egoOfferDiscountActive) { egoApplyDiscount('fixed', 0); window.egoOfferDiscountActive = false; }
                                             if (typeof pos_total_row === 'function') { pos_total_row(); }
+                                            if (typeof egoUpdateTotals === 'function') { egoUpdateTotals(); } // 🆕 يحدّث "الخصم/التوفير" الأحمر فوراً
                                             if (r.bundles && r.bundles.length && typeof toastr !== 'undefined') {
-                                                toastr.success('🎁 طُبّقت حزمة: ' + r.bundles.join('، '));
+                                                toastr.success('🎁 طُبّق عرض: ' + r.bundles.join('، '));
                                             }
                                             // نعيد تشغيل المراقبة بعد استقرار التعديلات
                                             setTimeout(egoStartObserver, 120);
@@ -948,6 +1302,8 @@
 
                                     function egoSyncSideButtons(){
                                         $('[data-ego-target]').each(function(){
+                                            // 🆕 زر "ذمم" يبقى ظاهراً دائماً (لا يُخفى رغم إخفاء النظام له مع عميل Walk-In)
+                                            if ($(this).hasClass('ego-pay-credit')) { $(this).show(); return; }
                                             var $t = $($(this).data('ego-target'));
                                             // يُخفى زرّي إذا كان هدف النظام غير موجود أو معطّلاً (عليه كلاس hide بسبب إعدادات الشركة)
                                             if ($t.length && !$t.hasClass('hide')) { $(this).show(); } else { $(this).hide(); }
@@ -964,27 +1320,42 @@
                                         if (e.key === 'Enter' || e.keyCode === 13) { e.preventDefault(); }
                                     });
 
-                                    // تفعيل وضع القائمة الجانبية (يخفي الشريط السفلي ويفسح مساحة يمين الشاشة)
-                                    document.body.classList.add('ego-side-on');
+                                    // 🆕 أُلغي تفعيل وضع القائمة الجانبية: كان يضيف padding-right كبيراً لحجز مكان القائمة (المُزالة)
+                                    //     فيترك فراغاً على يمين السلة. الآن لا نضيف ego-side-on فيختفي الفراغ.
+                                    document.body.classList.remove('ego-side-on');
 
                                     // ---------- 🆕 إخفاء القائمة العلوية وإظهارها عند مرور الماوس بأعلى الشاشة ----------
-                                    (function egoAutoHideNav(){
+                                    // 🆕 أُلغي إخفاء القائمة العلوية + زر ☰ المخصّص: لأن ‎.pos-header يحوي شريط البحث عن المنتج
+                                    //     (أساسي للكاشير) فإخفاؤه كان يخرّب الواجهة. القائمة العلوية تبقى ظاهرة دائماً،
+                                    //     ويبقى زر القائمة الخاص بالنظام في مكانه الصحيح.
+                                    (function egoNavToggle(){
+                                        return; // مُعطّل عمداً
                                         var header = document.querySelector('.pos-header') || document.querySelector('.main-header');
                                         if (!header) { return; }
                                         document.body.classList.add('ego-pos-autohide');
-                                        // منطقة استشعار رفيعة بأعلى الشاشة
-                                        if (!document.getElementById('ego_nav_hotzone')) {
-                                            var hz = document.createElement('div');
-                                            hz.id = 'ego_nav_hotzone';
-                                            document.body.appendChild(hz);
-                                            hz.addEventListener('mouseenter', function(){ header.classList.add('ego-show'); });
+                                        var btn = document.getElementById('ego_nav_toggle');
+                                        if (!btn) {
+                                            btn = document.createElement('button');
+                                            btn.id = 'ego_nav_toggle';
+                                            btn.type = 'button';
+                                            btn.title = 'القائمة العلوية';
+                                            btn.innerHTML = '<i class="fas fa-bars"></i>';
+                                            document.body.appendChild(btn);
                                         }
-                                        // إظهار عند اقتراب الماوس من أعلى الشاشة
-                                        document.addEventListener('mousemove', function(e){
-                                            if (e.clientY <= 6) { header.classList.add('ego-show'); }
+                                        btn.addEventListener('click', function(e){
+                                            e.stopPropagation();
+                                            var shown = header.classList.toggle('ego-show');
+                                            btn.classList.toggle('active', shown);
+                                            btn.innerHTML = shown ? '<i class="fas fa-times"></i>' : '<i class="fas fa-bars"></i>';
                                         });
-                                        // إخفاء عند مغادرة الماوس للقائمة
-                                        header.addEventListener('mouseleave', function(){ header.classList.remove('ego-show'); });
+                                        // إخفاء عند النقر خارج القائمة
+                                        document.addEventListener('click', function(e){
+                                            if (header.classList.contains('ego-show') && !header.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+                                                header.classList.remove('ego-show');
+                                                btn.classList.remove('active');
+                                                btn.innerHTML = '<i class="fas fa-bars"></i>';
+                                            }
+                                        });
                                     })();
 
                                     // 🆕 المجاميع + المدفوع + طرق الدفع تبقى مع السلة (يسار) حتى تظل ظاهرة عند إخفاء المنتجات
@@ -1003,6 +1374,344 @@
                                             wrap.appendChild(kb);
                                         }
                                     })();
+
+                                    // 🆕 زر "تسديد" يفتح نافذة فيها المجاميع + أزرار الدفع معاً، وضغط أي طريقة دفع يُنفّذها مباشرة.
+                                    (function egoPayPopup(){
+                                        var sum = document.getElementById('ego_pay_summary');
+                                        var totalsHolder = document.getElementById('ego_pay_modal_totals');
+                                        var kb = document.getElementById('ego_keypad_box');
+                                        var methodsHolder = document.getElementById('ego_pay_modal_methods');
+                                        if (sum && totalsHolder) { totalsHolder.appendChild(sum); }   // المجاميع داخل النافذة
+                                        if (kb && methodsHolder) { methodsHolder.appendChild(kb); }    // أزرار الدفع داخل النافذة
+
+                                        // 🆕 زر التسديد/المبلغ: يفتح النافذة المخصّصة (طرق دفع موحّدة + طباعة) بدل الدفع المتعدّد للنظام
+                                        $(document).on('click', '#ego_btn_checkout', function(){
+                                            if ($('#pos_table tbody tr.product_row').length === 0) {
+                                                if (typeof toastr !== 'undefined') { toastr.warning('أضف منتجات أولاً'); }
+                                                return;
+                                            }
+                                            var o = document.getElementById('ego_pay_modal_open');
+                                            if (o) { o.click(); }
+                                        });
+
+                                        // عند فتح النافذة: حدّث المجاميع وركّز حقل المدفوع وحدّد قيمته بالأزرق
+                                        var egoSelectPaid = function(){ var el = document.getElementById('ego_paid_amount'); if (el) { el.focus(); el.select(); } };
+                                        $('#ego_pay_modal').on('shown.bs.modal', function(){
+                                            if (typeof egoUpdateDue === 'function') { egoUpdateDue(); }
+                                            // 🆕 تحديد قيمة المدفوع بالأزرق تلقائياً (كأنها ضُغطت مرتين) — نكرّرها لتصمد أمام إعادة التعبئة الدورية
+                                            setTimeout(egoSelectPaid, 130); setTimeout(egoSelectPaid, 400);
+                                        });
+                                        // 🆕 أي تركيز/نقر على حقل المدفوع يحدّد قيمته بالكامل بالأزرق (focusin يتصاعد فيعمل بالتفويض)
+                                        $(document).on('focusin click', '#ego_paid_amount', function(){ var el = this; setTimeout(function(){ el.select(); }, 0); });
+                                        // 🆕 تنظيف أي "ظل أسود" (backdrop) عالق بعد إغلاق النافذة وتنفيذ الدفع
+                                        $('#ego_pay_modal').on('hidden.bs.modal', function(){
+                                            setTimeout(function(){
+                                                if (!$('.modal.in:visible, .modal.show:visible').length) {
+                                                    $('.modal-backdrop').remove();
+                                                    $('body').removeClass('modal-open').css('padding-right','');
+                                                }
+                                            }, 400);
+                                        });
+                                        // زر "طباعة الفاتورة" داخل نافذة الدفع → يستدعي منطق الطباعة الموجود (#ego_btn_print)
+                                        $(document).on('click', '#ego_pay_modal_print', function(){
+                                            var p = document.getElementById('ego_btn_print');
+                                            if (p) { p.click(); }
+                                            else if (typeof toastr !== 'undefined') { toastr.info('الطباعة تتاح بعد إتمام البيعة'); }
+                                        });
+                                        // أزرار الدفع الآن داخل النافذة وتعمل بمعالجاتها الأصلية مباشرة (data-dismiss يغلق النافذة)
+                                    })();
+
+                                    // 🆕 (أُزيل) كان اعتراض .pos-express-finalize يعيد فتح نافذة الدفع عند تنفيذ "كاش" من داخلها
+                                    //     فيمنع إتمام البيعة ويُبقي الظل الأسود. أزرار النظام مخفيّة أصلاً، فلا حاجة للاعتراض.
+
+                                    // 🆕 نقل القائمة الجانبية داخل نافذة "العمليات"، وزر العمليات يفتحها
+                                    (function egoOpsPanel(){
+                                        var sp = document.getElementById('ego_side_panel');
+                                        var body = document.getElementById('ego_ops_body');
+                                        if (sp && body) { body.appendChild(sp); }   // كل أدوات القائمة الجانبية داخل النافذة
+                                        // 🆕 ننقل زر "العمليات" (☰) إلى الشريط العلوي بجانب زر "إغلاق الكاش"
+                                        var obtn = document.getElementById('ego_ops_btn');
+                                        if (obtn) {
+                                            obtn.innerHTML = '<i class="fas fa-bars"></i>';
+                                            obtn.title = 'العمليات';
+                                            obtn.classList.add('ego-ops-topbar');
+                                            var cr = document.getElementById('close_register');
+                                            if (cr && cr.parentNode) { cr.parentNode.insertBefore(obtn, cr); }
+                                        }
+                                        $(document).on('click', '#ego_ops_btn', function(){
+                                            var o = document.getElementById('ego_ops_open');
+                                            if (o) { o.click(); }   // فتح موثوق عبر data-toggle
+                                        });
+
+                                        // 🆕 درج الكاش + طباعة الفاتورة → الشريط السفلي (السطر الذي تحت صف الإجراءات) بنمط ملاحظة
+                                        var bar     = document.getElementById('ego_cart_bar');
+                                        var drawer  = document.getElementById('ego_btn_drawer');
+                                        var printB  = document.getElementById('ego_btn_print');
+                                        if (bar) {
+                                            if (drawer) { drawer.classList.add('ego-cb-extra','ego-cb-drawer'); bar.insertBefore(drawer, bar.firstChild); }
+                                            if (printB) { printB.classList.add('ego-cb-extra','ego-cb-print'); bar.insertBefore(printB, drawer ? drawer.nextSibling : bar.firstChild); }
+                                        }
+                                        // إرسال للفيزا → طرق الدفع في نافذة التسديد (بنفس التنسيق الموحّد)
+                                        var visa = document.querySelector('.ego-op-visa');
+                                        var payGrid = document.querySelector('#ego_pay_modal_methods .ego-kb-pay');
+                                        if (visa && payGrid) {
+                                            visa.classList.add('ego-pay');
+                                            visa.setAttribute('data-dismiss', 'modal');
+                                            payGrid.appendChild(visa);
+                                        }
+                                        // 🆕 زر إلغاء بجانب إرسال للفيزا في نافذة الدفع (يلغي البيعة)
+                                        if (payGrid && !document.getElementById('ego_pay_cancel_btn')) {
+                                            var cancelBtn = document.createElement('button');
+                                            cancelBtn.type = 'button';
+                                            cancelBtn.id = 'ego_pay_cancel_btn';
+                                            cancelBtn.className = 'ego-pay ego-pay-cancelbtn';
+                                            cancelBtn.setAttribute('data-ego-target', '#pos-cancel');
+                                            cancelBtn.setAttribute('data-dismiss', 'modal');
+                                            cancelBtn.innerHTML = '<i class="fas fa-times-circle"></i> إلغاء';
+                                            payGrid.appendChild(cancelBtn);
+                                        }
+                                        // 🆕 ننقل أزرار (نقاط/كشف/مصاريف/مسودة) إلى صف الإجراءات (مخفية قابلة للتفعيل)، و⋮ = مفاتيح لكل الأزرار
+                                        var moreDd = document.getElementById('ego_more_dropdown');
+                                        var actionsRow = document.getElementById('ego_cart_actions');
+                                        var cancelRef = actionsRow ? actionsRow.querySelector('.ego-ca-cancel') : null;
+                                        function egoMoveToActions(el, cls){
+                                            if (!el || !actionsRow) { return; }
+                                            el.classList.remove('ego-op', 'ego-more-item');
+                                            el.classList.add('ego-ca-btn', 'ego-ca-toggleable', cls);
+                                            el.removeAttribute('data-dismiss'); el.style.width = ''; el.style.maxHeight = '';
+                                            actionsRow.insertBefore(el, cancelRef);
+                                        }
+                                        egoMoveToActions(document.getElementById('ego_btn_points'), 'ego-ca-points');
+                                        egoMoveToActions(document.getElementById('ego_btn_ledger'), 'ego-ca-ledger');
+                                        egoMoveToActions(document.getElementById('ego_btn_expense'), 'ego-ca-expense');
+                                        egoMoveToActions(document.querySelector('.ego-op-draft'), 'ego-ca-draft');
+                                        if (moreDd) {
+                                            var _sep = document.createElement('div'); _sep.className = 'ego-more-sep'; _sep.textContent = 'أظهر/أخفِ أزرار السلة:';
+                                            moreDd.appendChild(_sep);
+                                            [{key:'discount',sel:'.ego-ca-discount',label:'خصم'},{key:'note',sel:'.ego-ca-note',label:'ملاحظة'},{key:'shipping',sel:'.ego-ca-shipping',label:'توصيل'},{key:'points',sel:'.ego-ca-points',label:'استرداد نقاط'},{key:'ledger',sel:'.ego-ca-ledger',label:'كشف حساب'},{key:'expense',sel:'.ego-ca-expense',label:'مصاريف'},{key:'draft',sel:'.ego-ca-draft',label:'مسودة'}].forEach(function(t){
+                                                if (!$('#ego_cart_actions ' + t.sel).length) { return; } // 🆕 تخطّى الأزرار غير المُصرّح بها / المخفية (مثل الخصم عند تعطيله)
+                                                var on = localStorage.getItem('ego_cartbtn_' + t.key) === '1';
+                                                $('#ego_cart_actions ' + t.sel).toggleClass('ego-on', on);
+                                                var lbl = document.createElement('label'); lbl.className = 'ego-more-toggle';
+                                                var chk = document.createElement('input'); chk.type = 'checkbox'; chk.checked = on; chk.setAttribute('data-ego-cartbtn', t.key); chk.setAttribute('data-sel', t.sel);
+                                                lbl.innerHTML = '<span>' + t.label + '</span>';
+                                                lbl.appendChild(chk);
+                                                moreDd.appendChild(lbl);
+                                            });
+                                        }
+                                        // تبديل إظهار أزرار السلة (لا يُغلق القائمة)
+                                        $(document).on('click', '#ego_more_dropdown .ego-more-toggle', function(e){ e.stopPropagation(); });
+                                        $(document).on('change', '#ego_more_dropdown input[data-ego-cartbtn]', function(){
+                                            var key = $(this).attr('data-ego-cartbtn'), sel = $(this).attr('data-sel'), on = this.checked;
+                                            localStorage.setItem('ego_cartbtn_' + key, on ? '1' : '0');
+                                            $('#ego_cart_actions ' + sel).toggleClass('ego-on', on);
+                                        });
+                                        // فتح/إغلاق القائمة المنسدلة عند ⋮
+                                        $(document).on('click', '#ego_more_btn', function(e){
+                                            e.stopPropagation();
+                                            if (moreDd) { moreDd.classList.toggle('open'); }
+                                        });
+                                        // إغلاقها عند اختيار خيار أو الضغط خارجها
+                                        $(document).on('click', '#ego_more_dropdown .ego-more-item', function(){ if (moreDd) moreDd.classList.remove('open'); });
+                                        $(document).on('click', function(ev){
+                                            if (moreDd && moreDd.classList.contains('open') && !ev.target.closest('.ego-more-wrap')) { moreDd.classList.remove('open'); }
+                                        });
+                                    })();
+
+                                    // 🆕🆕 المرحلة 1: شريط علوي مبسّط (SST + ☰ + المستخدم) + قائمة ☰ + الإعدادات بمفاتيح
+                                    (function egoMainMenu(){
+                                        if (document.getElementById('ego_mainmenu_wrap')) return;
+                                        function srow(k,l){ return '<label class="ego-mm-srow"><span>'+l+'</span><span class="ego-sw"><input type="checkbox" data-ego-set="'+k+'"><span class="ego-sw-slider"></span></span></label>'; }
+                                        var wrap = document.createElement('div');
+                                        wrap.id = 'ego_mainmenu_wrap';
+                                        wrap.innerHTML =
+                                            '<img src="/img/sst-logo.png" alt="SST" class="ego-mm-logo-img">' +
+                                            '<span class="ego-mm-menuwrap">' +
+                                                '<button type="button" id="ego_mm_btn" class="ego-mm-btn" title="القائمة"><i class="fas fa-bars"></i></button>' +
+                                                '<div id="ego_mm_dd" class="ego-mm-dd">' +
+                                                    '<button type="button" class="ego-mm-item" data-ego-do="drafts"><i class="fas fa-file-invoice"></i> المسودات</button>' +
+                                                    '<button type="button" class="ego-mm-item" data-ego-do="reg_details"><i class="fas fa-briefcase"></i> تفاصيل الوردية</button>' +
+                                                    '<button type="button" class="ego-mm-item" data-ego-do="close_reg"><i class="fas fa-window-close"></i> إغلاق الوردية</button>' +
+                                                    '<button type="button" class="ego-mm-item ego-mm-settings-toggle"><i class="fas fa-cog"></i> الإعدادات <i class="fas fa-chevron-left ego-mm-caret"></i></button>' +
+                                                    '<div id="ego_mm_settings" class="ego-mm-settings">' + srow('no_instant_print','تعطيل الطباعة الفورية') + srow('fullscreen','ملء الشاشة') + srow('mute','كتم أصوات نقطة البيع') + srow('show_products','إظهار المنتجات') + '</div>' +
+                                                    '<button type="button" class="ego-mm-item ego-mm-addons-toggle"><i class="fas fa-puzzle-piece"></i> إضافات <i class="fas fa-chevron-left ego-mm-caret"></i></button>' +
+                                                    '<div id="ego_addons_sub" class="ego-mm-settings"></div>' +
+                                                    '<button type="button" class="ego-mm-item" data-ego-do="account"><i class="fas fa-user"></i> حسابي</button>' +
+                                                    '<button type="button" class="ego-mm-item ego-mm-logout" data-ego-do="logout"><i class="fas fa-sign-out-alt"></i> تسجيل الخروج</button>' +
+                                                '</div>' +
+                                            '</span>' +
+                                            '<a href="{{ url('/home') }}" id="ego_mm_home" class="ego-mm-home" title="الرئيسية"><i class="fas fa-home"></i></a>' +
+                                            '<button type="button" id="ego_mm_user" class="ego-mm-user" title="ملخص اليوم"><i class="fas fa-user-circle"></i> <span>{{ optional(auth()->user())->first_name ?? 'مستخدم' }}</span></button>' +
+                                            '<form id="ego_logout_form" action="{{ url('/logout') }}" method="POST" style="display:none"><input type="hidden" name="_token" value="{{ csrf_token() }}"></form>';
+                                        // حقن العناصر في يسار الشريط العلوي
+                                        var _lt = document.querySelector('.tw-w-full.md\\:tw-w-1\\/3');
+                                        var host = (_lt && _lt.parentElement) || document.querySelector('.tw-items-center.tw-justify-between') || document.querySelector('.pos-header');
+                                        if (host) { host.appendChild(wrap); }   // 🆕 آخر عنصر = أقصى اليسار (RTL)
+                                        // إخفاء زر الرجوع من الأعلى
+                                        var bk = document.querySelector('#pos_header_more_options a .fa-backward'); if (bk && bk.closest('a')) { bk.closest('a').style.display='none'; }
+                                        // إخفاء أزرار الشريط العلوي القديمة (تُستدعى عبر القائمة)
+                                        var st = document.createElement('style');
+                                        st.textContent = '#close_register,#register_details,#view_suspended_sales,#btnCalculator,#full_screen,#recent-transactions,#service_staff_replacement,#show_service_staff_availability,#customer_display_screen{display:none !important}';
+                                        document.head.appendChild(st);
+                                        // 🆕 نقل عناصر "العمليات" إلى "إضافات" داخل القائمة، وحذف زر العمليات
+                                        var addonsSub = document.getElementById('ego_addons_sub');
+                                        if (addonsSub) {
+                                            [document.getElementById('ego_btn_gift'), document.getElementById('ego_btn_reserve'), document.getElementById('ego_btn_stock'), document.getElementById('ego_btn_return_barcode'), document.querySelector('.ego-op-recent')].forEach(function(el){ if(el){ el.classList.remove('ego-op'); el.classList.add('ego-mm-item'); el.style.width=''; el.style.maxHeight=''; addonsSub.appendChild(el); } });
+                                            // زر "ارجاع حسب فاتورة" (زر الإرجاع العلوي ذو الـ popover) → إضافات
+                                            var _retInv=document.getElementById('return_sale');
+                                            if(_retInv){ _retInv.classList.add('ego-mm-item'); _retInv.style.display=''; _retInv.innerHTML='<i class="fas fa-undo"></i> ارجاع حسب فاتورة'; addonsSub.appendChild(_retInv);
+                                                try{ $(_retInv).popover('destroy'); }catch(e){}
+                                                try{ $(_retInv).popover({html:true, placement:'bottom', trigger:'click'}); }catch(e){}
+                                            }
+                                        }
+                                        // "إظهار المنتجات" يبقى في DOM للنقر لكن مخفي، و"خروج" يُحذف، وزر العمليات يُحذف
+                                        var _tp=document.getElementById('ego_toggle_products'); if(_tp) _tp.style.display='none';
+                                        var _lg=document.getElementById('ego_btn_logout'); if(_lg) _lg.remove();
+                                        var _ob=document.getElementById('ego_ops_btn'); if(_ob) _ob.remove();
+
+                                        function clk(id){ var el=document.getElementById(id); if(el) el.click(); }
+                                        function egoCollapseSubs(){ var s=document.getElementById('ego_mm_settings'); if(s)s.classList.remove('open'); var a=document.getElementById('ego_addons_sub'); if(a)a.classList.remove('open'); }
+                                        $(document).on('click','#ego_mm_btn',function(e){ e.stopPropagation(); document.getElementById('ego_mm_dd').classList.toggle('open'); egoCollapseSubs(); });
+                                        $(document).on('click','.ego-mm-settings-toggle',function(e){ e.stopPropagation(); document.getElementById('ego_mm_settings').classList.toggle('open'); });
+                                        $(document).on('click','.ego-mm-addons-toggle',function(e){ e.stopPropagation(); document.getElementById('ego_addons_sub').classList.toggle('open'); });
+                                        $(document).on('click','#ego_addons_sub .ego-mm-item',function(){ if(this.getAttribute('data-toggle')==='popover')return; var dd=document.getElementById('ego_mm_dd'); if(dd) dd.classList.remove('open'); });
+                                        $(document).on('click', function(ev){ var dd=document.getElementById('ego_mm_dd'); if(dd&&dd.classList.contains('open')&&!ev.target.closest('.ego-mm-menuwrap')&&!ev.target.closest('.popover')){ dd.classList.remove('open'); egoCollapseSubs(); } });
+                                        // 🆕 مزامنة مفتاح ملء الشاشة عند الخروج بـ Esc
+                                        $(document).on('fullscreenchange webkitfullscreenchange', function(){ var fs=!!(document.fullscreenElement||document.webkitFullscreenElement); var sw=document.querySelector('#ego_mm_settings input[data-ego-set="fullscreen"]'); if(sw){ sw.checked=fs; localStorage.setItem('ego_set_fullscreen', fs?'1':'0'); } });
+                                        $(document).on('click','.ego-mm-item[data-ego-do]',function(){
+                                            var a=this.getAttribute('data-ego-do'), dd=document.getElementById('ego_mm_dd');
+                                            if(a==='toggle_products') clk('ego_toggle_products');
+                                            else if(a==='drafts'){ window.location='{{ url('/sells/drafts') }}'; }
+                                            else if(a==='reg_details') clk('register_details');
+                                            else if(a==='close_reg') clk('close_register');
+                                            else if(a==='addons'){ if(window.toastr) toastr.info('الإضافات — قريباً'); }
+                                            else if(a==='account'){ window.location='{{ url('/user/profile') }}'; }
+                                            else if(a==='logout'){ window.location='{{ url('/logout') }}'; }
+                                            if(dd) dd.classList.remove('open');
+                                        });
+                                        // 🆕 جلب ملخص اليوم حديثاً (مع منع الكاش) — يُستدعى عند كل ضغط على admin
+                                        function egoLoadUserSummary(){
+                                            $.ajax({ url: "{{ route('pos.ego-user-summary') }}", cache: false, dataType: 'json' }).done(function(d){
+                                                if (!d || !d.success) { return; }
+                                                $('#ego_us_name').text(d.name);
+                                                $('#ego_us_time').text(d.open_time);
+                                                $('#ego_us_inv').text(d.invoices);
+                                                $('#ego_us_sales').text(typeof __currency_trans_from_en === 'function' ? __currency_trans_from_en(d.total_sales, true) : d.total_sales);
+                                                $('#ego_us_open').text(typeof __currency_trans_from_en === 'function' ? __currency_trans_from_en(d.opening_cash, true) : d.opening_cash);
+                                            });
+                                        }
+                                        window.egoLoadUserSummary = egoLoadUserSummary;
+                                        $(document).on('click','#ego_mm_user',function(){ var o=document.getElementById('ego_user_modal_open'); if(o){ o.click(); } else { clk('register_details'); } egoLoadUserSummary(); });
+                                        $(document).on('shown.bs.modal','#ego_user_modal', egoLoadUserSummary);
+
+                                        // مفاتيح الإعدادات (تُحفظ في localStorage)
+                                        function sGet(k){ return localStorage.getItem('ego_set_'+k)==='1'; }
+                                        function sPut(k,v){ localStorage.setItem('ego_set_'+k, v?'1':'0'); }
+                                        $('#ego_mm_settings input[data-ego-set]').each(function(){ this.checked = sGet($(this).attr('data-ego-set')); });
+                                        // مفتاح "إظهار المنتجات" يعكس الحالة الفعلية (المنتجات ظاهرة افتراضياً)
+                                        var _sp=document.querySelector('#ego_mm_settings input[data-ego-set="show_products"]'); if(_sp){ _sp.checked = !document.body.classList.contains('ego-cart-full'); }
+                                        window.EGO_MUTE = sGet('mute'); window.EGO_NO_INSTANT_PRINT = sGet('no_instant_print');
+                                        $(document).on('change','#ego_mm_settings input[data-ego-set]',function(){
+                                            var k=$(this).attr('data-ego-set'), on=this.checked; sPut(k,on);
+                                            if(k==='fullscreen'){ try{ if(on){ var de=document.documentElement; (de.requestFullscreen||de.webkitRequestFullscreen).call(de); } else { (document.exitFullscreen||document.webkitExitFullscreen).call(document); } }catch(e){} }
+                                            else if(k==='show_products'){ var shown=!document.body.classList.contains('ego-cart-full'); if(shown!==on){ clk('ego_toggle_products'); } }
+                                            else if(k==='mute'){ window.EGO_MUTE = on; }
+                                            else if(k==='no_instant_print'){ window.EGO_NO_INSTANT_PRINT = on; }
+                                        });
+                                        // كتم الصوت: ترقيع تشغيل الصوت (كود جديد فقط — لا يعدّل ملفات النظام)
+                                        try { var _ap = HTMLAudioElement.prototype.play; HTMLAudioElement.prototype.play = function(){ if(window.EGO_MUTE){ try{this.pause();}catch(e){} return Promise.resolve(); } return _ap.apply(this, arguments); }; } catch(e){}
+                                    })();
+
+                                    // 🆕🆕 تعدّد السلال (تبويبات سلة 1/2/+) — لقطة/استرجاع لمحتوى السلة من جهة العميل
+                                    (function egoMultiCart(){
+                                        if (!document.getElementById('ego_cart_tabs')) return;
+                                        var carts = [], active = -1, seq = 0;
+                                        // ملاحظة: العميل مشترك بين السلال (لا نُفرّغه) حتى لا يطلب اسم عميل إلزامي في سلة جديدة
+                                        function snap(){ return { html: $('#pos_table tbody').html(), rowCount: ($('#product_row_count').val()||0) }; }
+                                        function restore(s){
+                                            $('#pos_table tbody').html((s&&s.html)||'');
+                                            if ($('#product_row_count').length) { $('#product_row_count').val((s&&s.rowCount)||0); }
+                                            if (typeof window.pos_total_row==='function'){ try{ window.pos_total_row(); }catch(e){} }
+                                        }
+                                        function addCart(){ seq++; carts.push({ name:'السلة '+seq, data:{html:'',rowCount:0} }); return carts.length-1; }
+                                        function render(){
+                                            var list=document.getElementById('ego_cart_tablist'); if(!list) return; list.innerHTML='';
+                                            carts.forEach(function(c,i){
+                                                var t=document.createElement('div'); t.className='ego-ct-tab'+(i===active?' active':''); t.setAttribute('data-i',i);
+                                                t.innerHTML='<span class="ego-ct-name">'+c.name+'</span>'+(carts.length>1?'<i class="fas fa-times ego-ct-x"></i>':'');
+                                                list.appendChild(t);
+                                            });
+                                        }
+                                        function switchTo(i){ if(i===active||!carts[i])return; if(active>-1&&carts[active])carts[active].data=snap(); active=i; restore(carts[i].data); render(); }
+                                        // السلة الأولى من الحالة الحالية
+                                        active=addCart(); carts[0].data=snap(); render();
+                                        $(document).on('click','#ego_cart_add',function(){ if(active>-1&&carts[active])carts[active].data=snap(); active=addCart(); restore({html:'',customer:'',rowCount:0}); render(); });
+                                        $(document).on('click','.ego-ct-tab .ego-ct-name',function(){ switchTo(+$(this).closest('.ego-ct-tab').attr('data-i')); });
+                                        $(document).on('click','.ego-ct-x',function(e){ e.stopPropagation(); var i=+$(this).closest('.ego-ct-tab').attr('data-i'); if(carts.length<=1)return; carts.splice(i,1); if(active>=carts.length)active=carts.length-1; else if(active>i)active--; restore(carts[active].data); render(); });
+                                        // 🆕 إغلاق السلة الحالية بعد إتمام بيعتها (إن كان هناك أكثر من سلة)
+                                        window.egoCloseActiveCart = function(){
+                                            if (carts.length<=1) { return; }
+                                            carts.splice(active,1);
+                                            if (active>=carts.length) active=carts.length-1;
+                                            restore(carts[active].data); render();
+                                        };
+                                    })();
+
+                                    // 🆕 ملاءمة الشاشة: لا تمرير للصفحة — تُحسب أعمدة (السلة/المنتجات) حسب ارتفاع الشريط العلوي فعلياً
+                                    function egoFitScreen(){
+                                        var c=document.getElementById('pos_flexible_container'); if(!c) return;
+                                        var top=c.getBoundingClientRect().top + (window.scrollY||0);
+                                        var h=window.innerHeight - top - 8; if(h<360)h=360;
+                                        var m=document.querySelector('#pos_main_column > div'); var s=document.querySelector('#pos_side_column > div');
+                                        if(m){ m.style.height=h+'px'; m.style.maxHeight=h+'px'; m.style.minHeight='0'; }
+                                        if(s){ s.style.height=h+'px'; s.style.maxHeight=h+'px'; s.style.minHeight='0'; }
+                                    }
+                                    window.egoFitScreen=egoFitScreen;
+                                    $(window).on('resize', egoFitScreen);
+                                    $(function(){ egoFitScreen(); setTimeout(egoFitScreen,300); setTimeout(egoFitScreen,900); });
+
+                                    // 🆕 صندوق "المميزة" داخل نفس حاوية شبكة صور الأصناف ليكون بنفس الحجم/المكان
+                                    $(function(){ var fb=document.getElementById('featured_products_box'); var plb=document.getElementById('product_list_body'); if(fb&&plb&&plb.parentElement&&fb.parentElement!==plb.parentElement){ plb.parentElement.insertBefore(fb, plb); } });
+
+                                    // 🆕 فصل "المميزة" عن الأصناف العادية: كلٌّ يفتح لوحده
+                                    $(document).on('click', '#ego_featured_tab', function(){
+                                        setTimeout(function(){
+                                            if ($('#featured_products_box').is(':visible')) { $('#product_list_body').hide(); }
+                                            else { $('#product_list_body').show(); }
+                                        }, 380);
+                                    });
+                                    // عند اختيار صنف/علامة أو إغلاق الدرج → إظهار العادية وإخفاء المميزة
+                                    $(document).on('click', '.product_category, .product_brand, .main-category, .main-category-div, .close-side-bar-category, .close-side-bar-brand', function(){
+                                        $('#featured_products_box').hide();
+                                        $('#product_list_body').show();
+                                    });
+
+                                    // 🆕 أسهم تمرير أسطر البيع: المُعالج في سكربت مستقل بنهاية الصفحة (ليبقى فعّالاً مهما حدث)
+
+                                    // 🆕 بائع كل منتج يأخذ افتراضياً البائع المختار بالأعلى (#commission_agent)، ويمكن تغييره لكل سطر
+                                    function egoTopSeller(){ return $('#commission_agent').val() || ''; }
+                                    (function(){
+                                        var tb = document.querySelector('#pos_table tbody'); if (!tb) { return; }
+                                        new MutationObserver(function(muts){
+                                            var top = egoTopSeller(); if (!top) { return; }
+                                            muts.forEach(function(m){
+                                                $(m.addedNodes).find('.ego-seller-select').addBack('.ego-seller-select').each(function(){
+                                                    if (!$(this).val()) { $(this).val(top); }
+                                                });
+                                            });
+                                        }).observe(tb, {childList:true});
+                                    })();
+                                    // عند تغيير البائع بالأعلى: عبّئ الأسطر التي بلا بائع
+                                    $(document).on('change', '#commission_agent', function(){
+                                        var top = $(this).val() || ''; if (!top) { return; }
+                                        $('#pos_table .ego-seller-select').each(function(){ if (!$(this).val()) { $(this).val(top); } });
+                                    });
+
+                                    {{-- 🆕 (أُزيل تجاوز مكرّر — منطق الطباعة الفورية صار داخل تجاوز pos_print الأساسي) --}}
+
+                                    // 🆕 إغلاق السلة الحالية تلقائياً بعد إتمام تسديدها (للمسار الذي لا يُعيد تحميل الصفحة)
+                                    $(document).on('click','#ego_btn_cash, .ego-pay, #pos-finalize, .pos-express-finalize, [data-pay_method]', function(){ window.egoCheckingOut=true; setTimeout(function(){ window.egoCheckingOut=false; }, 9000); });
+                                    (function(){ var tb=document.querySelector('#pos_table tbody'); if(!tb) return; new MutationObserver(function(){ if(window.egoCheckingOut && tb.querySelectorAll('tr').length===0){ window.egoCheckingOut=false; if(typeof window.egoCloseActiveCart==='function') window.egoCloseActiveCart(); } }).observe(tb,{childList:true}); })();
 
                                     // زر إظهار/إخفاء المنتجات: عند الإخفاء تمتد السلة على كامل الصفحة
                                     $(document).on('click', '#ego_toggle_products', function(){
@@ -1026,7 +1735,7 @@
             display: {{ empty($pos_settings['hide_product_suggestion']) ? 'block' : 'none' }}; 
             flex-shrink: 0; overflow: hidden; box-sizing: border-box;">
     
-    <div class="tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-rounded-2xl tw-bg-white tw-p-4" style="height: calc(100vh - 24px); min-height: calc(100vh - 24px); display: flex; flex-direction: column;">
+    <div class="tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-rounded-2xl tw-bg-white tw-p-4" style="height: calc(100vh - 96px); max-height: calc(100vh - 96px); min-height: 0; display: flex; flex-direction: column; overflow: hidden;">
         @if(empty($pos_settings['hide_product_suggestion']))
             {{-- محتوى الـ Sidebar الأصلي (مثل الكاتالوج والفئات) --}}
             @include('sale_pos.partials.pos_sidebar')
@@ -1676,4 +2385,102 @@ function loadLedger(customerId, startDate, endDate, format) {
             @endif
         @endforeach
     @endif
+
+    {{-- 🆕 مُعالج مستقل لأسهم تمرير أسطر البيع (Vanilla JS، معزول عن باقي السكربتات لضمان عمله دائماً) --}}
+    <script>
+    (function(){
+        // 🆕 إخراج صفوف العميل/الخيارات من صندوق التمرير وتثبيتها فوقه — فيبقى داخل الصندوق جدول البيع فقط (فيتجاوز الصندوق ويصير قابلاً للتمرير)
+        function egoIsolateTable(){
+            try {
+                var scroll = document.getElementById('ego_cart_scroll');
+                var table  = document.getElementById('pos_table');
+                if (!scroll || !table || !scroll.contains(table)) { return; }
+                var directChild = table;
+                while (directChild.parentNode && directChild.parentNode !== scroll) { directChild = directChild.parentNode; }
+                if (directChild.parentNode !== scroll) { return; }
+                if (scroll.firstElementChild === directChild) { return; } // لا شيء قبل الجدول
+                var fixedTop = document.getElementById('ego_cart_fixed_top');
+                if (!fixedTop) {
+                    fixedTop = document.createElement('div');
+                    fixedTop.id = 'ego_cart_fixed_top';
+                    fixedTop.style.flexShrink = '0';
+                    fixedTop.style.background = '#fff';
+                    scroll.parentNode.insertBefore(fixedTop, scroll);
+                }
+                while (scroll.firstChild && scroll.firstChild !== directChild) {
+                    fixedTop.appendChild(scroll.firstChild);
+                }
+            } catch (e) {}
+        }
+        if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', egoIsolateTable); }
+        else { egoIsolateTable(); }
+        setTimeout(egoIsolateTable, 800); // إعادة محاولة بعد اكتمال البناء
+
+        // نجد العنصر الذي يتمرّر فعلاً ويحوي أسطر البيع (نُفضّل صندوق السلة، ثم أي سلف قابل للتمرير — عدا الصفحة نفسها)
+        function egoFindScroller(){
+            var box = document.getElementById('ego_cart_scroll');
+            if (box && (box.scrollHeight - box.clientHeight) > 4) { return box; }
+            var el = document.getElementById('pos_table');
+            el = el ? el.parentElement : null;
+            while (el && el !== document.body && el !== document.documentElement) {
+                var oy = getComputedStyle(el).overflowY;
+                if ((oy === 'auto' || oy === 'scroll') && (el.scrollHeight - el.clientHeight) > 4) { return el; }
+                el = el.parentElement;
+            }
+            return box; // احتياط (قد لا يتمرّر، لكن لن نُمرّر الصفحة أبداً)
+        }
+        function egoScrollStep(dir){
+            var el = egoFindScroller(); if (!el) { return; }
+            var row = document.querySelector('#pos_table tbody tr');
+            var rowH = (row && row.offsetHeight) ? row.offsetHeight : 56;
+            var step = Math.max(rowH * 3, Math.round(el.clientHeight * 0.6));
+            var before = el.scrollTop;
+            el.scrollTop = before + (dir * step);
+            // لو لم يتغيّر (لا تمرير في هذا العنصر) نبحث عن سلف آخر قابل للتمرير ونحرّكه
+            if (el.scrollTop === before) {
+                var p = el.parentElement;
+                while (p && p !== document.body && p !== document.documentElement) {
+                    if ((p.scrollHeight - p.clientHeight) > 4) { p.scrollTop = p.scrollTop + (dir * step); if (p.scrollTop !== 0 || dir < 0) break; }
+                    p = p.parentElement;
+                }
+            }
+        }
+        var holdTimer = null, holdInterval = null;
+        function stopHold(){ if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; } if (holdInterval) { clearInterval(holdInterval); holdInterval = null; } }
+        document.addEventListener('click', function(e){
+            var btn = e.target.closest ? e.target.closest('.ego-scroll-btn') : null;
+            if (!btn) { return; }
+            e.preventDefault();
+            egoScrollStep(btn.getAttribute('data-dir') === 'up' ? -1 : 1);
+        });
+        // ضغط مطوّل = تمرير مستمر مثل السكرول
+        document.addEventListener('mousedown', function(e){
+            var btn = e.target.closest ? e.target.closest('.ego-scroll-btn') : null;
+            if (!btn) { return; }
+            var dir = btn.getAttribute('data-dir') === 'up' ? -1 : 1;
+            holdTimer = setTimeout(function(){ holdInterval = setInterval(function(){ egoScrollStep(dir); }, 350); }, 350);
+        });
+        ['mouseup','mouseleave','blur'].forEach(function(ev){ document.addEventListener(ev, stopHold, true); });
+
+        // 🆕 تركيز + تظليل قيمة المدفوع بالأزرق عند التسديد (Vanilla — مضمون التنفيذ بلا اعتماد على jQuery/أحداث النافذة)
+        function egoFocusPaid(){
+            var el = document.getElementById('ego_paid_amount');
+            if (el && el.offsetParent !== null) { el.focus(); el.select(); return true; }
+            return false;
+        }
+        document.addEventListener('click', function(e){
+            var t = e.target.closest ? e.target.closest('#ego_btn_checkout, .ego-cb-pay') : null;
+            if (!t) { return; }
+            // ننتظر فتح النافذة ثم نُركّز الحقل ونحدّد قيمته (عدة محاولات لتصمد أمام إعادة التعبئة)
+            [300, 500, 750, 1000].forEach(function(ms){ setTimeout(egoFocusPaid, ms); });
+        });
+        // أي نقر/تركيز على الحقل يحدّد قيمته كاملةً بالأزرق
+        ['click','focusin'].forEach(function(ev){
+            document.addEventListener(ev, function(e){
+                var el = e.target;
+                if (el && el.id === 'ego_paid_amount') { setTimeout(function(){ try { el.select(); } catch(_){} }, 0); }
+            });
+        });
+    })();
+    </script>
 @endsection

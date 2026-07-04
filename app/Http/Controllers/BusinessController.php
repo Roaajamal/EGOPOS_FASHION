@@ -221,6 +221,25 @@ class BusinessController extends Controller
             $this->businessUtil->newBusinessDefaultResources($business->id, $user->id);
             $new_location = $this->businessUtil->addLocation($business->id, $business_location);
 
+            // 🆕 تفعيل النظام تلقائياً من تاريخ اليوم بالمدة المختارة عند إنشاء البزنس
+            try {
+                $ego_val = (int) $request->input('ego_activation_value', 1);
+                if ($ego_val < 1) { $ego_val = 1; }
+                $ego_unit = $request->input('ego_activation_unit', 'month');
+                if (! in_array($ego_unit, ['day', 'month', 'year'])) { $ego_unit = 'month'; }
+                $ego_start = ! empty($request->input('ego_activation_start')) ? \Carbon\Carbon::parse($request->input('ego_activation_start')) : \Carbon\Carbon::now();
+                $ego_end = \App\Http\Controllers\EgoActivationController::addDuration($ego_start->copy(), $ego_unit, $ego_val);
+                \App\EgoActivation::create([
+                    'business_id' => $business->id,
+                    'start_date' => $ego_start->format('Y-m-d'),
+                    'end_date' => $ego_end->format('Y-m-d'),
+                    'duration_value' => $ego_val,
+                    'duration_unit' => $ego_unit,
+                    'note' => 'تفعيل أولي عند إنشاء البزنس',
+                    'created_by' => $user->id,
+                ]);
+            } catch (\Throwable $e) { \Log::error('ego_activation_register: ' . $e->getMessage()); }
+
             //create new permission with the new location
             Permission::create(['name' => 'location.'.$new_location->id]);
 

@@ -66,15 +66,18 @@ class ImportSalesController extends Controller
                             ->where('type', 'sell')
                             ->whereNotNull('import_batch')
                             ->with(['sales_person'])
-                            ->select('id', 'import_batch', 'import_time', 'invoice_no', 'created_by')
+                            ->select('id', 'import_batch', 'import_time', 'invoice_no', 'created_by', 'final_total')
                             ->orderBy('import_batch', 'desc')
                             ->get();
 
         $imported_sales_array = [];
         foreach ($imported_sales as $sale) {
             $imported_sales_array[$sale->import_batch]['import_time'] = $sale->import_time;
-            $imported_sales_array[$sale->import_batch]['created_by'] = $sale->sales_person->user_full_name;
+            $imported_sales_array[$sale->import_batch]['created_by'] = optional($sale->sales_person)->user_full_name;
             $imported_sales_array[$sale->import_batch]['invoices'][] = $sale->invoice_no;
+            // 🆕 عدد الفواتير وإجمالي مبالغها لكل عملية استيراد
+            $imported_sales_array[$sale->import_batch]['count'] = ($imported_sales_array[$sale->import_batch]['count'] ?? 0) + 1;
+            $imported_sales_array[$sale->import_batch]['total'] = ($imported_sales_array[$sale->import_batch]['total'] ?? 0) + $sale->final_total;
         }
 
         $import_fields = $this->__importFields();
@@ -321,6 +324,7 @@ class ImportSalesController extends Controller
 
             $first_sell_line = $data[0];
             //get contact
+            $contact = null;
             if (! empty($first_sell_line['customer_phone_number'])) {
                 $contact = Contact::where('business_id', $business_id)
                                 ->where('mobile', $first_sell_line['customer_phone_number'])
@@ -329,25 +333,56 @@ class ImportSalesController extends Controller
                 $contact = Contact::where('business_id', $business_id)
                                 ->where('email', $first_sell_line['customer_email'])
                                 ->first();
+            } elseif (! empty($first_sell_line['customer_name'])) {
+                $contact = Contact::where('business_id', $business_id)
+                                ->where('name', $first_sell_line['customer_name'])
+                                ->first();
             }
             if (empty($contact)) {
-                $customer_name = ! empty($first_sell_line['customer_name']) ? $first_sell_line['customer_name'] : $first_sell_line['customer_phone_number'];
-                $contact = Contact::create([
-                    'business_id' => $business_id,
-                    'type' => 'customer',
-                    'name' => $customer_name,
-                    'email' => $first_sell_line['customer_email'],
-                    'mobile' => $first_sell_line['customer_phone_number'],
-                    'created_by' => auth()->user()->id,
-                ]);
+                // 🆕 إن توفّرت أي بيانات عميل ننشئه، وإلا نُسند المبيعة للعميل الافتراضي (Walk-In)
+                $hasIdentity = ! empty($first_sell_line['customer_name']) || ! empty($first_sell_line['customer_phone_number']) || ! empty($first_sell_line['customer_email']);
+                if ($hasIdentity) {
+                    $customer_name = ! empty($first_sell_line['customer_name'])
+                        ? $first_sell_line['customer_name']
+                        : (! empty($first_sell_line['customer_phone_number']) ? $first_sell_line['customer_phone_number'] : $first_sell_line['customer_email']);
+                    $contact = Contact::create([
+                        'business_id' => $business_id,
+                        'type' => 'customer',
+                        'name' => $customer_name,
+                        'email' => $first_sell_line['customer_email'],
+                        'mobile' => $first_sell_line['customer_phone_number'],
+                        'created_by' => auth()->user()->id,
+                    ]);
+                } else {
+                    $contact = Contact::where('business_id', $business_id)->where('is_default', 1)->first();
+                    if (empty($contact)) {
+                        $contact = Contact::create([
+                            'business_id' => $business_id,
+                            'type' => 'customer',
+                            'name' => 'Walk-In Customer',
+                            'is_default' => 1,
+                            'created_by' => auth()->user()->id,
+                        ]);
+                    }
+                }
             }
+
+            // 🆕 إجمالي الفاتورة = مجموع كل أسطرها (بدل أخذ إجمالي السطر الأول فقط الذي كان يعطي قيمة صنف واحد)
+            $sum_order_total_field = 0; $has_order_total_field = false;
+            foreach ($data as $ld) {
+                if (isset($ld['order_total']) && $ld['order_total'] !== null && $ld['order_total'] !== '') {
+                    $sum_order_total_field += (float) $ld['order_total'];
+                    $has_order_total_field = true;
+                }
+            }
+            $invoice_final = $has_order_total_field ? $sum_order_total_field : $order_total;
 
             $sale_data = [
                 'invoice_no' => $first_sell_line['invoice_no'],
                 'location_id' => $location_id,
                 'status' => 'final',
                 'contact_id' => $contact->id,
-                'final_total' => ! empty($first_sell_line['order_total']) ? $first_sell_line['order_total'] : $order_total,
+                'final_total' => $invoice_final,
                 'transaction_date' => ! empty($first_sell_line['date']) ? $first_sell_line['date'] : $now,
                 'discount_amount' => 0,
                 'import_batch' => $import_batch,
@@ -373,7 +408,7 @@ class ImportSalesController extends Controller
             }
 
             $invoice_total = [
-                'total_before_tax' => ! empty($first_sell_line['order_total']) ? $first_sell_line['order_total'] : $order_total,
+                'total_before_tax' => $invoice_final,
                 'tax' => 0,
             ];
 
@@ -426,6 +461,28 @@ class ImportSalesController extends Controller
                 }
             }
 
+            // 🆕 إنشاء سجل دفع بكامل الإجمالي بطريقة الدفع المحددة (cash/card) فينعكس "المدفوع" والحالة وطريقة الدفع
+            $pm = strtolower(trim((string) ($first_sell_line['payment_method'] ?? '')));
+            if (in_array($pm, ['card', 'visa', 'credit', 'credit card', 'فيزا', 'بطاقة', 'بطاقه', 'card_payment'])) {
+                $pm = 'card';
+            } elseif (in_array($pm, ['cash', 'نقد', 'نقدا', 'نقداً', 'كاش'])) {
+                $pm = 'cash';
+            } else {
+                $pm = 'cash'; // افتراضي عند عدم التحديد
+            }
+            $paid_amount = $transaction->final_total;
+            if ($paid_amount > 0) {
+                \App\TransactionPayment::create([
+                    'transaction_id' => $transaction->id,
+                    'business_id' => $business_id,
+                    'amount' => $paid_amount,
+                    'method' => $pm,
+                    'paid_on' => ! empty($first_sell_line['date']) ? $first_sell_line['date'] : $now,
+                    'created_by' => auth()->user()->id,
+                    'payment_for' => $contact->id,
+                ]);
+            }
+
             //Update payment status
             $this->transactionUtil->updatePaymentStatus($transaction->id, $transaction->final_total);
 
@@ -457,6 +514,7 @@ class ImportSalesController extends Controller
         $item_discount_key = array_search('item_discount', $import_fields);
         $item_description_key = array_search('item_description', $import_fields);
         $order_total_key = array_search('order_total', $import_fields);
+        $payment_method_key = array_search('payment_method', $import_fields);
         $unit_key = array_search('unit', $import_fields);
         $tos_key = array_search('types_of_service', $import_fields);
         $service_custom_field1_key = array_search('service_custom_field1', $import_fields);
@@ -479,6 +537,7 @@ class ImportSalesController extends Controller
             $formatted_array[$key]['item_discount'] = $item_discount_key !== false ? $value[$item_discount_key] : null;
             $formatted_array[$key]['item_description'] = $item_description_key !== false ? $value[$item_description_key] : null;
             $formatted_array[$key]['order_total'] = $order_total_key !== false ? $value[$order_total_key] : null;
+            $formatted_array[$key]['payment_method'] = $payment_method_key !== false ? $value[$payment_method_key] : null;
             $formatted_array[$key]['unit'] = $unit_key !== false ? $value[$unit_key] : null;
             $formatted_array[$key]['types_of_service'] = $tos_key !== false ? $value[$tos_key] : null;
             $formatted_array[$key]['service_custom_field1'] = $service_custom_field1_key !== false ? $value[$service_custom_field1_key] : null;
@@ -488,9 +547,7 @@ class ImportSalesController extends Controller
             $formatted_array[$key]['group_by'] = $value[$group_by];
 
             //check empty
-            if (empty($formatted_array[$key]['customer_phone_number']) && empty($formatted_array[$key]['customer_email'])) {
-                throw new \Exception(__('lang_v1.email_or_phone_cannot_be_empty_in_row', ['row' => $row_index]));
-            }
+            // 🆕 أُلغي شرط وجود الإيميل/الهاتف واسم العميل — تُستورد المبيعة بدونها (تُسنَد للعميل الافتراضي)
             if (empty($formatted_array[$key]['product']) && empty($formatted_array[$key]['sku'])) {
                 throw new \Exception(__('lang_v1.product_cannot_be_empty_in_row', ['row' => $row_index]));
             }
@@ -529,6 +586,8 @@ class ImportSalesController extends Controller
             'item_discount' => ['label' => __('lang_v1.item_discount')],
             'item_description' => ['label' => __('lang_v1.item_description')],
             'order_total' => ['label' => __('lang_v1.order_total')],
+            // 🆕 طريقة الدفع (cash/card) — يُنشأ لها سجل دفع فينعكس المدفوع والحالة
+            'payment_method' => ['label' => 'طريقة الدفع (cash/card)'],
         ];
 
         $is_types_service_enabled = $this->moduleUtil->isModuleEnabled('types_of_service');
@@ -542,6 +601,52 @@ class ImportSalesController extends Controller
         }
 
         return $fields;
+    }
+
+    // 🆕 تنزيل قالب Excel مطابق للحقول القابلة للاستيراد (يشمل طريقة الدفع والإجمالي) مع صف مثال
+    public function downloadTemplate()
+    {
+        if (! auth()->user()->can('sell.create')) {
+            abort(403, 'Unauthorized action.');
+        }
+        $fields = $this->__importFields();
+        $example = [
+            'invoice_no' => 'INV-001',
+            'customer_name' => 'عميل تجريبي',
+            'customer_phone_number' => '',
+            'customer_email' => '',
+            'date' => date('Y-m-d'),
+            'product' => '',
+            'sku' => 'PROD001',
+            'quantity' => 2,
+            'unit' => '',
+            'unit_price' => 25,
+            'item_tax' => '',
+            'item_discount' => 0,
+            'item_description' => '',
+            'order_total' => 50,
+            'payment_method' => 'cash',
+        ];
+
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $col = 1;
+        foreach ($fields as $key => $meta) {
+            $letter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
+            $sheet->setCellValue($letter . '1', $meta['label']);
+            $sheet->getStyle($letter . '1')->getFont()->setBold(true);
+            $sheet->setCellValue($letter . '2', $example[$key] ?? '');
+            $sheet->getColumnDimension($letter)->setWidth(20);
+            $col++;
+        }
+
+        if (! file_exists(public_path('downloads'))) {
+            mkdir(public_path('downloads'), 0755, true);
+        }
+        $file = public_path('downloads/import_sales_template.xlsx');
+        (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet))->save($file);
+
+        return response()->download($file, 'import_sales_template_' . date('Y-m-d') . '.xlsx');
     }
 
     /**

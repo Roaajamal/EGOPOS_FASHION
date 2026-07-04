@@ -2,13 +2,7 @@
 @section('title', __('lang_v1.product_offers'))
 @section('content')
 
-{{-- ============================================================
-     صفحة عروض المنتجات — إعادة بناء كاملة (3 تبويبات)
-     1) إضافة عرض (عروض الكمية)
-     2) إضافة مجموعة عروض (حزم)
-     3) الباركود البديل
-     كل الإضافات بادئتها ego- / 🆕 ولا تمسّ أي كود قديم
-============================================================ --}}
+
 
 <style>
     .ego-page-head {
@@ -82,6 +76,9 @@
     table.ego-dt thead th { background:#f8fafc; font-weight:700; color:#475569; white-space:nowrap; }
     .ego-empty-tip { background:#f8fafc; border-radius:10px; padding:10px 14px; color:#64748b; font-size:13px; margin-bottom:14px; }
     .select2-container { width:100% !important; }
+    /* 🆕 أزرار إجراءات أكبر وواضحة (فحص/تعديل/حذف) في كل الجداول */
+    .ego-act-wrap { display:flex; flex-wrap:wrap; gap:6px; }
+    .ego-act-btn { padding:7px 14px !important; font-size:13px !important; font-weight:700; border-radius:8px !important; display:inline-flex; align-items:center; gap:5px; line-height:1.2; white-space:nowrap; }
 </style>
 
 <div class="row">
@@ -114,6 +111,11 @@
                 <i class="fas fa-barcode"></i>
                 <span class="t">الباركود البديل</span>
                 <small>عدة باركودات لمنتج واحد</small>
+            </button>
+            <button type="button" class="ego-otype" data-type="type-special">
+                <i class="fas fa-gift"></i>
+                <span class="t">عروض خاصة</span>
+                <small>اشترِ 1 والثاني مجاناً، القطعة التالية بخصم، خصم % على أصناف</small>
             </button>
         </div>
 
@@ -177,6 +179,48 @@
                         <div class="ego-save-bar">
                             <button type="button" class="btn btn-default" id="ego_qty_reset">تفريغ</button>
                             <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> حفظ العرض</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {{-- 🆕 استيراد عروض الكمية من Excel (يعيد استخدام مساري import-excel و download-template) --}}
+            <div class="ego-card">
+                <div class="ego-card-head"><i class="fas fa-file-excel" style="color:#16a34a"></i><h4>استيراد من Excel</h4></div>
+                <div class="ego-card-body">
+                    @if(session('status') && is_array(session('status')) && isset(session('status')['msg']))
+                        <div class="alert {{ !empty(session('status')['success']) ? 'alert-success' : 'alert-danger' }}">{!! session('status')['msg'] !!}</div>
+                    @endif
+                    <form action="{{ route('product-offers.import-excel') }}" method="POST" enctype="multipart/form-data">
+                        @csrf
+                        <div class="row">
+                            <div class="col-md-4 form-group">
+                                <label class="ego-label">الفرع <span class="text-danger">*</span></label>
+                                <select name="location_id" class="form-control" required>
+                                    @foreach($business_locations as $id => $name)
+                                        <option value="{{ $id }}">{{ $name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-4 form-group">
+                                <label class="ego-label">طريقة الاستيراد</label>
+                                <select name="import_mode" class="form-control">
+                                    <option value="add">إضافة/تحديث (يُبقي القديم)</option>
+                                    <option value="replace">استبدال (يحذف عروض الفرع القديمة)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4 form-group">
+                                <label class="ego-label">ملف Excel <span class="text-danger">*</span></label>
+                                <input type="file" name="excel_file" class="form-control" accept=".xlsx,.xls,.csv" required>
+                            </div>
+                        </div>
+                        <div class="ego-empty-tip">
+                            <i class="fas fa-lightbulb text-warning"></i>
+                            أعمدة الملف: <b>SKU/Barcode</b> ، الكمية ، السعر ، النوع (fixed/percentage/override) ، تاريخ البداية ، تاريخ النهاية ، فعّال (1/0).
+                        </div>
+                        <div class="ego-save-bar">
+                            <a href="{{ route('product-offers.download-template') }}" class="btn btn-default"><i class="fas fa-download"></i> تحميل قالب Excel</a>
+                            <button type="submit" class="btn btn-success"><i class="fas fa-file-import"></i> استيراد</button>
                         </div>
                     </form>
                 </div>
@@ -287,6 +331,43 @@
                 </div>
             </div>
 
+            {{-- 🆕 استيراد الحزم من Excel --}}
+            <div class="ego-card">
+                <div class="ego-card-head"><i class="fas fa-file-excel" style="color:#16a34a"></i><h4>استيراد الحزم من Excel</h4></div>
+                <div class="ego-card-body">
+                    @if(session('status') && is_array(session('status')) && isset(session('status')['msg']))
+                        <div class="alert {{ !empty(session('status')['success']) ? 'alert-success' : 'alert-danger' }}">{!! session('status')['msg'] !!}</div>
+                    @endif
+                    <form action="{{ route('product-offers.bundles.import') }}" method="POST" enctype="multipart/form-data">
+                        @csrf
+                        <div class="row">
+                            <div class="col-md-4 form-group">
+                                <label class="ego-label">الفرع</label>
+                                <select name="location_id" class="form-control">
+                                    <option value="">كل الفروع</option>
+                                    @foreach($business_locations as $id => $name)
+                                        <option value="{{ $id }}">{{ $name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-8 form-group">
+                                <label class="ego-label">ملف Excel <span class="text-danger">*</span></label>
+                                <input type="file" name="excel_file" class="form-control" accept=".xlsx,.xls,.csv" required>
+                            </div>
+                        </div>
+                        <div class="ego-empty-tip">
+                            <i class="fas fa-lightbulb text-warning"></i>
+                            الأعمدة: <b>اسم الحزمة</b> ، SKU/الباركود ، الكمية ، سعر الحزمة ، تاريخ البداية ، تاريخ النهاية ، فعّال (1/0).
+                            الصفوف بنفس <b>اسم الحزمة</b> تُجمَّع في حزمة واحدة (منتجان على الأقل).
+                        </div>
+                        <div class="ego-save-bar">
+                            <a href="{{ route('product-offers.bundles.template') }}" class="btn btn-default"><i class="fas fa-download"></i> تحميل قالب Excel</a>
+                            <button type="submit" class="btn btn-success"><i class="fas fa-file-import"></i> استيراد</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <div class="ego-card">
                 <div class="ego-card-head"><i class="fas fa-boxes"></i><h4>الحزم الحالية</h4></div>
                 <div class="ego-card-body">
@@ -344,6 +425,33 @@
                 </div>
             </div>
 
+            {{-- 🆕 استيراد الباركود البديل من Excel --}}
+            <div class="ego-card">
+                <div class="ego-card-head"><i class="fas fa-file-excel" style="color:#16a34a"></i><h4>استيراد من Excel</h4></div>
+                <div class="ego-card-body">
+                    @if(session('status') && is_array(session('status')) && isset(session('status')['msg']))
+                        <div class="alert {{ !empty(session('status')['success']) ? 'alert-success' : 'alert-danger' }}">{!! session('status')['msg'] !!}</div>
+                    @endif
+                    <form action="{{ route('product-offers.alt-barcodes.import') }}" method="POST" enctype="multipart/form-data">
+                        @csrf
+                        <div class="row">
+                            <div class="col-md-8 form-group">
+                                <label class="ego-label">ملف Excel <span class="text-danger">*</span></label>
+                                <input type="file" name="excel_file" class="form-control" accept=".xlsx,.xls,.csv" required>
+                            </div>
+                        </div>
+                        <div class="ego-empty-tip">
+                            <i class="fas fa-lightbulb text-warning"></i>
+                            عمودان: <b>SKU/الباركود الأصلي</b> ثم <b>الباركود البديل</b>. الباركودات المكرّرة أو غير الموجودة تُتخطّى.
+                        </div>
+                        <div class="ego-save-bar">
+                            <a href="{{ route('product-offers.alt-barcodes.template') }}" class="btn btn-default"><i class="fas fa-download"></i> تحميل قالب Excel</a>
+                            <button type="submit" class="btn btn-success"><i class="fas fa-file-import"></i> استيراد</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <div class="ego-card">
                 <div class="ego-card-head"><i class="fas fa-list"></i><h4>الباركودات البديلة الحالية</h4></div>
                 <div class="ego-card-body">
@@ -352,7 +460,150 @@
                             <thead>
                                 <tr>
                                     <th>المنتج</th>
-                                    <th>الباركود البديل</th>
+                                    <th>عدد الباركودات البديلة</th>
+                                    <th>إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- ============================================================
+             تبويب 4: عروض خاصة
+        ============================================================ --}}
+        <div class="ego-type-pane" id="type-special">
+
+            <div class="ego-card">
+                <div class="ego-card-head"><i class="fas fa-gift"></i><h4>إضافة عرض خاص</h4></div>
+                <div class="ego-card-body">
+                    <form id="ego_special_form">
+                        @csrf
+                        <div class="row">
+                            <div class="col-md-6 form-group">
+                                <label class="ego-label">اسم العرض <span class="text-danger">*</span></label>
+                                <input type="text" id="ego_sp_name" class="form-control" placeholder="مثال: عرض العيد">
+                            </div>
+                            <div class="col-md-6 form-group">
+                                <label class="ego-label">نوع العرض <span class="text-danger">*</span></label>
+                                <select id="ego_sp_type" class="form-control">
+                                    <option value="bogo">اشترِ قطعة واحصل على الثانية مجاناً</option>
+                                    <option value="nth_percent">اشترِ قطعة والقطعة التالية بخصم %</option>
+                                    <option value="percent_items">خصم % على الأصناف المحددة</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {{-- حقول حسب النوع --}}
+                        <div class="row" id="ego_sp_fields">
+                            <div class="col-md-3 form-group ego-sp-buy">
+                                <label class="ego-label">عدد الشراء (قطعة)</label>
+                                <input type="number" step="1" min="1" id="ego_sp_buy" class="form-control" value="1">
+                            </div>
+                            <div class="col-md-3 form-group ego-sp-free">
+                                <label class="ego-label">المجاني (الثانية)</label>
+                                <input type="number" step="1" min="1" id="ego_sp_free" class="form-control" value="1">
+                            </div>
+                            <div class="col-md-3 form-group ego-sp-percent">
+                                <label class="ego-label">نسبة الخصم %</label>
+                                <input type="number" step="0.01" min="0" max="100" id="ego_sp_percent" class="form-control" placeholder="مثال: 50">
+                            </div>
+                            <div class="col-md-3 form-group">
+                                <label class="ego-label">الفرع</label>
+                                <select id="ego_sp_location" class="form-control">
+                                    <option value="">كل الفروع</option>
+                                    @foreach($business_locations as $id => $name)
+                                        <option value="{{ $id }}">{{ $name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="ego-label">الأصناف المشمولة بالعرض <span class="text-danger">*</span></label>
+                            <select id="ego_sp_products" class="form-control" multiple style="width:100%"></select>
+                            <span class="ego-hint">اختر منتجاً أو أكثر يطبَّق عليها العرض</span>
+                        </div>
+
+                        <div class="ego-empty-tip" id="ego_sp_hint"><i class="fas fa-lightbulb text-warning"></i> <span></span></div>
+
+                        <div class="row">
+                            <div class="col-md-4 form-group">
+                                <label class="ego-label">تاريخ البداية</label>
+                                <input type="date" id="ego_sp_start" class="form-control">
+                            </div>
+                            <div class="col-md-4 form-group">
+                                <label class="ego-label">تاريخ النهاية</label>
+                                <input type="date" id="ego_sp_end" class="form-control">
+                            </div>
+                            <div class="col-md-4 form-group">
+                                <label class="ego-label">الحالة</label>
+                                <select id="ego_sp_active" class="form-control">
+                                    <option value="1">فعّال</option>
+                                    <option value="0">غير فعّال</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="ego-save-bar">
+                            <button type="button" class="btn btn-default" id="ego_sp_reset">تفريغ</button>
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> حفظ العرض الخاص</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {{-- 🆕 استيراد العروض الخاصة من Excel --}}
+            <div class="ego-card">
+                <div class="ego-card-head"><i class="fas fa-file-excel" style="color:#16a34a"></i><h4>استيراد العروض الخاصة من Excel</h4></div>
+                <div class="ego-card-body">
+                    @if(session('status') && is_array(session('status')) && isset(session('status')['msg']))
+                        <div class="alert {{ !empty(session('status')['success']) ? 'alert-success' : 'alert-danger' }}">{!! session('status')['msg'] !!}</div>
+                    @endif
+                    <form action="{{ route('product-offers.special.import') }}" method="POST" enctype="multipart/form-data">
+                        @csrf
+                        <div class="row">
+                            <div class="col-md-4 form-group">
+                                <label class="ego-label">الفرع</label>
+                                <select name="location_id" class="form-control">
+                                    <option value="">كل الفروع</option>
+                                    @foreach($business_locations as $id => $name)
+                                        <option value="{{ $id }}">{{ $name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="col-md-8 form-group">
+                                <label class="ego-label">ملف Excel <span class="text-danger">*</span></label>
+                                <input type="file" name="excel_file" class="form-control" accept=".xlsx,.xls,.csv" required>
+                            </div>
+                        </div>
+                        <div class="ego-empty-tip">
+                            <i class="fas fa-lightbulb text-warning"></i>
+                            الأعمدة: <b>اسم العرض</b> ، النوع (bogo/nth_percent/percent_items) ، عدد الشراء ، المجاني ، نسبة % ، <b>الأصناف SKU مفصولة بفواصل</b> ، تاريخ البداية ، تاريخ النهاية ، فعّال (1/0). كل صف = عرض واحد يظهر بخانة واحدة، واضغط <b>فحص</b> لرؤية أصنافه.
+                        </div>
+                        <div class="ego-save-bar">
+                            <a href="{{ route('product-offers.special.template') }}" class="btn btn-default"><i class="fas fa-download"></i> تحميل قالب Excel</a>
+                            <button type="submit" class="btn btn-success"><i class="fas fa-file-import"></i> استيراد</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="ego-card">
+                <div class="ego-card-head"><i class="fas fa-gifts"></i><h4>العروض الخاصة الحالية</h4></div>
+                <div class="ego-card-body">
+                    <div class="table-responsive">
+                        <table id="special_table" class="table table-bordered table-striped ego-dt" style="width:100%">
+                            <thead>
+                                <tr>
+                                    <th>الاسم</th>
+                                    <th>النوع</th>
+                                    <th>التفاصيل</th>
+                                    <th>الأصناف</th>
+                                    <th>الفرع</th>
+                                    <th>الحالة</th>
                                     <th>إجراء</th>
                                 </tr>
                             </thead>
@@ -502,6 +753,109 @@
                     <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> حفظ التعديل</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+{{-- 🆕 نافذة تعديل العرض الخاص --}}
+<div class="modal fade" id="ego_edit_special_modal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <form id="ego_edit_special_form">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                    <h4 class="modal-title"><i class="fas fa-edit"></i> تعديل العرض الخاص</h4>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="ego_esp_id">
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label class="ego-label">اسم العرض <span class="text-danger">*</span></label>
+                            <input type="text" id="ego_esp_name" class="form-control">
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label class="ego-label">نوع العرض <span class="text-danger">*</span></label>
+                            <select id="ego_esp_type" class="form-control">
+                                <option value="bogo">اشترِ X واحصل على Y مجاناً</option>
+                                <option value="nth_percent">اشترِ X والقطعة التالية بخصم %</option>
+                                <option value="percent_items">خصم % على الأصناف المحددة</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3 form-group ego-esp-buy">
+                            <label class="ego-label">عدد الشراء (X)</label>
+                            <input type="number" step="1" min="1" id="ego_esp_buy" class="form-control" value="1">
+                        </div>
+                        <div class="col-md-3 form-group ego-esp-free">
+                            <label class="ego-label">المجاني (Y)</label>
+                            <input type="number" step="1" min="1" id="ego_esp_free" class="form-control" value="1">
+                        </div>
+                        <div class="col-md-3 form-group ego-esp-percent">
+                            <label class="ego-label">نسبة الخصم %</label>
+                            <input type="number" step="0.01" min="0" max="100" id="ego_esp_percent" class="form-control">
+                        </div>
+                        <div class="col-md-3 form-group">
+                            <label class="ego-label">الفرع</label>
+                            <select id="ego_esp_location" class="form-control">
+                                <option value="">كل الفروع</option>
+                                @foreach($business_locations as $id => $name)
+                                    <option value="{{ $id }}">{{ $name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="ego-label">الأصناف المشمولة <span class="text-danger">*</span></label>
+                        <select id="ego_esp_products" class="form-control" multiple style="width:100%"></select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4 form-group">
+                            <label class="ego-label">تاريخ البداية</label>
+                            <input type="date" id="ego_esp_start" class="form-control">
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label class="ego-label">تاريخ النهاية</label>
+                            <input type="date" id="ego_esp_end" class="form-control">
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label class="ego-label">الحالة</label>
+                            <select id="ego_esp_active" class="form-control">
+                                <option value="1">فعّال</option>
+                                <option value="0">غير فعّال</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> حفظ التعديل</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{{-- 🆕 نافذة فحص تفاصيل العرض/الحزمة (تعرض المنتجات والأعمدة الخاصة) --}}
+<div class="modal fade" id="ego_inspect_modal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"><span>&times;</span></button>
+                <h4 class="modal-title"><i class="fas fa-search"></i> <span id="ego_inspect_title">فحص التفاصيل</span></h4>
+            </div>
+            <div class="modal-body">
+                <div id="ego_inspect_header" style="margin-bottom:14px;"></div>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-striped ego-dt" style="width:100%">
+                        <thead><tr id="ego_inspect_cols"></tr></thead>
+                        <tbody id="ego_inspect_rows"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">إغلاق</button>
+            </div>
         </div>
     </div>
 </div>
@@ -920,10 +1274,10 @@ $(document).ready(function() {
         ajax: { url: "{{ route('product-offers.alt-barcodes.get-data') }}" },
         columns: [
             { data: 'product', name: 'product', orderable: false },
-            { data: 'alt_barcode', name: 'alt_barcode' },
+            { data: 'codes_count', name: 'codes_count', orderable: false, searchable: false },
             { data: 'action', name: 'action', orderable: false, searchable: false }
         ],
-        order: [[1, 'asc']],
+        order: [],
         language: egoDtLang
     });
 
@@ -954,6 +1308,239 @@ $(document).ready(function() {
             })
             .fail(function(){ toastr.error("{{ __('messages.something_went_wrong') }}"); })
             .always(function(){ $btn.prop('disabled', false); });
+    });
+
+    /* ============================================================
+       تبويب 4: عروض خاصة
+    ============================================================ */
+    egoInitProductSelect($('#ego_sp_products'));  // متعدّد (multiple مضبوط في HTML)
+
+    function egoSpUpdateFields() {
+        var t = $('#ego_sp_type').val();
+        $('.ego-sp-buy, .ego-sp-free, .ego-sp-percent').hide();
+        var hint = '';
+        if (t === 'bogo') {
+            $('.ego-sp-buy, .ego-sp-free').show();
+            hint = 'اشترِ العدد المحدّد (X) من الأصناف واحصل على (Y) مجاناً — يُحتسب الأرخص مجاناً.';
+        } else if (t === 'nth_percent') {
+            $('.ego-sp-buy, .ego-sp-free, .ego-sp-percent').show();
+            hint = 'اشترِ (X) قطعة، والـ (Y) التالية عليها نسبة الخصم المحددة.';
+        } else {
+            $('.ego-sp-percent').show();
+            hint = 'خصم بنسبة مئوية على كل الأصناف المحددة في العرض.';
+        }
+        $('#ego_sp_hint span').text(hint);
+    }
+    $('#ego_sp_type').on('change', egoSpUpdateFields);
+    egoSpUpdateFields();
+
+    function egoSpReset() {
+        $('#ego_special_form')[0].reset();
+        $('#ego_sp_products').val(null).trigger('change');
+        $('#ego_sp_buy').val(1); $('#ego_sp_free').val(1);
+        egoSpUpdateFields();
+    }
+    $('#ego_sp_reset').on('click', egoSpReset);
+
+    $('#ego_special_form').on('submit', function(e) {
+        e.preventDefault();
+        var items = $('#ego_sp_products').val() || [];
+        if (!$('#ego_sp_name').val().trim()) { toastr.error('أدخل اسم العرض'); return; }
+        if (items.length < 1) { toastr.error('اختر صنفاً واحداً على الأقل'); return; }
+
+        var data = {
+            name: $('#ego_sp_name').val(),
+            offer_type: $('#ego_sp_type').val(),
+            buy_qty: $('#ego_sp_buy').val() || 1,
+            free_qty: $('#ego_sp_free').val() || 1,
+            percent: $('#ego_sp_percent').val() || 0,
+            location_id: $('#ego_sp_location').val() || null,
+            start_date: $('#ego_sp_start').val() || null,
+            end_date: $('#ego_sp_end').val() || null,
+            is_active: $('#ego_sp_active').val(),
+            items: items
+        };
+        var $btn = $(this).find('button[type=submit]').prop('disabled', true);
+        $.post("{{ route('product-offers.special.store') }}", data)
+            .done(function(r){
+                if (r.success) { toastr.success(r.msg); egoSpReset(); special_table.ajax.reload(); }
+                else { toastr.error(r.msg); }
+            })
+            .fail(function(){ toastr.error("{{ __('messages.something_went_wrong') }}"); })
+            .always(function(){ $btn.prop('disabled', false); });
+    });
+
+    var special_table = $('#special_table').DataTable({
+        processing: true, serverSide: true,
+        ajax: { url: "{{ route('product-offers.special.get-data') }}" },
+        columns: [
+            { data: 'name', name: 'name' },
+            { data: 'offer_type', name: 'offer_type' },
+            { data: 'details', name: 'details', orderable: false, searchable: false },
+            { data: 'products', name: 'products', orderable: false, searchable: false },
+            { data: 'location_name', name: 'bl.name', orderable: false },
+            { data: 'is_active', name: 'is_active', orderable: false },
+            { data: 'action', name: 'action', orderable: false, searchable: false }
+        ],
+        order: [[0, 'asc']],
+        language: egoDtLang
+    });
+
+    $(document).on('click', '.delete-special-btn', function() {
+        if (!confirm('حذف هذا العرض الخاص؟')) return;
+        var id = $(this).data('id');
+        $.ajax({ url: "{{ url('product-offers/special') }}/" + id, type: 'DELETE',
+            success: function(r){ if(r.success){ toastr.success(r.msg); special_table.ajax.reload(); } else { toastr.error(r.msg); } }
+        });
+    });
+
+    // 🆕 تعديل العرض الخاص
+    egoInitProductSelect($('#ego_esp_products'), $('#ego_edit_special_modal'));
+    function egoEspUpdateFields() {
+        var t = $('#ego_esp_type').val();
+        $('#ego_edit_special_modal .ego-esp-buy, #ego_edit_special_modal .ego-esp-free, #ego_edit_special_modal .ego-esp-percent').hide();
+        if (t === 'bogo') { $('.ego-esp-buy, .ego-esp-free').show(); }
+        else if (t === 'nth_percent') { $('.ego-esp-buy, .ego-esp-free, .ego-esp-percent').show(); }
+        else { $('.ego-esp-percent').show(); }
+    }
+    $('#ego_esp_type').on('change', egoEspUpdateFields);
+
+    $(document).on('click', '.edit-special-btn', function() {
+        var id = $(this).data('id');
+        $.get("{{ url('product-offers/special') }}/" + id + "/edit", function(r){
+            if (!r.success) { toastr.error(r.msg || 'تعذّر الجلب'); return; }
+            var o = r.offer;
+            $('#ego_esp_id').val(id);
+            $('#ego_esp_name').val(o.name || '');
+            $('#ego_esp_type').val(o.offer_type);
+            $('#ego_esp_buy').val(o.buy_qty); $('#ego_esp_free').val(o.free_qty); $('#ego_esp_percent').val(o.percent);
+            $('#ego_esp_location').val(o.location_id || '');
+            $('#ego_esp_start').val(o.start_date ? String(o.start_date).substring(0,10) : '');
+            $('#ego_esp_end').val(o.end_date ? String(o.end_date).substring(0,10) : '');
+            $('#ego_esp_active').val(o.is_active ? '1' : '0');
+            // املأ المنتجات (خيارات مُسبقة)
+            var $sel = $('#ego_esp_products'); $sel.empty();
+            (r.items || []).forEach(function(it){
+                $sel.append(new Option(it.label, it.variation_id, true, true));
+            });
+            $sel.trigger('change');
+            egoEspUpdateFields();
+            $('#ego_edit_special_modal').modal('show');
+        });
+    });
+
+    $('#ego_edit_special_form').on('submit', function(e) {
+        e.preventDefault();
+        var id = $('#ego_esp_id').val();
+        var items = $('#ego_esp_products').val() || [];
+        if (!$('#ego_esp_name').val().trim()) { toastr.error('أدخل اسم العرض'); return; }
+        if (items.length < 1) { toastr.error('اختر صنفاً واحداً على الأقل'); return; }
+        var $btn = $(this).find('button[type=submit]').prop('disabled', true);
+        $.ajax({ url: "{{ url('product-offers/special') }}/" + id, type: 'PUT', data: {
+            name: $('#ego_esp_name').val(),
+            offer_type: $('#ego_esp_type').val(),
+            buy_qty: $('#ego_esp_buy').val() || 1,
+            free_qty: $('#ego_esp_free').val() || 1,
+            percent: $('#ego_esp_percent').val() || 0,
+            location_id: $('#ego_esp_location').val() || null,
+            start_date: $('#ego_esp_start').val() || null,
+            end_date: $('#ego_esp_end').val() || null,
+            is_active: $('#ego_esp_active').val(),
+            items: items
+        }}).done(function(r){
+            if (r.success) { toastr.success(r.msg); $('#ego_edit_special_modal').modal('hide'); special_table.ajax.reload(); }
+            else { toastr.error(r.msg); }
+        }).fail(function(){ toastr.error("{{ __('messages.something_went_wrong') }}"); })
+          .always(function(){ $btn.prop('disabled', false); });
+    });
+
+    /* ============================================================
+       🆕 فحص التفاصيل (عرض خاص / حزمة) — يعرض المنتجات والأعمدة الخاصة في نافذة
+    ============================================================ */
+    function egoRenderInspect(r) {
+        if (!r || !r.success) { toastr.error((r && r.msg) || 'تعذّر جلب التفاصيل'); return; }
+        $('#ego_inspect_title').text(r.title || 'فحص التفاصيل');
+        var h = '';
+        (r.header || []).forEach(function(x){
+            h += '<span class="label label-default" style="margin:2px;font-size:13px;font-weight:600;">' + $('<div>').text(x[0]).html() + ': ' + $('<div>').text(x[1] == null ? '' : x[1]).html() + '</span> ';
+        });
+        $('#ego_inspect_header').html(h);
+        var cols = '';
+        (r.columns || []).forEach(function(c){ cols += '<th>' + $('<div>').text(c).html() + '</th>'; });
+        $('#ego_inspect_cols').html(cols);
+        var body = '';
+        (r.rows || []).forEach(function(row){
+            body += '<tr>';
+            row.forEach(function(cell, ci){
+                var isLast = (ci === row.length - 1);
+                if (r.rawLast && isLast) { body += '<td>' + (cell == null ? '' : cell) + '</td>'; } // آخر عمود HTML (أزرار)
+                else { body += '<td>' + $('<div>').text(cell == null ? '' : cell).html() + '</td>'; }
+            });
+            body += '</tr>';
+        });
+        if (!body) { body = '<tr><td colspan="' + ((r.columns || []).length || 1) + '" class="text-center text-muted">لا توجد أصناف</td></tr>'; }
+        $('#ego_inspect_rows').html(body);
+        $('#ego_inspect_modal').modal('show');
+    }
+    $(document).on('click', '.inspect-special-btn', function(){
+        $.get("{{ url('product-offers/special') }}/" + $(this).data('id') + "/items", egoRenderInspect)
+            .fail(function(){ toastr.error("{{ __('messages.something_went_wrong') }}"); });
+    });
+    $(document).on('click', '.inspect-bundle-btn', function(){
+        $.get("{{ url('product-offers/bundles') }}/" + $(this).data('id') + "/items", egoRenderInspect)
+            .fail(function(){ toastr.error("{{ __('messages.something_went_wrong') }}"); });
+    });
+    $(document).on('click', '.inspect-offer-btn', function(){
+        $.get("{{ url('product-offers') }}/" + $(this).data('id') + "/items", egoRenderInspect)
+            .fail(function(){ toastr.error("{{ __('messages.something_went_wrong') }}"); });
+    });
+    var egoLastAltVid = null;
+    $(document).on('click', '.inspect-alt-btn', function(){
+        egoLastAltVid = $(this).data('vid');
+        $.get("{{ url('product-offers/alt-barcodes') }}/" + egoLastAltVid + "/items", egoRenderInspect)
+            .fail(function(){ toastr.error("{{ __('messages.something_went_wrong') }}"); });
+    });
+    // حذف كل باركودات المنتج (من صف الجدول المجمّع)
+    $(document).on('click', '.delete-alt-group-btn', function(){
+        if (!confirm('حذف كل الباركودات البديلة لهذا المنتج؟')) return;
+        $.ajax({ url: "{{ url('product-offers/alt-barcodes/group') }}/" + $(this).data('vid'), type: 'DELETE',
+            success: function(r){ if(r.success){ toastr.success(r.msg); alt_table.ajax.reload(); } else { toastr.error(r.msg); } } });
+    });
+    // تعديل باركود مفرد داخل نافذة الفحص (تحرير مباشر في الصف)
+    $(document).on('click', '.ego-insp-edit-alt', function(){
+        var $tr = $(this).closest('tr');
+        var id = $(this).data('id'), vid = $(this).data('vid'), code = $(this).data('code');
+        $tr.find('td:first').html('<input type="text" class="form-control input-sm ego-insp-edit-input" value="' + $('<div>').text(code).html() + '">');
+        $tr.find('td:last').html('<button class="btn btn-xs btn-success ego-insp-save-alt" data-id="' + id + '" data-vid="' + vid + '"><i class="fa fa-check"></i> حفظ</button> '
+            + '<button class="btn btn-xs btn-default ego-insp-cancel-alt" data-vid="' + vid + '">إلغاء</button>');
+        $tr.find('.ego-insp-edit-input').focus().select();
+    });
+    $(document).on('click', '.ego-insp-save-alt', function(){
+        var $tr = $(this).closest('tr');
+        var val = $.trim($tr.find('.ego-insp-edit-input').val());
+        if (!val) { toastr.error('أدخل الباركود'); return; }
+        var vid = $(this).data('vid');
+        $.ajax({ url: "{{ url('product-offers/alt-barcodes') }}/" + $(this).data('id'), type: 'PUT', data: { alt_barcode: val } })
+            .done(function(r){
+                if (r.success) { toastr.success(r.msg); alt_table.ajax.reload(); $.get("{{ url('product-offers/alt-barcodes') }}/" + vid + "/items", egoRenderInspect); }
+                else { toastr.error(r.msg); }
+            }).fail(function(){ toastr.error("{{ __('messages.something_went_wrong') }}"); });
+    });
+    $(document).on('click', '.ego-insp-cancel-alt', function(){
+        $.get("{{ url('product-offers/alt-barcodes') }}/" + $(this).data('vid') + "/items", egoRenderInspect);
+    });
+    // حذف باركود مفرد من داخل نافذة الفحص ثم تحديث النافذة والجدول
+    $(document).on('click', '.ego-insp-del-alt', function(){
+        if (!confirm('حذف هذا الباركود؟')) return;
+        var vid = $(this).data('vid');
+        $.ajax({ url: "{{ url('product-offers/alt-barcodes') }}/" + $(this).data('id'), type: 'DELETE',
+            success: function(r){
+                if(r.success){
+                    toastr.success(r.msg);
+                    alt_table.ajax.reload();
+                    $.get("{{ url('product-offers/alt-barcodes') }}/" + vid + "/items", egoRenderInspect);
+                } else { toastr.error(r.msg); }
+            } });
     });
 
 });

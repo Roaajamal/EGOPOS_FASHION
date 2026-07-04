@@ -1085,6 +1085,12 @@ if (auth()->user()->can('daily_sales_report.view')) {  //001
                                 __('business.business_settings'),
                                 ['icon' => '', 'active' => request()->segment(1) == 'business', 'id' => 'tour_step2']
                             );
+                            // 🆕 إدارة تفعيل النظام
+                            $sub->url(
+                                action([\App\Http\Controllers\EgoActivationController::class, 'index']),
+                                'تفعيل النظام',
+                                ['icon' => '', 'active' => request()->segment(1) == 'ego-activation']
+                            );
                             $sub->url(
                                 action([\App\Http\Controllers\BusinessLocationController::class, 'index']),
                                 __('business.business_locations'),

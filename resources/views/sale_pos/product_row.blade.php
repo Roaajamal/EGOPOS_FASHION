@@ -39,6 +39,14 @@
 			{!! $product_name !!}
 		@endif
 
+		{{-- 🆕 البائع المسؤول عن هذا المنتج (يظهر فقط عند تفعيل إعداد "إضافة بائع في سطر البيع") --}}
+		@if(!empty($pos_settings['ego_line_seller']))
+		<div class="ego-line-seller" style="margin-top:5px">
+			<i class="fas fa-user-tag" style="color:#0d9488;font-size:11px"></i>
+			{!! Form::select("products[".$row_count."][ego_seller_id]", $ego_sellers ?? [], !empty($product->ego_seller_id) ? $product->ego_seller_id : null, ['class' => 'ego-seller-select', 'placeholder' => 'اختر البائع', 'style' => 'height:28px;font-size:11px;border:1px solid #cbd5e1;border-radius:6px;padding:2px 6px;max-width:150px']) !!}
+		</div>
+		@endif
+
 {{-- ✅ تعريف المتغيرات وجلب القيم من قاعدة البيانات --}}
 @php
     $custom_labels = json_decode(session('business.custom_labels'), true);

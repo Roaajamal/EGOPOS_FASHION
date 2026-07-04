@@ -73,6 +73,41 @@ class HomeController extends Controller
 
         $is_admin = $this->businessUtil->is_admin(auth()->user());
 
+        // 🆕 إشعارات ذكية للأدمن (مرة يومياً لكل نوع): انتهاء التفعيل / مخزون منخفض / طلبات توصيل
+        if ($is_admin) {
+            $u = auth()->user();
+            // 1) قرب انتهاء/انتهاء التفعيل
+            try {
+                $days_left = \App\EgoActivation::daysLeft($business_id);
+                if ($days_left !== null && $days_left <= 3) {
+                    $msg = $days_left < 0 ? 'انتهى تفعيل النظام — يرجى التجديد' : ('تنبيه: تفعيل النظام ينتهي خلال ' . $days_left . ' يوم');
+                    $this->egoMakeNotification($u, 'ego_activation', $msg, $days_left < 0 ? 'fas fa-times-circle bg-red' : 'fas fa-exclamation-triangle bg-yellow', action([\App\Http\Controllers\EgoActivationController::class, 'index']));
+                }
+            } catch (\Throwable $e) {}
+            // 2) مخزون منخفض (وصل لحد التنبيه أو أقل)
+            try {
+                $lowStock = \Illuminate\Support\Facades\DB::table('variation_location_details as vld')
+                    ->join('products as p', 'vld.product_id', '=', 'p.id')
+                    ->where('p.business_id', $business_id)->where('p.enable_stock', 1)
+                    ->whereNotNull('p.alert_quantity')->where('p.alert_quantity', '>', 0)
+                    ->whereRaw('vld.qty_available <= p.alert_quantity')
+                    ->distinct('p.id')->count('p.id');
+                if ($lowStock > 0) {
+                    $this->egoMakeNotification($u, 'ego_low_stock', $lowStock . ' منتج قارب على النفاد', 'fas fa-cubes bg-yellow', url('products'));
+                }
+            } catch (\Throwable $e) {}
+            // 3) طلبات توصيل قيد التنفيذ
+            try {
+                $delivery = \Illuminate\Support\Facades\DB::table('transactions')
+                    ->where('business_id', $business_id)->where('type', 'sell')
+                    ->whereIn('shipping_status', ['ordered', 'pending', 'packed', 'shipped'])
+                    ->count();
+                if ($delivery > 0) {
+                    $this->egoMakeNotification($u, 'ego_delivery', $delivery . ' طلب توصيل قيد التنفيذ', 'fas fa-truck bg-light-blue', url('sells'));
+                }
+            } catch (\Throwable $e) {}
+        }
+
         if (! auth()->user()->can('dashboard.data')) {
             return view('home.index');
         }
@@ -463,9 +498,34 @@ class HomeController extends Controller
         }
     }
 
+    // 🆕 إنشاء إشعار عام (مرة واحدة يومياً لكل نوع key) يظهر في الجرس
+    private function egoMakeNotification($user, $key, $msg, $icon_class, $link)
+    {
+        try {
+            $already = $user->notifications()->whereDate('created_at', \Carbon\Carbon::today())->get()
+                ->contains(function ($n) use ($key) { return ! empty($n->data[$key]); });
+            if ($already) { return; }
+            \Illuminate\Support\Facades\DB::table('notifications')->insert([
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'type' => 'App\\Notifications\\EgoGeneric',
+                'notifiable_type' => 'App\\User',
+                'notifiable_id' => $user->id,
+                'data' => json_encode(['ego_generic' => true, $key => true, 'msg' => $msg, 'icon_class' => $icon_class, 'link' => $link]),
+                'read_at' => null,
+                'created_at' => \Carbon\Carbon::now(),
+                'updated_at' => \Carbon\Carbon::now(),
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('egoMakeNotification: ' . $e->getMessage());
+        }
+    }
+
     public function loadMoreNotifications()
     {
-        $notifications = auth()->user()->notifications()->orderBy('created_at', 'DESC')->paginate(10);
+        // 🆕 تُعرض فقط إشعارات آخر 24 ساعة (والأقدم يختفي)
+        $notifications = auth()->user()->notifications()
+            ->where('created_at', '>=', \Carbon\Carbon::now()->subDay())
+            ->orderBy('created_at', 'DESC')->paginate(10);
 
         if (request()->input('page') == 1) {
             auth()->user()->unreadNotifications->markAsRead();

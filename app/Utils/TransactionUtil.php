@@ -385,6 +385,7 @@ if (empty($pay_term_number) || empty($pay_term_type)) {
                     'res_line_order_status' => ! empty($product['res_service_staff_id']) ? 'received' : null,
                     'so_line_id' => ! empty($product['so_line_id']) ? $product['so_line_id'] : null,
                     'secondary_unit_quantity' => ! empty($product['secondary_unit_quantity']) ? $this->num_uf($product['secondary_unit_quantity']) : 0,
+                    'ego_seller_id' => ! empty($product['ego_seller_id']) ? $product['ego_seller_id'] : null, // 🆕 البائع المسؤول عن هذا المنتج
                 ];
 
                 foreach ($extra_line_parameters as $key => $value) {
@@ -604,6 +605,7 @@ if (empty($pay_term_number) || empty($pay_term_type)) {
             'sub_unit_id' => ! empty($product['sub_unit_id']) ? $product['sub_unit_id'] : null,
             'res_service_staff_id' => ! empty($product['res_service_staff_id']) ? $product['res_service_staff_id'] : null,
             'secondary_unit_quantity' => ! empty($product['secondary_unit_quantity']) ? $this->num_uf($product['secondary_unit_quantity']) : 0,
+            'ego_seller_id' => ! empty($product['ego_seller_id']) ? $product['ego_seller_id'] : null, // 🆕 البائع المسؤول
         ]);
         $sell_line->save();
 

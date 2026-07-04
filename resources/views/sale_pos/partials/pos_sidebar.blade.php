@@ -49,6 +49,8 @@
 <!-- نهاية تعديل منطقة المنتجات المميزة -->
 
 @if(empty($pos_settings['hide_product_suggestion']))
+{{-- 🆕 حاوية مرنة: شريط أيقونات (الصنف/العلامات/المميزة) عمودي بجانب شبكة المنتجات --}}
+<div class="ego-prod-wrap">
 <div class="row tw-mb-1">
     @if (!empty($categories))
         <div class="col-md-4 col-sm-4 !tw-px-2" id="product_category_div">
@@ -250,6 +252,7 @@
         <i class="fa fa-spinner fa-spin fa-2x"></i>
     </div>
 </div>
+</div>{{-- 🆕 نهاية الحاوية المرنة --}}
 
 <style>
     #product_list_body > div, #featured_products_box > div {
