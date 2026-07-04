@@ -1572,29 +1572,48 @@ public function getSalesRepresentativeSummary(Request $request) {
         $query->where('id', $user_id);
     }
     $users = $query->select(['id', 'cmmsn_percent', 'first_name', 'last_name'])->get();
-    
+
+    // 🆕 عند تفعيل "بائع لكل منتج" تُحتسب مبيعات كل بائع من سطور منتجاته (ego_seller_id) بدل وكيل الطلب كامل
+    $ego_line_seller = false;
+    try {
+        $biz = \App\Business::find($business_id);
+        $ps = $biz ? json_decode($biz->pos_settings, true) : [];
+        $ego_line_seller = ! empty($ps['ego_line_seller']);
+    } catch (\Throwable $e) {}
+
     $data = [];
 
     foreach ($users as $user) {
-        // 2. المبيعات - تم التعديل لاستخدام whereBetween لدعم الوقت
-        $total_sell = \DB::table('transactions')
-            ->where('business_id', $business_id)
-            ->where('type', 'sell')
-            ->where('status', 'final')
-            ->where(function($q) use ($user) {
-                $q->where('commission_agent', $user->id)
-                  ->orWhere(function($sub_q) use ($user) {
-                      $sub_q->where('created_by', $user->id)
-                            ->whereNull('commission_agent');
-                  });
-            })
-            ->when($location_id, function($q) use ($location_id){ 
-                $q->where('location_id', $location_id); 
-            })
-            ->when($start_date, function($q) use ($start_date, $end_date){ 
-                return $q->whereBetween('transaction_date', [$start_date, $end_date]); 
-            })
-            ->sum('final_total');
+        // 2. المبيعات
+        if ($ego_line_seller) {
+            // مبيعات البائع = مجموع (كمية × السعر شامل الضريبة) لسطور المنتجات المُسنَدة إليه
+            $total_sell = \DB::table('transaction_sell_lines as tsl')
+                ->join('transactions as t', 'tsl.transaction_id', '=', 't.id')
+                ->where('t.business_id', $business_id)->where('t.type', 'sell')->where('t.status', 'final')
+                ->where('tsl.ego_seller_id', $user->id)
+                ->when(!empty($location_id) && $location_id !== 'all', function($q) use ($location_id){ $q->where('t.location_id', $location_id); })
+                ->when($start_date, function($q) use ($start_date, $end_date){ return $q->whereBetween('t.transaction_date', [$start_date, $end_date]); })
+                ->sum(\DB::raw('tsl.quantity * tsl.unit_price_inc_tax'));
+        } else {
+            $total_sell = \DB::table('transactions')
+                ->where('business_id', $business_id)
+                ->where('type', 'sell')
+                ->where('status', 'final')
+                ->where(function($q) use ($user) {
+                    $q->where('commission_agent', $user->id)
+                      ->orWhere(function($sub_q) use ($user) {
+                          $sub_q->where('created_by', $user->id)
+                                ->whereNull('commission_agent');
+                      });
+                })
+                ->when($location_id, function($q) use ($location_id){
+                    $q->where('location_id', $location_id);
+                })
+                ->when($start_date, function($q) use ($start_date, $end_date){
+                    return $q->whereBetween('transaction_date', [$start_date, $end_date]);
+                })
+                ->sum('final_total');
+        }
 
         // 3. المرتجعات - تم التعديل لاستخدام whereBetween لدعم الوقت
         $total_return = \DB::table('transactions')

@@ -57,8 +57,16 @@
               <div class="col-md-12">
                 <div class="checkbox">
                   <label>
-                    {!! Form::checkbox('permissions[]', 'view_export_buttons', false, 
+                    {!! Form::checkbox('permissions[]', 'view_export_buttons', false,
                     [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.view_export_buttons' ) }}
+                  </label>
+                </div>
+              </div>
+              {{-- 🆕 صلاحية إظهار زر التنبيه (الجرس) في الرئيسية --}}
+              <div class="col-md-12">
+                <div class="checkbox">
+                  <label>
+                    {!! Form::checkbox('permissions[]', 'ego.notification_bell', false, ['class' => 'input-icheck']); !!} الإشعارات وطلب التجديد
                   </label>
                 </div>
               </div>

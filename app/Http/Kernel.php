@@ -39,6 +39,8 @@ class Kernel extends HttpKernel
         \Illuminate\View\Middleware\ShareErrorsFromSession::class,
         \App\Http\Middleware\VerifyCsrfToken::class,
         \Illuminate\Routing\Middleware\SubstituteBindings::class,
+        // 🆕 حظر الدخول عند انتهاء التفعيل (يُستثنى الأدمن، fail-open)
+        \App\Http\Middleware\EgoActivationCheck::class,
     ],
 
     'api' => [

@@ -240,6 +240,15 @@
 
 <script type="text/javascript">
   $(document).ready(function(){
+    // 🆕 تبسيط النموذج: إبقاء (الاسم/الباركود/الصنف/العلامة/الوحدة/الكمية/الأسعار) فقط وإخفاء الباقي
+    //     الحقول المخفية تحتفظ بقيمها الافتراضية وتُرسَل، وتتجاهلها مدقّقات jQuery (ignore: ":hidden")
+    ['barcode_type','sub_unit_ids','enable_stock','alert_quantity','warranty_id','expiry_period','expiry_period_type','product_locations','weight','product_description','tax_type','enable_sr_no','not_for_selling','product_custom_field1','product_custom_field2','product_custom_field3','product_custom_field4'].forEach(function(n){
+        $('#quick_add_product_form').find('[name="'+n+'"], [name="'+n+'[]"]').closest('[class*="col-sm-"]').addClass('hide');
+    });
+    // إسناد المنتج لكل الفروع (الحقل مخفي) حتى يظهر في نقطة البيع
+    $('#product_locations option').prop('selected', true);
+    try { $('#product_locations').trigger('change'); } catch(e){}
+
     $("form#quick_add_product_form").validate({
       rules: {
           sku: {

@@ -55,6 +55,10 @@ use App\Utils\ProductUtil;
 use App\Utils\TransactionUtil;
 use App\Variation;
 use App\Warranty;
+use App\ProductOffer;
+use App\ProductOfferBundle;
+use App\ProductAltBarcode;
+use App\ProductSpecialOffer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -313,7 +317,9 @@ class SellPosController extends Controller
         //      }
         //     } 
 
-        return view('sale_pos.create')
+        // 🆕 إن فُعّل إعداد "نقطة البيع القديمة" نعرض النسخة الأصلية، وإلا النسخة الجديدة المصمّمة
+        $ego_pos_view = !empty($pos_settings['use_classic_pos']) ? 'sale_pos.create_classic' : 'sale_pos.create';
+        return view($ego_pos_view)
             ->with(compact(
                 'edit_discount',
                 'edit_price',
@@ -2201,8 +2207,9 @@ private function receiptContent(
                 $edit_price = auth()->user()->can('edit_product_price_from_pos_screen');
             }
 
+            $ego_sellers = \App\User::saleCommissionAgentsDropdown($business_id, false); // 🆕 قائمة البائعين/وكلاء العمولة المسجّلين لاختيار بائع لكل منتج
             $output['html_content'] = view('sale_pos.product_row')
-                ->with(compact('product', 'row_count', 'tax_dropdown', 'enabled_modules', 'pos_settings', 'sub_units', 'discount', 'waiters', 'edit_discount', 'edit_price', 'purchase_line_id', 'warranties', 'quantity', 'is_direct_sell', 'so_line', 'is_sales_order', 'last_sell_line', 'is_serial_no'))
+                ->with(compact('product', 'row_count', 'tax_dropdown', 'enabled_modules', 'pos_settings', 'sub_units', 'discount', 'waiters', 'edit_discount', 'edit_price', 'purchase_line_id', 'warranties', 'quantity', 'is_direct_sell', 'so_line', 'is_sales_order', 'last_sell_line', 'is_serial_no', 'ego_sellers'))
                 ->render();
         }
 
@@ -3720,5 +3727,258 @@ private function receiptContent(
             return $output;
 
         }
+    }
+
+    // ============================================================
+    // 🆕 تكامل العروض مع نقطة البيع
+    // ============================================================
+
+    
+    public function updatePriceWithOffer(Request $request)
+    {
+        return response()->json(['success' => true, 'has_offer' => false]);
+    }
+
+    /**
+     * 2) الباركود البديل: يحوّل الباركود الممسوح إلى variation_id الأصلي.
+     */
+    public function resolveAltBarcode(Request $request)
+    {
+        try {
+            $business_id = $request->session()->get('user.business_id');
+            $code = trim($request->input('code', ''));
+            if ($code === '') {
+                return response()->json(['success' => true, 'found' => false]);
+            }
+
+            $row = ProductAltBarcode::where('business_id', $business_id)
+                ->where('alt_barcode', $code)
+                ->first();
+
+            if (!$row) {
+                return response()->json(['success' => true, 'found' => false]);
+            }
+
+            return response()->json([
+                'success'      => true,
+                'found'        => true,
+                'variation_id' => $row->variation_id,
+            ]);
+        } catch (\Exception $e) {
+            \Log::emergency('File:' . $e->getFile() . 'Line:' . $e->getLine() . 'Message:' . $e->getMessage());
+            return response()->json(['success' => false, 'found' => false]);
+        }
+    }
+
+    /**
+     * 3) محرّك العروض الموحّد لنقطة البيع.
+     */
+    public function calcOffers(Request $request)
+    {
+        try {
+            $business_id = $request->session()->get('user.business_id');
+            $location_id = $request->input('location_id');
+            $lines_in    = $request->input('lines', []);
+
+            // تجميع السلة: variation_id => [qty, unit]
+            $cart = [];
+            foreach ((array) $lines_in as $ln) {
+                $vid  = $ln['variation_id'] ?? null;
+                $qty  = (float) ($ln['quantity'] ?? 0);
+                $unit = (float) ($ln['unit_price'] ?? 0);
+                if ($vid && $qty > 0) {
+                    if (isset($cart[$vid])) { $cart[$vid]['qty'] += $qty; }
+                    else { $cart[$vid] = ['qty' => $qty, 'unit' => $unit]; }
+                }
+            }
+
+            $map = [];
+            $bundle_names = [];
+            if (empty($cart)) {
+                return response()->json(['success' => true, 'map' => $map, 'bundles' => $bundle_names]);
+            }
+
+            // ===== 1) الحزم (أولوية) =====
+            $bundleVids = [];
+            $bundles = ProductOfferBundle::where('business_id', $business_id)
+                ->where('is_active', 1)
+                ->where(function ($q) use ($location_id) {
+                    $q->whereNull('location_id')->orWhere('location_id', $location_id);
+                })
+                ->where(function ($q) { $q->whereNull('start_date')->orWhere('start_date', '<=', date('Y-m-d')); })
+                ->where(function ($q) { $q->whereNull('end_date')->orWhere('end_date', '>=', date('Y-m-d')); })
+                ->with('items')
+                ->get();
+
+            foreach ($bundles as $bundle) {
+                if ($bundle->items->count() < 2) { continue; }
+
+                $sets = null; $normal_one_set = 0; $ok = true;
+                foreach ($bundle->items as $bi) {
+                    $need = (float) $bi->quantity;
+                    if ($need <= 0) { $ok = false; break; }
+                    if (!isset($cart[$bi->variation_id]) || $cart[$bi->variation_id]['qty'] < $need) { $ok = false; break; }
+                    $possible = floor($cart[$bi->variation_id]['qty'] / $need);
+                    $sets = is_null($sets) ? $possible : min($sets, $possible);
+                    $normal_one_set += $cart[$bi->variation_id]['unit'] * $need;
+                }
+                if (!$ok || !$sets || $sets < 1 || $normal_one_set <= 0) { continue; }
+
+                $saving_per_set = $normal_one_set - (float) $bundle->bundle_price;
+                if ($saving_per_set <= 0) { continue; }
+                $total_saving = $saving_per_set * $sets;
+
+                // توزيع التوفير على عناصر الحزمة حسب وزن (سعر × كمية)
+                foreach ($bundle->items as $bi) {
+                    $need = (float) $bi->quantity;
+                    $weight = ($cart[$bi->variation_id]['unit'] * $need) / $normal_one_set;
+                    $share = $total_saving * $weight;
+                    $map[$bi->variation_id]['discount'] = ($map[$bi->variation_id]['discount'] ?? 0) + $share;
+                    $map[$bi->variation_id]['bundle'] = true;
+                    $bundleVids[$bi->variation_id] = true;
+                }
+                $bundle_names[] = $bundle->name ?: ('حزمة #' . $bundle->id);
+            }
+
+            // ===== 1.5) العروض الخاصة (أولوية بعد الحزم) =====
+            $specialVids = [];
+            $specialOffers = ProductSpecialOffer::where('business_id', $business_id)
+                ->where('is_active', 1)
+                ->where(function ($q) use ($location_id) { $q->whereNull('location_id')->orWhere('location_id', $location_id); })
+                ->where(function ($q) { $q->whereNull('start_date')->orWhere('start_date', '<=', date('Y-m-d')); })
+                ->where(function ($q) { $q->whereNull('end_date')->orWhere('end_date', '>=', date('Y-m-d')); })
+                ->with('items')
+                ->get();
+
+            foreach ($specialOffers as $so) {
+                // أصناف العرض الموجودة في السلة وغير مشمولة بحزمة
+                $vids = [];
+                foreach ($so->items as $it) {
+                    if (isset($cart[$it->variation_id]) && !isset($bundleVids[$it->variation_id])) {
+                        $vids[] = $it->variation_id;
+                    }
+                }
+                if (empty($vids)) { continue; }
+                $applied = false;
+
+                if ($so->offer_type === 'percent_items') {
+                    $pct = (float) $so->percent;
+                    if ($pct <= 0) { continue; }
+                    foreach ($vids as $v) {
+                        $d = $cart[$v]['unit'] * $cart[$v]['qty'] * ($pct / 100);
+                        if ($d > 0) {
+                            $map[$v]['discount'] = ($map[$v]['discount'] ?? 0) + $d;
+                            $map[$v]['bundle'] = false;
+                            $specialVids[$v] = true;
+                            $applied = true;
+                        }
+                    }
+                } else {
+                    // bogo: اشترِ X واحصل على Y مجاناً | nth_percent: اشترِ X والـ Y التالية بخصم %
+                    $buy = (float) $so->buy_qty;
+                    $cnt = (float) $so->free_qty;          // عدد القطع المجانية/المخصومة لكل مجموعة
+                    $group = $buy + $cnt;
+                    if ($group <= 0) { continue; }
+                    // كل وحدات أصناف العرض بأسعارها
+                    $units = [];
+                    foreach ($vids as $v) {
+                        $q = (int) floor($cart[$v]['qty']);
+                        for ($k = 0; $k < $q; $k++) { $units[] = ['vid' => $v, 'price' => $cart[$v]['unit']]; }
+                    }
+                    $sets = floor(count($units) / $group);
+                    $affected = (int) ($sets * $cnt);      // عدد القطع المتأثّرة
+                    if ($affected < 1) { continue; }
+                    usort($units, function ($a, $b) { return $a['price'] <=> $b['price']; }); // الأرخص أولاً
+                    $pct = ($so->offer_type === 'bogo') ? 100 : (float) $so->percent;
+                    if ($pct <= 0) { continue; }
+                    for ($k = 0; $k < $affected && $k < count($units); $k++) {
+                        $u = $units[$k];
+                        $d = $u['price'] * ($pct / 100);
+                        $map[$u['vid']]['discount'] = ($map[$u['vid']]['discount'] ?? 0) + $d;
+                        $map[$u['vid']]['bundle'] = false;
+                        $specialVids[$u['vid']] = true;
+                        $applied = true;
+                    }
+                }
+                if ($applied) { $bundle_names[] = $so->name; }
+            }
+
+            // ===== 2) عروض الكمية (للأصناف غير المشمولة بحزمة أو عرض خاص) =====
+            foreach ($cart as $vid => $info) {
+                if (isset($bundleVids[$vid]) || isset($specialVids[$vid])) { continue; } // أولوية الحزمة ثم العرض الخاص
+                $qty = $info['qty']; $unit = $info['unit'];
+
+                $offer = ProductOffer::where('business_id', $business_id)
+                    ->where('variation_id', $vid)
+                    ->where('location_id', $location_id)
+                    ->where('min_quantity', '<=', $qty)
+                    ->where('is_active', 1)
+                    ->where(function ($q) { $q->whereNull('start_date')->orWhere('start_date', '<=', date('Y-m-d')); })
+                    ->where(function ($q) { $q->whereNull('end_date')->orWhere('end_date', '>=', date('Y-m-d')); })
+                    ->orderBy('min_quantity', 'desc')
+                    ->first();
+                if (!$offer) { continue; }
+
+                $min = (float) $offer->min_quantity;
+                $op  = (float) $offer->offer_price;
+                $D = 0;
+                switch ($offer->price_type) {
+                    case 'override': // op = السعر الإجمالي للشريحة (مثال: القطعتين بـ5)
+                        $sets = $min > 0 ? floor($qty / $min) : 0;
+                        $saving_per_set = ($unit * $min) - $op;
+                        if ($saving_per_set > 0) { $D = $sets * $saving_per_set; }
+                        break;
+                    case 'fixed': // op = سعر قطعة ثابت
+                        if ($unit > $op) { $D = ($unit - $op) * $qty; }
+                        break;
+                    case 'percentage': // op = نسبة خصم
+                        $D = ($unit * ($op / 100)) * $qty;
+                        break;
+                }
+                if ($D > 0) {
+                    $map[$vid]['discount'] = $D;
+                    $map[$vid]['bundle'] = false;
+                }
+            }
+
+            foreach ($map as $k => $v) { $map[$k]['discount'] = round($v['discount'], 4); }
+
+            return response()->json([
+                'success' => true,
+                'map'     => $map,
+                'bundles' => array_values(array_unique($bundle_names)),
+            ]);
+        } catch (\Exception $e) {
+            \Log::emergency('File:' . $e->getFile() . 'Line:' . $e->getLine() . 'Message:' . $e->getMessage());
+            return response()->json(['success' => false, 'map' => [], 'bundles' => []]);
+        }
+    }
+
+    // 🆕 ملخص وردية المستخدم (يُحدَّث لحظياً عند فتح نافذة admin) — يُرجِع أرقاماً خام لتنسيقها في الواجهة
+    public function egoUserSummary(Request $request)
+    {
+        $business_id = $request->session()->get('user.business_id');
+        $user_id = auth()->id();
+        $out = ['success' => false];
+        try {
+            $reg = \App\CashRegister::where('user_id', $user_id)->where('status', 'open')->orderByDesc('id')->first();
+            if ($reg) {
+                $rd = app(\App\Utils\CashRegisterUtil::class)->getRegisterDetails($reg->id);
+                $inv = \App\Transaction::where('business_id', $business_id)
+                    ->where('created_by', $user_id)->where('type', 'sell')->where('status', 'final')
+                    ->where('created_at', '>=', $rd->open_time)->count();
+                $out = [
+                    'success' => true,
+                    'name' => trim((auth()->user()->first_name ?? '') . ' ' . (auth()->user()->surname ?? '')) ?: (auth()->user()->username ?? 'مستخدم'),
+                    'open_time' => \Carbon\Carbon::parse($rd->open_time)->format('d-m-Y h:i A'),
+                    'invoices' => $inv,
+                    'total_sales' => (float) ($rd->total_sales ?? 0),
+                    'opening_cash' => (float) ($rd->cash_in_hand ?? 0),
+                ];
+            }
+        } catch (\Throwable $e) {
+            \Log::error('egoUserSummary: ' . $e->getMessage());
+        }
+        return response()->json($out);
     }
 }

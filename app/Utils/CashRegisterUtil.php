@@ -262,9 +262,9 @@ class CashRegisterUtil extends Util
         DB::raw("(SELECT SUM(final_total) FROM transactions $common_filters AND type = 'sell' AND status = 'final') as total_sales"), 
 
         // صافي الكاش والفيزا
-        DB::raw("(SELECT 
-            (SELECT IFNULL(SUM(tp.amount), 0) FROM transaction_payments AS tp JOIN transactions AS tr ON tp.transaction_id = tr.id $payment_filters AND tp.method = 'cash' AND tr.type = 'sell') 
-            - (SELECT IFNULL(SUM(tp.amount), 0) FROM transaction_payments AS tp JOIN transactions AS tr ON tp.transaction_id = tr.id $payment_filters AND tp.method = 'cash' AND tr.type = 'expense') 
+        DB::raw("(SELECT
+            (SELECT IFNULL(SUM(tp.amount), 0) FROM transaction_payments AS tp JOIN transactions AS tr ON tp.transaction_id = tr.id $payment_filters AND tp.method = 'cash' AND tr.type = 'sell')
+            - (SELECT IFNULL(SUM(tp.amount), 0) FROM transaction_payments AS tp JOIN transactions AS tr ON tp.transaction_id = tr.id $payment_filters AND tp.method = 'cash' AND tr.type = 'expense')
             - (SELECT IFNULL(SUM(tp.amount), 0) FROM transaction_payments AS tp JOIN transactions AS tr ON tp.transaction_id = tr.id $payment_filters AND tp.method = 'cash' AND tr.type = 'sell_return')
         ) as total_final_cash"),
 

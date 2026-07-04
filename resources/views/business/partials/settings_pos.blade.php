@@ -114,9 +114,21 @@
                 <div class="checkbox">
                 <br>
                   <label>
-                    {!! Form::checkbox('pos_settings[disable_draft]', 1,  
-                        $pos_settings['disable_draft'] , 
+                    {!! Form::checkbox('pos_settings[disable_draft]', 1,
+                        $pos_settings['disable_draft'] ,
                     [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.disable_draft' ) }}
+                  </label>
+                </div>
+            </div>
+        </div>
+
+        {{-- 🆕 تبديل نقطة البيع: القديمة (الأصلية) أو الجديدة المصمّمة --}}
+        <div class="col-sm-4">
+            <div class="form-group">
+                <div class="checkbox">
+                <br>
+                  <label>
+                    {!! Form::checkbox('pos_settings[use_classic_pos]', 1, !empty($pos_settings['use_classic_pos']), ['class' => 'input-icheck']); !!} استخدام نقطة البيع القديمة (الأصلية)
                   </label>
                 </div>
             </div>

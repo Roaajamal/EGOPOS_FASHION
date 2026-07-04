@@ -24,7 +24,7 @@
 				{!! Form::select('contact_id', 
 					[], null, ['class' => 'form-control mousetrap', 'id' => 'customer_id', 'placeholder' => 'Enter Customer name / phone', 'required']); !!}
 				<span class="input-group-btn">
-					<button type="button" class="btn btn-default bg-white btn-flat add_new_customer" data-name=""  @if(!auth()->user()->can('customer.create')) disabled @endif><i class="fa fa-plus-circle text-primary fa-lg"></i></button>
+					<button type="button" title="إضافة عميل" data-toggle="tooltip" class="btn btn-default bg-white btn-flat add_new_customer" data-name=""  @if(!auth()->user()->can('customer.create')) disabled @endif><i class="fa fa-plus-circle text-primary fa-lg"></i></button>
 				</span>
 			</div>
 			<small class="text-danger hide contact_due_text"><strong>@lang('account.customer_due'):</strong> <span></span></small>
@@ -50,11 +50,11 @@
 					@endif
 					
 
-					<button type="button" class="btn btn-default bg-white btn-flat pos_add_quick_product" data-href="{{action([\App\Http\Controllers\ProductController::class, 'quickAdd'])}}" data-container=".quick_add_product_modal"><i class="fa fa-plus-circle text-primary fa-lg"></i></button>
+					<button type="button" title="إضافة منتج" data-toggle="tooltip" class="btn btn-default bg-white btn-flat pos_add_quick_product" data-href="{{action([\App\Http\Controllers\ProductController::class, 'quickAdd'])}}" data-container=".quick_add_product_modal"><i class="fa fa-plus-circle text-primary fa-lg"></i></button>
 
 					{{-- 🆕 زر فحص السعر (يفتح نافذة فحص السعر بدون بيع) --}}
 					<button type="button" class="btn btn-default bg-white btn-flat" id="ego_price_check_open" data-toggle="modal" data-target="#ego_price_check_modal" title="فحص سعر قطعة دون بيعها">
-						<i class="fas fa-search-dollar fa-lg" style="color:#6366f1"></i>
+						<i class="fas fa-search-dollar fa-lg" style="color:#0d9488"></i>
 					</button>
 				</span>
 			</div>
@@ -215,8 +215,12 @@
 	<div class="col-sm-12 pos_product_div">
 		<input type="hidden" name="sell_price_tax" id="sell_price_tax" value="{{$business_details->sell_price_tax}}">
 
+		{{-- 🆕 طريقة إضافة المنتج (كان مفقوداً من شاشة البيع فتوقّف الإعداد):
+		     1 = زيادة الكمية على نفس السطر عند تكرار المنتج، 0 = سطر جديد لكل إضافة --}}
+		<input type="hidden" id="item_addition_method" value="{{ $business_details->item_addition_method }}">
+
 		<!-- Keeps count of product rows -->
-		<input type="hidden" id="product_row_count" 
+		<input type="hidden" id="product_row_count"
 			value="0">
 		@php
 			$hide_tax = '';
@@ -252,6 +256,10 @@
 					@endif
 					<th class="text-center tw-text-sm md:!tw-text-base tw-font-bold col-md-2 {{$hide_tax}}">
 						@lang('sale.price_inc_tax')
+					</th>
+					{{-- 🆕 عمود الخصم (عروض الكمية/الحزم تظهر هنا، السعر يبقى كما هو) --}}
+					<th class="text-center tw-text-sm md:!tw-text-base tw-font-bold ego-discount-col">
+						الخصم
 					</th>
 					<th class="text-center tw-text-sm md:!tw-text-base tw-font-bold col-md-2">
 						@lang('sale.subtotal')

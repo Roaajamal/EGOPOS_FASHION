@@ -19,7 +19,7 @@
 			</div>
 
 			<div class="text_div">
-				<small class="text text-muted">{{$product->name}} 
+				<small class="text text-muted">{{$product->name}}
 				@if($product->type == 'variable')
 					- {{$product->variation}}
 				@endif
@@ -27,14 +27,15 @@
 
 				<small class="text-muted">
 					({{$product->sub_sku}})
-				</small><br>
-				<small class="text-muted" style="font-size: 60%;">
-					@if($product->enable_stock)
-					{{ @num_format($product->qty_available) }} {{$product->unit}} @lang('lang_v1.in_stock')
-					@else
-						--
-					@endif
 				</small>
+				{{-- 🆕 شارة المخزون --}}
+				@if($product->enable_stock)
+					<span class="ego-stock-badge {{ $product->qty_available > 0 ? 'ego-stock-in' : 'ego-stock-out' }}">{{ @num_format($product->qty_available) }} {{$product->unit}}</span>
+				@endif
+				{{-- 🆕 السعر --}}
+				@if(!empty($show_prices))
+					<span class="ego-price-badge">@format_currency($product->selling_price)</span>
+				@endif
 			</div>
 			
 		</div>

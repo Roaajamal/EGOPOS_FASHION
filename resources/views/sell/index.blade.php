@@ -122,6 +122,29 @@
 
 @section('javascript')
 <script type="text/javascript">
+// 🆕 إصلاح طباعة الفاتورة من قائمة المبيعات:
+//    دالة النظام __print_receipt تنتظر تحميل كل صور الإيصال قبل فتح نافذة الطباعة،
+//    فإن فشل تحميل صورة (شعار/صورة منتج 404) لا تُفتح النافذة أبداً. نتجاوزها بمهلة قصوى
+//    تضمن فتح نافذة الطباعة دائماً حتى لو تعذّر تحميل صورة.
+window.__print_receipt = function(section_id){
+    var sec = section_id ? document.getElementById(section_id) : null;
+    var imgs = sec ? sec.getElementsByTagName('img') : document.images;
+    var total = imgs.length, printed = false;
+    function doPrint(){ if (printed) { return; } printed = true; window.print(); }
+    if (!total) { setTimeout(doPrint, 400); return; }
+    var loaded = 0;
+    [].forEach.call(imgs, function(img){
+        if (img.complete) { loaded++; }
+        else {
+            img.addEventListener('load',  function(){ if (++loaded >= total) doPrint(); }, false);
+            img.addEventListener('error', function(){ if (++loaded >= total) doPrint(); }, false); // لا تتعطّل عند فشل صورة
+        }
+    });
+    if (loaded >= total) { setTimeout(doPrint, 300); }
+    // مهلة قصوى: افتح نافذة الطباعة بأي حال بعد ثانية ونصف
+    setTimeout(doPrint, 1500);
+};
+
 $(document).ready(function() {
     // 1. إعداد فلتر التاريخ وضبط القيمة الافتراضية
     if ($('#sell_list_filter_date_range').length) {

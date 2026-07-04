@@ -162,6 +162,10 @@
                         </a>
                     @endcan
                 @endif
+
+                {{-- 🆕 جرس الإشعارات بجانب نقطة البيع --}}
+                @include('layouts.partials.header-notifications')
+
                 @if (Module::has('Repair'))
                     @includeIf('repair::layouts.partials.header')
                 @endif
@@ -188,8 +192,7 @@
                     class="tw-hidden lg:tw-inline-flex tw-transition-all tw-ring-1 tw-ring-white/10 tw-duration-200 tw-bg-@if(!empty(session('business.theme_color'))){{session('business.theme_color')}}@else{{'primary'}}@endif-800 hover:tw-bg-@if(!empty(session('business.theme_color'))){{session('business.theme_color')}}@else{{'primary'}}@endif-700 tw-py-1.5 tw-px-3 tw-rounded-lg tw-items-center tw-justify-center tw-text-sm tw-font-medium tw-text-white hover:tw-text-white tw-font-mono">
                     {{ @format_date('now') }}
                 </button>
-
-                @include('layouts.partials.header-notifications')
+                {{-- 🆕 (نُقل جرس الإشعارات إلى بجانب نقطة البيع) --}}
 
 
 

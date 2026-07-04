@@ -83,11 +83,22 @@
                 <div class="checkbox">
                 <br>
                   <label>
-                    {!! Form::checkbox('pos_settings[allow_overselling]', 1,  
-                        !empty($pos_settings['allow_overselling']) ? true : false , 
-                    [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.allow_overselling' ) }} 
+                    {!! Form::checkbox('pos_settings[allow_overselling]', 1,
+                        !empty($pos_settings['allow_overselling']) ? true : false ,
+                    [ 'class' => 'input-icheck']); !!} {{ __( 'lang_v1.allow_overselling' ) }}
                   </label>
                   @show_tooltip(__('lang_v1.allow_overselling_help'))
+                </div>
+            </div>
+        </div>
+        {{-- 🆕 إضافة بائع لكل منتج في سطر البيع --}}
+        <div class="col-sm-4">
+            <div class="form-group">
+                <div class="checkbox">
+                <br>
+                  <label>
+                    {!! Form::checkbox('pos_settings[ego_line_seller]', 1, !empty($pos_settings['ego_line_seller']), ['class' => 'input-icheck']); !!} إضافة بائع في سطر البيع
+                  </label>
                 </div>
             </div>
         </div>

@@ -28,6 +28,23 @@
     </div>
     </div>
 </div>
+{{-- 🆕 تفعيل النظام: تاريخ البداية (يوم/شهر/سنة) + المدة --}}
+<div class="col-md-6">
+    <div class="form-group">
+        {!! Form::label('ego_activation_value', 'مدة تفعيل النظام:*') !!}
+        <div style="display:flex;gap:8px">
+            {!! Form::number('ego_activation_value', 1, ['class' => 'form-control', 'min' => 1, 'required', 'style' => 'flex:1']); !!}
+            {!! Form::select('ego_activation_unit', ['day' => 'يوم', 'month' => 'شهر', 'year' => 'سنة'], 'month', ['class' => 'form-control', 'style' => 'flex:1']); !!}
+        </div>
+    </div>
+</div>
+<div class="col-md-6">
+    <div class="form-group">
+        {!! Form::label('ego_activation_start', 'تاريخ بداية التفعيل:') !!}
+        {!! Form::date('ego_activation_start', \Carbon\Carbon::today(), ['class' => 'form-control']); !!}
+        <span class="help-block">اليوم/الشهر/السنة — إن تُرك فارغاً يبدأ من اليوم ويبدأ العدّ.</span>
+    </div>
+</div>
 <div class="col-md-6">
     <div class="form-group">
     {!! Form::label('currency_id', __('business.currency') . ':*') !!}

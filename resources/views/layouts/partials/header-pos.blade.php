@@ -29,43 +29,50 @@
         class="tw-flex tw-flex-col md:tw-flex-row tw-items-center tw-justify-between tw-shadow-[rgba(17,_17,_26,_0.1)_0px_0px_16px] tw-bg-white tw-rounded-xl tw-mx-0 tw-mt-1 tw-mb-0 md:tw-mb-0 tw-p-3">
         <div class="tw-w-full md:tw-w-1/3">
             <div class="tw-flex tw-items-center tw-gap-2">
-                <p><strong>@lang('sale.location'): &nbsp;</strong></p>
-                <div style="width: 28%">
-                    @if (empty($transaction->location_id))
-                        @if (count($business_locations) > 1)
-                            {!! Form::select(
-                                'select_location_id',
-                                $business_locations,
-                                $default_location->id ?? null,
-                                ['class' => 'form-control input-sm', 'id' => 'select_location_id', 'required', 'autofocus'],
-                                $bl_attributes,
-                            ) !!}
-                        @else
-                            {{ $default_location->name }}
-                        @endif
-                    @else
-                    {{ $transaction->location->name }}
-                    @endif
+                {{-- 🆕 بوكس الفرع منسّق مع التاريخ ورقم الفاتورة (التسمية على استقامة القائمة) --}}
+                {{-- 🆕 بطاقة الفرع بتصميم أنيق: شارة أيقونة + التسمية فوق القيمة --}}
+                <div class="tw-flex tw-items-center" style="gap:10px;background:#fff;border:1.5px solid #99f6e4;border-radius:12px;padding:6px 12px;box-shadow:0 3px 12px rgba(13,148,136,.14);white-space:nowrap">
+                    <span style="width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#0d9488,#0f766e);display:inline-flex;align-items:center;justify-content:center;flex:0 0 32px">
+                        <i class="fa fa-store" style="color:#fff;font-size:14px"></i>
+                    </span>
+                    <div style="display:flex;flex-direction:column;line-height:1.2">
+                        <span style="font-size:10px;color:#0d9488;font-weight:800;letter-spacing:.3px">@lang('sale.location')</span>
+                        <div style="min-width:110px;font-weight:800;color:#0f172a;font-size:13px">
+                            @if (empty($transaction->location_id))
+                                @if (count($business_locations) > 1)
+                                    {!! Form::select(
+                                        'select_location_id',
+                                        $business_locations,
+                                        $default_location->id ?? null,
+                                        ['class' => 'input-sm', 'id' => 'select_location_id', 'required', 'autofocus', 'style' => 'height:24px;border:none;padding:0;font-weight:800;color:#0f172a;background:transparent;box-shadow:none;cursor:pointer'],
+                                        $bl_attributes,
+                                    ) !!}
+                                @else
+                                    <span>{{ $default_location->name }}</span>
+                                @endif
+                            @else
+                                <span>{{ $transaction->location->name }}</span>
+                            @endif
+                        </div>
+                    </div>
                 </div>
-                <div
-                    class="tw-hidden md:tw-block tw-bg-[#646EE4] hover:tw-bg-[#414aac] tw-py-1.5 tw-px-2 tw-rounded-md">
-                     &nbsp; <span
-                        class="curr_datetime text-white tw-font-semibold">{{ @format_datetime('now') }}</span>
+                {{-- 🆕 بوكس التاريخ منسّق ومصغّر --}}
+                <div class="tw-hidden md:tw-flex tw-items-center tw-gap-2" style="background:#0d9488;border-radius:10px;padding:9px 14px;box-shadow:0 2px 8px rgba(0,0,0,.12);white-space:nowrap">
+                    <i class="fa fa-clock text-white" style="font-size:14px;opacity:.9"></i>
+                    <span class="curr_datetime text-white" style="font-size:12px;font-weight:600">{{ @format_datetime('now') }}</span>
                     <i class="fa fa-keyboard hover-q text-white" aria-hidden="true" data-container="body"
                         data-toggle="popover" data-placement="bottom" data-content="@include('sale_pos.partials.keyboard_shortcuts_details')"
-                        data-html="true" data-trigger="hover" data-original-title="" title=""></i>
+                        data-html="true" data-trigger="hover" data-original-title="" title="" style="opacity:.8;cursor:pointer"></i>
                 </div>
 
                  <!--   invoice number  006  -->
                @if(!empty($pos_settings['enable_invoice_number']))
-              <div class="col-sm-4">
-        <div class="well well-sm" style="padding: 5px 10px; margin-bottom: 5px;">
-            <strong>@lang('sale.invoice_number'): </strong>
-            <span id="next_invoice_no_display" class="text-success" style="font-size: 1em; font-weight: bold;">
-                {{ $next_invoice_no }}
-            </span>
+        {{-- 🆕 بوكس رقم الفاتورة — بنفس حجم وتنسيق بوكس التاريخ المجاور --}}
+        <div class="tw-hidden md:tw-flex tw-items-center tw-gap-2" style="background:#0d9488;color:#fff;border-radius:10px;padding:9px 14px;box-shadow:0 2px 8px rgba(0,0,0,.12);direction:rtl;white-space:nowrap;flex-wrap:nowrap">
+            <i class="fas fa-file-invoice" style="font-size:15px;opacity:.9"></i>
+            <span style="font-size:12px;font-weight:600;opacity:.9;white-space:nowrap">@lang('sale.invoice_number'):</span>
+            <span id="next_invoice_no_display" style="font-size:13px;font-weight:800;color:#fff;white-space:nowrap">{{ $next_invoice_no }}</span>
         </div>
-    </div>
 @endif
                   <!--   invoice number  006  -->
                      
@@ -325,7 +332,7 @@
                     </div>
                     <div class="col-md-2">
                         <label>&nbsp;</label>
-                        <button class="btn btn-primary btn-block" type="button" id="btn_search_return" style="height: 45px;">
+                        <button class="btn btn-block" type="button" id="btn_search_return" style="height: 45px;background:#0d9488;color:#fff;font-weight:700;border:none">
                             <i class="fa fa-search"></i> بحث
                         </button>
                     </div>

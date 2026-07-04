@@ -323,6 +323,69 @@ Route::group(['middleware' => ['web', 'auth', 'language']], function () {
     Route::get('product-offers/active-offers', [\App\Http\Controllers\ProductOfferController::class, 'getActiveOffersForLocation'])
         ->name('product-offers.active-offers');
     
+    // 🆕 مجموعة عروض (حزم) - Bundles
+    Route::get('product-offers/bundles/get-data', [\App\Http\Controllers\ProductOfferController::class, 'getBundlesData'])
+        ->name('product-offers.bundles.get-data');
+    Route::post('product-offers/bundles', [\App\Http\Controllers\ProductOfferController::class, 'storeBundle'])
+        ->name('product-offers.bundles.store');
+    Route::get('product-offers/bundles/{id}/edit', [\App\Http\Controllers\ProductOfferController::class, 'editBundle'])
+        ->name('product-offers.bundles.edit');
+    Route::put('product-offers/bundles/{id}', [\App\Http\Controllers\ProductOfferController::class, 'updateBundle'])
+        ->name('product-offers.bundles.update');
+    Route::delete('product-offers/bundles/{id}', [\App\Http\Controllers\ProductOfferController::class, 'destroyBundle'])
+        ->name('product-offers.bundles.destroy');
+
+    // 🆕 الباركود البديل - Alternative barcodes
+    Route::get('product-offers/alt-barcodes/get-data', [\App\Http\Controllers\ProductOfferController::class, 'getAltBarcodesData'])
+        ->name('product-offers.alt-barcodes.get-data');
+    // 🆕 فحص باركود بديل (منتج + كل باركوداته) + حذف الكل لمنتج
+    Route::get('product-offers/alt-barcodes/{id}/items', [\App\Http\Controllers\ProductOfferController::class, 'getAltItems'])
+        ->name('product-offers.alt-barcodes.items');
+    Route::delete('product-offers/alt-barcodes/group/{vid}', [\App\Http\Controllers\ProductOfferController::class, 'destroyAltGroup'])
+        ->name('product-offers.alt-barcodes.destroy-group');
+    Route::post('product-offers/alt-barcodes', [\App\Http\Controllers\ProductOfferController::class, 'storeAltBarcode'])
+        ->name('product-offers.alt-barcodes.store');
+    Route::put('product-offers/alt-barcodes/{id}', [\App\Http\Controllers\ProductOfferController::class, 'updateAltBarcode'])
+        ->name('product-offers.alt-barcodes.update');
+    Route::delete('product-offers/alt-barcodes/{id}', [\App\Http\Controllers\ProductOfferController::class, 'destroyAltBarcode'])
+        ->name('product-offers.alt-barcodes.destroy');
+
+    // 🆕 استيراد الباركود البديل من Excel
+    Route::post('product-offers/alt-barcodes/import', [\App\Http\Controllers\ProductOfferController::class, 'importAltBarcodes'])
+        ->name('product-offers.alt-barcodes.import');
+    Route::get('product-offers/alt-barcodes/template', [\App\Http\Controllers\ProductOfferController::class, 'downloadAltBarcodeTemplate'])
+        ->name('product-offers.alt-barcodes.template');
+
+    // 🆕 العروض الخاصة
+    Route::get('product-offers/special/get-data', [\App\Http\Controllers\ProductOfferController::class, 'getSpecialOffersData'])
+        ->name('product-offers.special.get-data');
+    Route::post('product-offers/special', [\App\Http\Controllers\ProductOfferController::class, 'storeSpecialOffer'])
+        ->name('product-offers.special.store');
+    Route::get('product-offers/special/{id}/edit', [\App\Http\Controllers\ProductOfferController::class, 'editSpecialOffer'])
+        ->name('product-offers.special.edit');
+    Route::put('product-offers/special/{id}', [\App\Http\Controllers\ProductOfferController::class, 'updateSpecialOffer'])
+        ->name('product-offers.special.update');
+    Route::delete('product-offers/special/{id}', [\App\Http\Controllers\ProductOfferController::class, 'destroySpecialOffer'])
+        ->name('product-offers.special.destroy');
+    // 🆕 استيراد/قالب/فحص العروض الخاصة
+    Route::post('product-offers/special/import', [\App\Http\Controllers\ProductOfferController::class, 'importSpecialOffers'])
+        ->name('product-offers.special.import');
+    Route::get('product-offers/special/template', [\App\Http\Controllers\ProductOfferController::class, 'downloadSpecialTemplate'])
+        ->name('product-offers.special.template');
+    Route::get('product-offers/special/{id}/items', [\App\Http\Controllers\ProductOfferController::class, 'getSpecialOfferItems'])
+        ->name('product-offers.special.items');
+    // 🆕 استيراد/قالب/فحص الحزم
+    Route::post('product-offers/bundles/import', [\App\Http\Controllers\ProductOfferController::class, 'importBundles'])
+        ->name('product-offers.bundles.import');
+    Route::get('product-offers/bundles/template', [\App\Http\Controllers\ProductOfferController::class, 'downloadBundleTemplate'])
+        ->name('product-offers.bundles.template');
+    Route::get('product-offers/bundles/{id}/items', [\App\Http\Controllers\ProductOfferController::class, 'getBundleItems'])
+        ->name('product-offers.bundles.items');
+
+    // 🆕 فحص عرض كمية (المنتج + كل شرائحه)
+    Route::get('product-offers/{id}/items', [\App\Http\Controllers\ProductOfferController::class, 'getOfferItems'])
+        ->name('product-offers.items');
+
     // 10. تعديل عرض (AJAX)
     Route::get('product-offers/{id}/edit', [\App\Http\Controllers\ProductOfferController::class, 'edit'])
         ->name('product-offers.edit');
@@ -471,6 +534,10 @@ use Illuminate\Support\Facades\Route;
 
 include_once 'install_r.php';
 Route::post('/update-price-offer', [SellPosController::class, 'updatePriceWithOffer'])->name('update.price.offer');
+// 🆕 تكامل العروض مع نقطة البيع
+Route::get('/pos/resolve-alt-barcode', [SellPosController::class, 'resolveAltBarcode'])->name('pos.resolve-alt-barcode');
+Route::post('/pos/calc-offers', [SellPosController::class, 'calcOffers'])->name('pos.calc-offers');
+Route::get('/pos/ego-user-summary', [SellPosController::class, 'egoUserSummary'])->name('pos.ego-user-summary');
 Route::middleware(['setData'])->group(function () {
     Route::get('/', function () {
         return auth()->check() ? redirect('/home') : redirect('/login');
@@ -642,7 +709,18 @@ Route::get('/get-product-stock-by-sku/{sku}', [SellPosController::class, 'getPro
     Route::get('/sells/subscriptions', [SellPosController::class, 'listSubscriptions']);
     Route::get('/sells/duplicate/{id}', [SellController::class, 'duplicateSell']);
     Route::get('/sells/drafts', [SellController::class, 'getDrafts']);
-    
+
+    // 🆕 تقرير عمولات البائعين لكل منتج
+    Route::get('/reports/ego-seller-commission', [\App\Http\Controllers\EgoSellerCommissionController::class, 'index'])->name('reports.ego_seller_commission');
+
+    // 🆕 شاشة إدارة تفعيل النظام + طلبات التجديد
+    Route::get('/ego-activation', [\App\Http\Controllers\EgoActivationController::class, 'index'])->name('ego-activation.index');
+    Route::post('/ego-activation', [\App\Http\Controllers\EgoActivationController::class, 'store'])->name('ego-activation.store');
+    Route::post('/ego-activation/request-renewal', [\App\Http\Controllers\EgoActivationController::class, 'requestRenewal'])->name('ego-activation.request');
+    Route::post('/ego-activation/approve/{id}', [\App\Http\Controllers\EgoActivationController::class, 'approveRenewal'])->name('ego-activation.approve');
+    Route::post('/ego-activation/reject/{id}', [\App\Http\Controllers\EgoActivationController::class, 'rejectRenewal'])->name('ego-activation.reject');
+    Route::get('/ego-activation/expired', [\App\Http\Controllers\EgoActivationController::class, 'expired'])->name('ego-activation.expired');
+
     // NEW: Draft management with separate table
     Route::post('/drafts/store', [\App\Http\Controllers\DraftController::class, 'storeDraft'])->name('drafts.store');
     Route::get('/drafts/convert-to-invoice/{id}', [\App\Http\Controllers\DraftController::class, 'convertToInvoice'])->name('drafts.convert');
@@ -660,6 +738,7 @@ Route::get('/get-product-stock-by-sku/{sku}', [SellPosController::class, 'getPro
     Route::post('/import-sales/preview', [ImportSalesController::class, 'preview']);
     Route::post('/import-sales', [ImportSalesController::class, 'import']);
     Route::get('/revert-sale-import/{batch}', [ImportSalesController::class, 'revertSaleImport']);
+    Route::get('/import-sales/template', [ImportSalesController::class, 'downloadTemplate'])->name('import-sales.template');
 
     Route::get('/sells/pos/get_product_row/{variation_id}/{location_id}', [SellPosController::class, 'getProductRow']);
     Route::post('/sells/pos/get_payment_row', [SellPosController::class, 'getPaymentRow']);

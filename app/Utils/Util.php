@@ -1321,6 +1321,17 @@ class Util
         $notifications_data = [];
         foreach ($notifications as $notification) {
             $data = $notification->data;
+            // 🆕 إشعار عام مخصّص (مثل تنبيه قرب انتهاء التفعيل) — يُعرض مباشرة من بيانات الإشعار
+            if (! empty($data['ego_generic'])) {
+                $notifications_data[] = [
+                    'msg' => $data['msg'] ?? '',
+                    'icon_class' => $data['icon_class'] ?? 'fas fa-bell bg-yellow',
+                    'link' => $data['link'] ?? '#',
+                    'read_at' => $notification->read_at,
+                    'created_at' => $notification->created_at->diffForHumans(),
+                ];
+                continue;
+            }
             if (in_array($notification->type, [\App\Notifications\RecurringInvoiceNotification::class, \App\Notifications\RecurringExpenseNotification::class])) {
                 $msg = '';
                 $icon_class = '';
