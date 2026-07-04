@@ -603,6 +603,49 @@ class ImportSalesController extends Controller
         return $fields;
     }
 
+    // 🆕 فحص عملية استيراد: تُرجع فواتيرها وأصناف كل فاتورة وإجماليها وطريقة دفعها
+    public function getImportBatchItems($batch)
+    {
+        if (! auth()->user()->can('sell.create')) {
+            abort(403, 'Unauthorized action.');
+        }
+        $business_id = request()->session()->get('user.business_id');
+        $sales = Transaction::where('business_id', $business_id)
+            ->where('type', 'sell')
+            ->where('import_batch', $batch)
+            ->with(['sell_lines.product', 'sell_lines.variations', 'payment_lines'])
+            ->orderBy('id')
+            ->get();
+
+        $methodLabels = ['cash' => 'كاش', 'card' => 'بطاقة/فيزا', 'cheque' => 'شيك', 'bank_transfer' => 'حوالة', 'other' => 'أخرى'];
+        $invoices = [];
+        foreach ($sales as $sale) {
+            $items = [];
+            foreach ($sale->sell_lines as $line) {
+                $pname = optional($line->product)->name;
+                $vname = optional($line->variations)->name;
+                $label = $pname . (! empty($vname) && $vname != 'DUMMY' ? ' - ' . $vname : '');
+                $qty = (float) $line->quantity;
+                $price = (float) $line->unit_price_inc_tax;
+                $items[] = [
+                    'product'  => $label,
+                    'qty'      => $this->businessUtil->num_f($qty),
+                    'price'    => $this->businessUtil->num_f($price),
+                    'subtotal' => $this->businessUtil->num_f($qty * $price),
+                ];
+            }
+            $methods = $sale->payment_lines->pluck('method')->filter()->unique()
+                ->map(function ($m) use ($methodLabels) { return $methodLabels[$m] ?? $m; })->implode('، ');
+            $invoices[] = [
+                'invoice_no' => $sale->invoice_no,
+                'total'      => $this->businessUtil->num_f($sale->final_total),
+                'payment'    => $methods ?: '—',
+                'items'      => $items,
+            ];
+        }
+        return response()->json(['success' => true, 'batch' => $batch, 'invoices' => $invoices]);
+    }
+
     // 🆕 تنزيل قالب Excel مطابق للحقول القابلة للاستيراد (يشمل طريقة الدفع والإجمالي) مع صف مثال
     public function downloadTemplate()
     {

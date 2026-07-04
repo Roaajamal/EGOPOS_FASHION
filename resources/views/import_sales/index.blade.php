@@ -45,7 +45,7 @@
                     <div class="row">
                         <div class="col-sm-12">
                             <br>
-                            <a href="{{ url('import-sales/template') }}" class="tw-dw-btn tw-dw-btn-success tw-text-white"><i class="fa fa-download"></i> @lang('lang_v1.download_template_file') (يشمل طريقة الدفع والإجمالي)</a>
+                            <a href="{{ url('import-sales/template') }}" class="tw-dw-btn tw-dw-btn-success tw-text-white"><i class="fa fa-download"></i> @lang('lang_v1.download_template_file')</a>
                         </div>
                     </div>
 
@@ -124,8 +124,7 @@
                                 <button type="button" class="btn btn-info btn-sm ego-inspect-import"
                                     data-batch="{{ $key }}"
                                     data-time="{{ @format_datetime($value['import_time']) }}"
-                                    data-count="{{ $value['count'] ?? count($value['invoices']) }}"
-                                    data-invoices="{{ e(implode(', ', $value['invoices'])) }}"><i class="fa fa-search"></i> فحص</button>
+                                    data-count="{{ $value['count'] ?? count($value['invoices']) }}"><i class="fa fa-search"></i> فحص</button>
                                 @can('sell.delete')
                                     <a href="{{action([\App\Http\Controllers\ImportSalesController::class, 'revertSaleImport'], $key)}}" class="btn btn-danger btn-sm revert_import"><i class="fas fa-undo"></i> @lang('lang_v1.revert_import')</a>
                                 @endcan
@@ -151,7 +150,9 @@
             </div>
             <div class="modal-body">
                 <p style="color:#64748b"><i class="far fa-clock"></i> وقت الاستيراد: <b id="ego_imp_time"></b> — عدد الفواتير: <b id="ego_imp_count"></b></p>
-                <div id="ego_imp_invoices" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+                <div id="ego_imp_body">
+                    <div class="text-center text-muted" style="padding:20px"><i class="fas fa-spinner fa-spin"></i> جارٍ التحميل…</div>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-default" data-dismiss="modal">إغلاق</button>
@@ -162,16 +163,38 @@
 @stop
 @section('javascript')
 <script type="text/javascript">
-    // 🆕 فحص فواتير عملية استيراد
+    // 🆕 فحص عملية استيراد: جدول لكل فاتورة بأصنافها وإجماليها وطريقة دفعها
+    function egoEsc(s){ return $('<div>').text(s == null ? '' : s).html(); }
     $(document).on('click', '.ego-inspect-import', function(){
-        $('#ego_imp_batch').text('#' + $(this).data('batch'));
+        var batch = $(this).data('batch');
+        $('#ego_imp_batch').text('#' + batch);
         $('#ego_imp_time').text($(this).data('time'));
         $('#ego_imp_count').text($(this).data('count'));
-        var invoices = String($(this).data('invoices') || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
-        var html = '';
-        invoices.forEach(function(inv){ html += '<span class="label label-default" style="font-size:13px;padding:6px 10px;">' + $('<div>').text(inv).html() + '</span>'; });
-        $('#ego_imp_invoices').html(html || '<span class="text-muted">لا توجد فواتير</span>');
+        $('#ego_imp_body').html('<div class="text-center text-muted" style="padding:20px"><i class="fas fa-spinner fa-spin"></i> جارٍ التحميل…</div>');
         $('#ego_import_inspect_modal').modal('show');
+        $.get("{{ url('import-sales/batch') }}/" + batch + "/items", function(r){
+            if (!r || !r.success) { $('#ego_imp_body').html('<div class="text-danger text-center">تعذّر جلب البيانات</div>'); return; }
+            var html = '';
+            (r.invoices || []).forEach(function(inv){
+                html += '<div style="border:1px solid #e2e8f0;border-radius:10px;margin-bottom:14px;overflow:hidden;">';
+                html += '<div style="background:#f0fdfa;padding:8px 12px;font-weight:700;color:#0f766e;display:flex;flex-wrap:wrap;gap:14px;">'
+                    + '<span><i class="fas fa-file-invoice"></i> فاتورة: ' + egoEsc(inv.invoice_no) + '</span>'
+                    + '<span>الإجمالي: <b>' + egoEsc(inv.total) + '</b></span>'
+                    + '<span>طريقة الدفع: <b>' + egoEsc(inv.payment) + '</b></span>'
+                    + '</div>';
+                html += '<table class="table table-bordered table-striped" style="margin:0;font-size:13px;">'
+                    + '<thead><tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>المجموع</th></tr></thead><tbody>';
+                if ((inv.items || []).length === 0) {
+                    html += '<tr><td colspan="4" class="text-center text-muted">لا أصناف</td></tr>';
+                } else {
+                    inv.items.forEach(function(it){
+                        html += '<tr><td>' + egoEsc(it.product) + '</td><td>' + egoEsc(it.qty) + '</td><td>' + egoEsc(it.price) + '</td><td>' + egoEsc(it.subtotal) + '</td></tr>';
+                    });
+                }
+                html += '</tbody></table></div>';
+            });
+            $('#ego_imp_body').html(html || '<div class="text-muted text-center">لا توجد فواتير</div>');
+        }).fail(function(){ $('#ego_imp_body').html('<div class="text-danger text-center">تعذّر جلب البيانات</div>'); });
     });
 
     $(document).on('click', 'a.revert_import', function(e){

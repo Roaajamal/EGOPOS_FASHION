@@ -739,6 +739,7 @@ Route::get('/get-product-stock-by-sku/{sku}', [SellPosController::class, 'getPro
     Route::post('/import-sales', [ImportSalesController::class, 'import']);
     Route::get('/revert-sale-import/{batch}', [ImportSalesController::class, 'revertSaleImport']);
     Route::get('/import-sales/template', [ImportSalesController::class, 'downloadTemplate'])->name('import-sales.template');
+    Route::get('/import-sales/batch/{batch}/items', [ImportSalesController::class, 'getImportBatchItems'])->name('import-sales.batch-items');
 
     Route::get('/sells/pos/get_product_row/{variation_id}/{location_id}', [SellPosController::class, 'getProductRow']);
     Route::post('/sells/pos/get_payment_row', [SellPosController::class, 'getPaymentRow']);
