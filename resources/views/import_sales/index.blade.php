@@ -108,7 +108,6 @@
                         <th><i class="far fa-clock"></i> وقت الاستيراد</th>
                         <th>@lang('business.created_by')</th>
                         <th>عدد الفواتير</th>
-                        <th>إجمالي المبالغ</th>
                         <th>@lang('messages.action')</th>
                     </tr>
                 </thead>
@@ -119,7 +118,6 @@
                             <td>{{@format_datetime($value['import_time'])}}</td>
                             <td>{{$value['created_by']}}</td>
                             <td><span class="label label-info" style="font-size:13px;">{{ $value['count'] ?? count($value['invoices']) }} فاتورة</span></td>
-                            <td><span class="display_currency" data-currency_symbol="true">@num_format($value['total'] ?? 0)</span></td>
                             <td>
                                 <button type="button" class="btn btn-info btn-sm ego-inspect-import"
                                     data-batch="{{ $key }}"
@@ -131,7 +129,7 @@
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="text-center text-muted">لا توجد مبيعات مستوردة بعد</td></tr>
+                        <tr><td colspan="5" class="text-center text-muted">لا توجد مبيعات مستوردة بعد</td></tr>
                     @endforelse
                 </tbody>
             </table>
